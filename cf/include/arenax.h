@@ -70,9 +70,17 @@ typedef enum {
 #define ELEMENT_ID_NUM_BITS 28
 #define ELEMENT_ID_MASK ((1UL << ELEMENT_ID_NUM_BITS) - 1) // 0xFFFffff
 
+#define CF_ARENAX_N_STASHES 64
+#define CF_ARENAX_STASH_LEN 512
+
 typedef struct cf_arenax_chunk_s {
 	uint64_t base_h: 40;
 } __attribute__((packed)) cf_arenax_chunk;
+
+typedef struct cf_arenax_stash_s {
+	cf_mutex lock;
+	cf_arenax_handle free_h;
+} cf_arenax_stash;
 
 // DO NOT access this member data directly - use the API!
 // Caution - changing this struct could break warm restart.
@@ -87,8 +95,8 @@ typedef struct cf_arenax_s {
 	uint32_t			unused_2;
 	size_t				stage_size;
 
-	// Free-element list (non-chunked allocations).
-	cf_arenax_handle	free_h;
+	// Free-element lists (non-chunked allocations).
+	cf_arenax_stash*	stash;
 
 	// Where to end-allocate.
 	uint32_t			at_stage_id;

@@ -86,7 +86,14 @@ cf_arenax_init(cf_arenax* arena, cf_xmem_type xmem_type,
 	arena->unused_2 = 0;
 	arena->stage_size = stage_size;
 
-	arena->free_h = 0;
+	arena->stash = cf_malloc(CF_ARENAX_N_STASHES * sizeof(cf_arenax_stash));
+
+	for (uint32_t i = 0; i < CF_ARENAX_N_STASHES; i++) {
+		cf_arenax_stash* stash = &arena->stash[i];
+
+		cf_mutex_init(&stash->lock);
+		stash->free_h = 0;
+	}
 
 	if (chunk_count == 1) {
 		arena->pool_len = 0;
@@ -127,23 +134,29 @@ cf_arenax_alloc(cf_arenax* arena, cf_arenax_puddle* puddle)
 		return cf_arenax_alloc_chunked(arena, puddle);
 	}
 
-	cf_mutex_lock(&arena->lock);
+	static uint32_t rr = 0;
+	cf_arenax_stash* stash = &arena->stash[rr++ % CF_ARENAX_N_STASHES];
+
+	cf_mutex_lock(&stash->lock);
 
 	cf_arenax_handle h;
 
 	// Check free list first.
-	if (arena->free_h != 0) {
-		h = arena->free_h;
+	if (stash->free_h != 0) {
+		h = stash->free_h;
 
 		free_element* p_free_element = cf_arenax_resolve(arena, h);
 
-		arena->free_h = p_free_element->next_h;
+		stash->free_h = p_free_element->next_h;
 	}
 	// Otherwise keep end-allocating.
 	else {
+		cf_mutex_lock(&arena->lock);
+
 		if (arena->at_element_id >= arena->stage_capacity) {
 			if (cf_arenax_add_stage(arena) != CF_ARENAX_OK) {
 				cf_mutex_unlock(&arena->lock);
+				cf_mutex_unlock(&stash->lock);
 				return 0;
 			}
 
@@ -151,12 +164,30 @@ cf_arenax_alloc(cf_arenax* arena, cf_arenax_puddle* puddle)
 			arena->at_element_id = 0;
 		}
 
-		cf_arenax_set_handle(&h, arena->at_stage_id, arena->at_element_id);
+		uint32_t start = arena->at_element_id;
+		uint32_t end = (start + CF_ARENAX_STASH_LEN) & -CF_ARENAX_STASH_LEN;
+		uint32_t stage_id = arena->at_stage_id;
 
-		arena->at_element_id++;
+		arena->at_element_id = end;
+
+		cf_mutex_unlock(&arena->lock);
+
+		cf_assert(end <= arena->stage_capacity, CF_ARENAX, "bad stash length");
+
+		for (uint32_t i = end - 1; i > start; i--) {
+			cf_arenax_set_handle(&h, stage_id, i);
+
+			free_element* p_free_element = cf_arenax_resolve(arena, h);
+
+			p_free_element->magic = FREE_MAGIC;
+			p_free_element->next_h = stash->free_h;
+			stash->free_h = h;
+		}
+
+		cf_arenax_set_handle(&h, stage_id, start);
 	}
 
-	cf_mutex_unlock(&arena->lock);
+	cf_mutex_unlock(&stash->lock);
 
 	return h;
 }
@@ -170,19 +201,25 @@ cf_arenax_free(cf_arenax* arena, cf_arenax_handle h, cf_arenax_puddle* puddle)
 		return;
 	}
 
+	uint32_t stage_id;
+	uint32_t element_id;
+
+	cf_arenax_expand_handle(&stage_id, &element_id, h);
+
+	cf_arenax_stash* stash = &arena->stash[element_id % CF_ARENAX_N_STASHES];
 	free_element* p_free_element = cf_arenax_resolve(arena, h);
 
-	cf_mutex_lock(&arena->lock);
+	cf_mutex_lock(&stash->lock);
 
 	// OLD PARANOIA.
 	cf_assert(p_free_element->magic != FREE_MAGIC, CF_ARENAX,
 			"double freed arena element");
 
 	p_free_element->magic = FREE_MAGIC;
-	p_free_element->next_h = arena->free_h;
-	arena->free_h = h;
+	p_free_element->next_h = stash->free_h;
+	stash->free_h = h;
 
-	cf_mutex_unlock(&arena->lock);
+	cf_mutex_unlock(&stash->lock);
 }
 
 bool
