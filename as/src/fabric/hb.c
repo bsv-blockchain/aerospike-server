@@ -5626,7 +5626,7 @@ mesh_seed_dns_resolve_cb(bool is_resolved, const char* hostname,
 			CRASH("error initializing resolved address list");
 		}
 
-		DETAIL("resolved mesh node hostname %s to %s", seed->seed_host_name,
+		INFO("resolved mesh node hostname %s to %s", seed->seed_host_name,
 				cf_ip_addr_print(&addrs[i]));
 	}
 
