@@ -279,6 +279,12 @@ find_self_in_replicas(const as_partition* p)
 	return index_of_node(p->replicas, p->n_replicas, g_config.self_node);
 }
 
+static inline int
+find_self_in_nodes(const as_partition* p)
+{
+	return index_of_node(p->replicas, p->n_nodes, g_config.self_node);
+}
+
 static inline bool
 is_self_replica(const as_partition* p)
 {

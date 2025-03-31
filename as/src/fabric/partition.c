@@ -563,7 +563,7 @@ as_partition_getinfo_str(cf_dyn_buf* db)
 	size_t db_sz = db->used_sz;
 
 	cf_dyn_buf_append_string(db, "namespace:partition:state:n_replicas:replica:"
-			"n_dupl:working_master:proxy_dst:emigrates:lead_emigrates:"
+			"succession:n_dupl:working_master:proxy_dst:emigrates:lead_emigrates:"
 			"immigrates:records:tombstones:regime:version:final_version;");
 
 	for (uint32_t ns_ix = 0; ns_ix < g_config.n_namespaces; ns_ix++) {
@@ -583,6 +583,8 @@ as_partition_getinfo_str(cf_dyn_buf* db)
 			cf_dyn_buf_append_uint32(db, p->n_replicas);
 			cf_dyn_buf_append_char(db, ':');
 			cf_dyn_buf_append_int(db, find_self_in_replicas(p));
+			cf_dyn_buf_append_char(db, ':');
+			cf_dyn_buf_append_int(db, find_self_in_nodes(p));
 			cf_dyn_buf_append_char(db, ':');
 			cf_dyn_buf_append_uint32(db, p->n_dupl);
 			cf_dyn_buf_append_char(db, ':');

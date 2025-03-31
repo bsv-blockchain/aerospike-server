@@ -915,8 +915,9 @@ balance_namespace_ap(as_namespace* ns, cf_queue* mq)
 
 			p->working_master = (cf_node)0;
 
+			p->n_nodes = ns->cluster_size;
 			p->n_replicas = ns->replication_factor;
-			memcpy(p->replicas, ns_node_seq, p->n_replicas * sizeof(cf_node));
+			memcpy(p->replicas, ns_node_seq, p->n_nodes * sizeof(cf_node));
 
 			p->n_dupl = 0;
 
