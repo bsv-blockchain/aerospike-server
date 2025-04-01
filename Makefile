@@ -26,9 +26,6 @@
 #       deb:  Suitable for building and installing on Debian-derived systems.
 #
 
-OS = $(shell build/os_version)
-UNAME=$(shell uname)
-
 # Common variable definitions:
 include make_in/Makefile.vars
 

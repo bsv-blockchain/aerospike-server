@@ -312,5 +312,9 @@ ifeq (clang,$(COMPILER_TYPE))
   S2_WNO += -Wno-unused-private-field
 endif
 
+ifeq ($(ARCH), aarch64)
+  S2_WNO += -Wno-psabi
+endif
+
 $(OBJECT_DIR)/geospatial/%.o: CXXFLAGS += $(S2_WNO) -std=c++17 -D__STDC_LIMIT_MACROS
 $(OBJECT_DIR)/geospatial/%.o: CFLAGS := $(filter-out -std=gnu99,$(CFLAGS))
