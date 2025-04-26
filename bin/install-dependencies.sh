@@ -69,7 +69,7 @@ function main() {
 	log_info "Installing server dependencies, os=${OS}, runtime-only=${RUNTIME_ONLY}..."
 
 	case "$OS" in
-	'debian11' | 'debian12' | 'ubuntu20.04' | 'ubuntu22.04' | 'ubuntu24.04' )
+	debian* | ubuntu*)
 		maybe "${SUDO} apt-get update"
 		packages=(libssl-dev zlib1g-dev)  # Common packages (build + Runtime)
 		# Add packages for build-only mode (i.e., runtime-only is not set)
@@ -93,7 +93,7 @@ function main() {
 		maybe "DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y --no-install-recommends ${packages[*]}"
 		;;
 
-	'amzn2023' | 'rhel8' | 'rhel9' )
+	'amzn2023' | rhel* )
 		packages=(openssl-devel zlib-devel)  # Common packages (build + Runtime).
 
 		# Add packages for build-only mode (i.e., runtime-only is not set)
