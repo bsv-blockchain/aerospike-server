@@ -37,7 +37,7 @@
 #include "socket.h"
 #include "tls.h"
 #include "vector.h"
-
+#include "cfg_info.h"
 
 //==========================================================
 // Forward declarations.
@@ -219,6 +219,6 @@ void as_xdr_timer_event(cf_poll_event* events, int32_t n_events, uint32_t e_ix);
 void as_xdr_get_config(const char* cmd, cf_dyn_buf* db);
 bool as_xdr_set_config(const char* cmd);
 void as_xdr_get_stats(const char* cmd, cf_dyn_buf* db);
-void as_xdr_dc_state(const char* name, const char* cmd, cf_dyn_buf* db);
-void as_xdr_get_filter(const char* name, const char* cmd, cf_dyn_buf* db);
-void as_xdr_set_filter(const char* name, const char* cmd, cf_dyn_buf* db);
+void as_xdr_dc_state(const struct as_info_cmd_args_s* args);
+void as_xdr_get_filter(const struct as_info_cmd_args_s* args);
+void as_xdr_set_filter(const struct as_info_cmd_args_s* args);

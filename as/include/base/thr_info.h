@@ -51,6 +51,12 @@ struct as_proto_s;
 #define MIN_INFO_MAX_MS 500
 #define MAX_INFO_MAX_MS 10000
 
+typedef struct as_info_cmd_args_s {
+	const char* name;
+	const char* params;
+	cf_dyn_buf* db;
+} as_info_cmd_args;
+
 typedef struct as_info_transaction_s {
 	struct as_file_handle_s* fd_h;
 	struct as_proto_s* proto;

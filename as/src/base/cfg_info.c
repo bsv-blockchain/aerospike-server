@@ -108,9 +108,10 @@ static bool any_benchmarks_enabled(void);
 //
 
 void
-as_cfg_info_cmd_config_get_with_params(const char* name, const char* params,
-		cf_dyn_buf* db)
+as_cfg_info_cmd_config_get_with_params(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
 	char context[1024];
 	int context_len = sizeof(context);
 	info_param_result rv = as_info_parameter_get(params, "context", context,
@@ -150,12 +151,15 @@ as_cfg_info_cmd_config_get_with_params(const char* name, const char* params,
 }
 
 void
-as_cfg_info_cmd_config_get(const char* name, const char* params, cf_dyn_buf* db)
+as_cfg_info_cmd_config_get(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	if (params && *params != 0) {
 		cf_debug(AS_INFO, "config-get command received: params %s", params);
 
-		as_cfg_info_cmd_config_get_with_params(name, params, db);
+		as_cfg_info_cmd_config_get_with_params(args);
 		// Response may be an error string (without a semicolon).
 		cf_dyn_buf_chomp_char(db, ';');
 		return;
@@ -181,8 +185,12 @@ as_cfg_info_namespace_config_get(const as_namespace* ns, cf_dyn_buf* db)
 // config-set:context=network;variable=heartbeat.value;
 // config-set:context=namespace;id=test;variable=value;
 void
-as_cfg_info_cmd_config_set(const char* name, const char* params, cf_dyn_buf* db)
+as_cfg_info_cmd_config_set(const as_info_cmd_args* args)
 {
+	const char* name = args->name;
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	cf_mutex_lock(&g_set_cfg_lock);
 
 	cfg_set(name, params, db);

@@ -29,6 +29,7 @@
 #include <stdint.h>
 
 #include "dynbuf.h"
+struct as_info_cmd_args_s;
 
 
 //==========================================================
@@ -37,5 +38,5 @@
 
 void as_service_list_init(void);
 
-void as_service_list_dynamic(const char* key, const char* params, cf_dyn_buf* db);
-void as_service_list_command(const char* key, const char* params, cf_dyn_buf* db);
+void as_service_list_dynamic(const struct as_info_cmd_args_s* args);
+void as_service_list_command(const struct as_info_cmd_args_s* args);

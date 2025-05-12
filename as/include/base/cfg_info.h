@@ -33,6 +33,7 @@
 // Forward declarations.
 //
 
+struct as_info_cmd_args_s;
 struct as_namespace_s;
 
 
@@ -40,7 +41,7 @@ struct as_namespace_s;
 // Public API.
 //
 
-void as_cfg_info_cmd_config_get_with_params(const char* name, const char* params, cf_dyn_buf* db);
-void as_cfg_info_cmd_config_get(const char* name, const char* params, cf_dyn_buf* db);
+void as_cfg_info_cmd_config_get_with_params(const struct as_info_cmd_args_s* args);
+void as_cfg_info_cmd_config_get(const struct as_info_cmd_args_s* args);
 void as_cfg_info_namespace_config_get(const struct as_namespace_s* ns, cf_dyn_buf* db);
-void as_cfg_info_cmd_config_set(const char* name, const char* params, cf_dyn_buf* db);
+void as_cfg_info_cmd_config_set(const struct as_info_cmd_args_s* args);

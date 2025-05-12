@@ -371,9 +371,10 @@ as_service_list_init(void)
 }
 
 void
-as_service_list_dynamic(const char* key, const char* params, cf_dyn_buf* db)
+as_service_list_dynamic(const as_info_cmd_args* args)
 {
-	(void)params;
+	const char* key = args->name;
+	cf_dyn_buf* db = args->db;
 
 	cf_detail(AS_SERVICE_LIST, "handling info value %s", key);
 
@@ -387,8 +388,12 @@ as_service_list_dynamic(const char* key, const char* params, cf_dyn_buf* db)
 }
 
 void
-as_service_list_command(const char* key, const char* params, cf_dyn_buf* db)
+as_service_list_command(const as_info_cmd_args* args)
 {
+	const char* key = args->name;
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	cf_detail(AS_SERVICE_LIST, "handling info command %s %s", key, params);
 
 	uint64_t since = 0;
@@ -404,7 +409,7 @@ as_service_list_command(const char* key, const char* params, cf_dyn_buf* db)
 		// Prior to 7.1, these commands behaved differently depending on the
 		// presence of a colon. Going forward these commands use the non-colon
 		// behavior when 'generation' isn't in the params.
-		as_service_list_dynamic(key, params, db);
+		as_service_list_dynamic(args);
 		return;
 	}
 

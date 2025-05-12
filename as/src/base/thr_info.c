@@ -114,7 +114,7 @@
 
 #define CMD_NAME_MAX_LEN 32
 
-typedef void (*as_info_cmd_fn)(const char* name, const char* params, cf_dyn_buf* db);
+typedef void (*as_info_cmd_fn)(const as_info_cmd_args* args);
 
 typedef struct as_info_cmd_s {
 	const char* name;
@@ -184,88 +184,88 @@ static const as_info_cmd* find_cmd(const char* name, size_t name_len);
 static void handle_cmd(const as_info_cmd* cmd, const char* params, const as_file_handle* fd_h, cf_dyn_buf* db);
 
 // Info commands.
-static void cmd_best_practices(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_build(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_build_arch(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_build_ee_sha(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_build_os(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_build_sha(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_build_time(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_cluster_name(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_cluster_stable(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_compatibility_id(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_debug_record(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_debug_record_meta(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_digests(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_dump_cluster(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_dump_fabric(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_dump_hb(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_dump_hlc(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_dump_migrates(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_dump_rw_request_hash(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_dump_skew(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_dump_wb_summary(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_edition(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_endpoints(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_eviction_reset(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_features(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_features_key(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_get_sl(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_get_stats(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_hb_addr(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_health_outliers(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_health_stats(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_help(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_histogram(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_index_pressure(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_jem_stats(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_latencies(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_log(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_log_message(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_log_set(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_logs(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_namespace(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_namespaces(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_node(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_objects(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_partition_generation(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_partition_info(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_partitions(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_physical_devices(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_query_abort(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_query_abort_all(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_query_show(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_quiesce(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_quiesce_undo(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_rack_ids(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_racks(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_rebalance_generation(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_recluster(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_replicas(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_replicas_all(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_replicas_master(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_revive(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_roster(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_roster_set(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_sets(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_sindex(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_sindex_create(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_sindex_delete(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_sindex_exists(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_sindex_list(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_sindex_stat(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_smd_info(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_smd_show(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_statistics(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_status(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_thread_traces(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_tip(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_tip_clear(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_truncate(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_truncate_namespace(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_truncate_namespace_undo(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_truncate_undo(const char* name, const char* params, cf_dyn_buf* db);
-static void cmd_version(const char* name, const char* params, cf_dyn_buf* db);
+static void cmd_best_practices(const as_info_cmd_args* args);
+static void cmd_build(const as_info_cmd_args* args);
+static void cmd_build_arch(const as_info_cmd_args* args);
+static void cmd_build_ee_sha(const as_info_cmd_args* args);
+static void cmd_build_os(const as_info_cmd_args* args);
+static void cmd_build_sha(const as_info_cmd_args* args);
+static void cmd_build_time(const as_info_cmd_args* args);
+static void cmd_cluster_name(const as_info_cmd_args* args);
+static void cmd_cluster_stable(const as_info_cmd_args* args);
+static void cmd_compatibility_id(const as_info_cmd_args* args);
+static void cmd_debug_record(const as_info_cmd_args* args);
+static void cmd_debug_record_meta(const as_info_cmd_args* args);
+static void cmd_digests(const as_info_cmd_args* args);
+static void cmd_dump_cluster(const as_info_cmd_args* args);
+static void cmd_dump_fabric(const as_info_cmd_args* args);
+static void cmd_dump_hb(const as_info_cmd_args* args);
+static void cmd_dump_hlc(const as_info_cmd_args* args);
+static void cmd_dump_migrates(const as_info_cmd_args* args);
+static void cmd_dump_rw_request_hash(const as_info_cmd_args* args);
+static void cmd_dump_skew(const as_info_cmd_args* args);
+static void cmd_dump_wb_summary(const as_info_cmd_args* args);
+static void cmd_edition(const as_info_cmd_args* args);
+static void cmd_endpoints(const as_info_cmd_args* args);
+static void cmd_eviction_reset(const as_info_cmd_args* args);
+static void cmd_features(const as_info_cmd_args* args);
+static void cmd_features_key(const as_info_cmd_args* args);
+static void cmd_get_sl(const as_info_cmd_args* args);
+static void cmd_get_stats(const as_info_cmd_args* args);
+static void cmd_hb_addr(const as_info_cmd_args* args);
+static void cmd_health_outliers(const as_info_cmd_args* args);
+static void cmd_health_stats(const as_info_cmd_args* args);
+static void cmd_help(const as_info_cmd_args* args);
+static void cmd_histogram(const as_info_cmd_args* args);
+static void cmd_index_pressure(const as_info_cmd_args* args);
+static void cmd_jem_stats(const as_info_cmd_args* args);
+static void cmd_latencies(const as_info_cmd_args* args);
+static void cmd_log(const as_info_cmd_args* args);
+static void cmd_log_message(const as_info_cmd_args* args);
+static void cmd_log_set(const as_info_cmd_args* args);
+static void cmd_logs(const as_info_cmd_args* args);
+static void cmd_namespace(const as_info_cmd_args* args);
+static void cmd_namespaces(const as_info_cmd_args* args);
+static void cmd_node(const as_info_cmd_args* args);
+static void cmd_objects(const as_info_cmd_args* args);
+static void cmd_partition_generation(const as_info_cmd_args* args);
+static void cmd_partition_info(const as_info_cmd_args* args);
+static void cmd_partitions(const as_info_cmd_args* args);
+static void cmd_physical_devices(const as_info_cmd_args* args);
+static void cmd_query_abort(const as_info_cmd_args* args);
+static void cmd_query_abort_all(const as_info_cmd_args* args);
+static void cmd_query_show(const as_info_cmd_args* args);
+static void cmd_quiesce(const as_info_cmd_args* args);
+static void cmd_quiesce_undo(const as_info_cmd_args* args);
+static void cmd_rack_ids(const as_info_cmd_args* args);
+static void cmd_racks(const as_info_cmd_args* args);
+static void cmd_rebalance_generation(const as_info_cmd_args* args);
+static void cmd_recluster(const as_info_cmd_args* args);
+static void cmd_replicas(const as_info_cmd_args* args);
+static void cmd_replicas_all(const as_info_cmd_args* args);
+static void cmd_replicas_master(const as_info_cmd_args* args);
+static void cmd_revive(const as_info_cmd_args* args);
+static void cmd_roster(const as_info_cmd_args* args);
+static void cmd_roster_set(const as_info_cmd_args* args);
+static void cmd_sets(const as_info_cmd_args* args);
+static void cmd_sindex(const as_info_cmd_args* args);
+static void cmd_sindex_create(const as_info_cmd_args* args);
+static void cmd_sindex_delete(const as_info_cmd_args* args);
+static void cmd_sindex_exists(const as_info_cmd_args* args);
+static void cmd_sindex_list(const as_info_cmd_args* args);
+static void cmd_sindex_stat(const as_info_cmd_args* args);
+static void cmd_smd_info(const as_info_cmd_args* args);
+static void cmd_smd_show(const as_info_cmd_args* args);
+static void cmd_statistics(const as_info_cmd_args* args);
+static void cmd_status(const as_info_cmd_args* args);
+static void cmd_thread_traces(const as_info_cmd_args* args);
+static void cmd_tip(const as_info_cmd_args* args);
+static void cmd_tip_clear(const as_info_cmd_args* args);
+static void cmd_truncate(const as_info_cmd_args* args);
+static void cmd_truncate_namespace(const as_info_cmd_args* args);
+static void cmd_truncate_namespace_undo(const as_info_cmd_args* args);
+static void cmd_truncate_undo(const as_info_cmd_args* args);
+static void cmd_version(const as_info_cmd_args* args);
 
 // Info command helpers.
 static const char* perm_to_string(as_sec_perm perm);
@@ -1067,7 +1067,8 @@ info_summary(cf_dyn_buf* db)
 		if (cmd->in_summary == true) {
 			cf_dyn_buf_append_string(db, cmd->name);
 			cf_dyn_buf_append_char(db, SEP);
-			cmd->fn(cmd->name, "", db);
+			as_info_cmd_args args = { .name = cmd->name, .params = "", .db = db };
+			cmd->fn(&args);
 			cf_dyn_buf_append_char(db, EOL);
 		}
 	}
@@ -1182,7 +1183,8 @@ handle_cmd(const as_info_cmd* cmd, const char* params,
 		}
 	}
 
-	cmd->fn(cmd->name, params, db);
+	as_info_cmd_args args = { .name = cmd->name, .params = params, .db = db };
+	cmd->fn(&args);
 }
 
 static void
@@ -1210,8 +1212,10 @@ append_security_error(cf_dyn_buf* db, uint32_t result, as_sec_perm perm)
 //
 
 static void
-cmd_best_practices(const char* name, const char* params, cf_dyn_buf* db)
+cmd_best_practices(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_string(db, "failed_best_practices=");
 
 	if (g_bad_practices.used_sz == 0) {
@@ -1223,44 +1227,58 @@ cmd_best_practices(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_build(const char* name, const char* params, cf_dyn_buf* db)
+cmd_build(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_string(db, aerospike_build_id);
 }
 
 static void
-cmd_build_arch(const char* name, const char* params, cf_dyn_buf* db)
+cmd_build_arch(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_string(db, aerospike_build_arch);
 }
 
 static void
-cmd_build_ee_sha(const char* name, const char* params, cf_dyn_buf* db)
+cmd_build_ee_sha(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_string(db, aerospike_build_ee_sha);
 }
 
 static void
-cmd_build_os(const char* name, const char* params, cf_dyn_buf* db)
+cmd_build_os(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_string(db, aerospike_build_os);
 }
 
 static void
-cmd_build_sha(const char* name, const char* params, cf_dyn_buf* db)
+cmd_build_sha(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_string(db, aerospike_build_sha);
 }
 
 static void
-cmd_build_time(const char* name, const char* params, cf_dyn_buf* db)
+cmd_build_time(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_string(db, aerospike_build_time);
 }
 
 static void
-cmd_cluster_name(const char* name, const char* params, cf_dyn_buf* db)
+cmd_cluster_name(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	char cluster_name[AS_CLUSTER_NAME_SZ];
 
 	as_config_cluster_name_get(cluster_name);
@@ -1268,8 +1286,11 @@ cmd_cluster_name(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_cluster_stable(const char* name, const char* params, cf_dyn_buf* db)
+cmd_cluster_stable(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// cluster-stable:[size=<target-size>];[ignore-migrations=<bool>];[namespace=<namespace-name>]
 
@@ -1382,14 +1403,19 @@ cmd_cluster_stable(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_compatibility_id(const char* name, const char* params, cf_dyn_buf* db)
+cmd_compatibility_id(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_uint32(db, AS_EXCHANGE_COMPATIBILITY_ID);
 }
 
 static void
-cmd_debug_record(const char* name, const char* params, cf_dyn_buf* db)
+cmd_debug_record(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// debug-record:namespace=<ns-name>;keyd=<hex-digest>[;mode=<mode>]
 	// where <mode> is one of: pickle or raw or raw-encrypted
@@ -1398,22 +1424,31 @@ cmd_debug_record(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_debug_record_meta(const char* name, const char* params, cf_dyn_buf* db)
+cmd_debug_record_meta(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: debug-record-meta:namespace=<ns-name>;keyd=<hex-digest>
 
 	debug_record(params, db, false);
 }
 
 static void
-cmd_digests(const char* name, const char* params, cf_dyn_buf* db)
+cmd_digests(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_string(db, "RIPEMD160");
 }
 
 static void
-cmd_dump_cluster(const char* name, const char* params, cf_dyn_buf* db)
+cmd_dump_cluster(const as_info_cmd_args* args)
 {
+	const char* name = args->name;
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// dump-cluster:{verbose=<opt>}
 	// where the "verbose" argument is optional and <opt> is one of:
@@ -1453,8 +1488,12 @@ cmd_dump_cluster(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_dump_fabric(const char* name, const char* params, cf_dyn_buf* db)
+cmd_dump_fabric(const as_info_cmd_args* args)
 {
+	const char* name = args->name;
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// dump-fabric:{verbose=<opt>}
 	// where the "verbose" argument is optional] and the <opt> is one of:
@@ -1493,8 +1532,12 @@ cmd_dump_fabric(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_dump_hb(const char* name, const char* params, cf_dyn_buf* db)
+cmd_dump_hb(const as_info_cmd_args* args)
 {
+	const char* name = args->name;
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: dump-hb:{verbose=<opt>}
 	// where the "verbose" argument is optional and the <opt> is one of:
 	// {"true" | "false"} and defaults to "false".
@@ -1532,8 +1575,12 @@ cmd_dump_hb(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_dump_hlc(const char* name, const char* params, cf_dyn_buf* db)
+cmd_dump_hlc(const as_info_cmd_args* args)
 {
+	const char* name = args->name;
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// dump-hlc:{verbose=<opt>}
 	// where the "verbose" argument is optional] and the <opt> is one of:
@@ -1572,8 +1619,12 @@ cmd_dump_hlc(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_dump_migrates(const char* name, const char* params, cf_dyn_buf* db)
+cmd_dump_migrates(const as_info_cmd_args* args)
 {
+	const char* name = args->name;
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// dump-migrates:{verbose=<opt>}
 	// where <opt> is one of:  {"true" | "false"} and defaults to "false".
@@ -1611,15 +1662,20 @@ cmd_dump_migrates(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_dump_rw_request_hash(const char* name, const char* params, cf_dyn_buf* db)
+cmd_dump_rw_request_hash(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	rw_request_hash_dump();
 	as_info_respond_ok(db);
 }
 
 static void
-cmd_dump_skew(const char* name, const char* params, cf_dyn_buf* db)
+cmd_dump_skew(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: dump-skew:
 
 	cf_debug(AS_INFO, "dump-skew command received: params %s", params);
@@ -1629,8 +1685,11 @@ cmd_dump_skew(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_dump_wb_summary(const char* name, const char* params, cf_dyn_buf* db)
+cmd_dump_wb_summary(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: dump-wb-summary:ns=<Namespace>
 	// where <Namespace> is the name of an existing namespace.
 
@@ -1649,14 +1708,18 @@ cmd_dump_wb_summary(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_edition(const char* name, const char* params, cf_dyn_buf* db)
+cmd_edition(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_string(db, aerospike_build_type);
 }
 
 static void
-cmd_endpoints(const char* name, const char* params, cf_dyn_buf* db)
+cmd_endpoints(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_ip_port port = bind_to_port(&g_service_bind, CF_SOCK_OWNER_SERVICE);
 	info_append_int(db, "service.port", port);
 
@@ -1726,8 +1789,11 @@ cmd_endpoints(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_eviction_reset(const char* name, const char* params, cf_dyn_buf* db)
+cmd_eviction_reset(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// eviction-reset:namespace=<ns-name>[;ttl=<seconds-from-now>]
 	// where no ttl means delete the SMD evict-void-time.
@@ -1763,8 +1829,10 @@ cmd_eviction_reset(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_features(const char* name, const char* params, cf_dyn_buf* db)
+cmd_features(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_string(db,
 			"batch-any;batch-index;blob-bits;"
 			"cdt-index;cdt-list;cdt-map;cluster-stable;"
@@ -1781,21 +1849,28 @@ cmd_features(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_features_key(const char* name, const char* params, cf_dyn_buf* db)
+cmd_features_key(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_string(db, as_features_info());
 }
 
 static void
-cmd_get_sl(const char* name, const char* params, cf_dyn_buf* db)
+cmd_get_sl(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	// Command format: get-sl:
 	as_exchange_info_get_succession(db);
 }
 
 static void
-cmd_get_stats(const char* name, const char* params, cf_dyn_buf* db)
+cmd_get_stats(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	char context[1024];
 	int context_len = sizeof(context);
 	info_param_result rv = as_info_parameter_get(params, "context", context,
@@ -1814,8 +1889,11 @@ cmd_get_stats(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_hb_addr(const char* name, const char* params, cf_dyn_buf* db)
+cmd_hb_addr(const as_info_cmd_args* args)
 {
+	const char* name = args->name;
+	cf_dyn_buf* db = args->db;
+
 	as_hb_mode hb_mode;
 	char addr_port_str[1024];
 
@@ -1838,20 +1916,26 @@ cmd_hb_addr(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_health_outliers(const char* name, const char* params, cf_dyn_buf* db)
+cmd_health_outliers(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	as_health_get_outliers(db);
 }
 
 static void
-cmd_health_stats(const char* name, const char* params, cf_dyn_buf* db)
+cmd_health_stats(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	as_health_get_stats(db);
 }
 
 static void
-cmd_help(const char* name, const char* params, cf_dyn_buf* db)
+cmd_help(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	bool is_ce = as_error_enterprise_only();
 
 	for (uint32_t i = 0; i < N_SPECS; i++) {
@@ -1870,8 +1954,11 @@ cmd_help(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_histogram(const char* name, const char* params, cf_dyn_buf* db)
+cmd_histogram(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	char value_str[128];
 	int  value_str_len = sizeof(value_str);
 	info_param_result rv = as_info_param_get_namespace(params, value_str,
@@ -1904,8 +1991,10 @@ cmd_histogram(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_index_pressure(const char* name, const char* params, cf_dyn_buf* db)
+cmd_index_pressure(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	for (uint32_t i = 0; i < g_config.n_namespaces; i++) {
 		as_namespace* ns = g_config.namespaces[i];
 		cf_page_cache_stats stats;
@@ -1926,8 +2015,11 @@ cmd_index_pressure(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_jem_stats(const char* name, const char* params, cf_dyn_buf* db)
+cmd_jem_stats(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// jem-stats:{file=<string>;options=<string>;sites=<string>}
 	// where the "file", "options", and "sites" arguments are optional.
@@ -1981,8 +2073,12 @@ cmd_jem_stats(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_latencies(const char* name, const char* params, cf_dyn_buf* db)
+cmd_latencies(const as_info_cmd_args* args)
 {
+	const char* name = args->name;
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: latencies:[hist=<name>]
 	// Example:
 	// latencies:hist={test}-reads
@@ -2173,8 +2269,11 @@ cmd_latencies(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_log(const char* name, const char* params, cf_dyn_buf* db)
+cmd_log(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	int sink_id;
 	char* context = strchr(params, ARG_SEP);
 
@@ -2200,8 +2299,11 @@ cmd_log(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_log_message(const char* name, const char* params, cf_dyn_buf* db)
+cmd_log_message(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Log a message to the server. Limited to 2048 characters.
 	// Command format: log-message:message=<MESSAGE>[;who=<WHO>]
 	// Example: log-message:message=Example Log Message;who=Aerospike User
@@ -2233,8 +2335,11 @@ cmd_log_message(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_log_set(const char* name, const char* params, cf_dyn_buf* db)
+cmd_log_set(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: log-set:id=<id>;<context>=<level>
 	// Example: log-set:id=0;service=detail
 
@@ -2292,14 +2397,19 @@ cmd_log_set(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_logs(const char* name, const char* params, cf_dyn_buf* db)
+cmd_logs(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_log_get_sinks(db);
 }
 
 static void
-cmd_namespace(const char* name, const char* params, cf_dyn_buf* db)
+cmd_namespace(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	as_namespace* ns = as_namespace_get_byname(params);
 
 	if (ns == NULL) {
@@ -2315,8 +2425,10 @@ cmd_namespace(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_namespaces(const char* name, const char* params, cf_dyn_buf* db)
+cmd_namespaces(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	for (uint32_t i = 0; i < g_config.n_namespaces; i++) {
 		cf_dyn_buf_append_string(db, g_config.namespaces[i]->name);
 		cf_dyn_buf_append_char(db, ';');
@@ -2328,14 +2440,18 @@ cmd_namespaces(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_node(const char* name, const char* params, cf_dyn_buf* db)
+cmd_node(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_uint64_x(db, g_config.self_node);
 }
 
 static void
-cmd_objects(const char* name, const char* params, cf_dyn_buf* db)
+cmd_objects(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	uint64_t objects = 0;
 
 	for (uint32_t i = 0; i < g_config.n_namespaces; i++) {
@@ -2346,27 +2462,36 @@ cmd_objects(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_partition_generation(const char* name, const char* params, cf_dyn_buf* db)
+cmd_partition_generation(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	// TODO - ARM TSO plugin - will need acquire semantic.
 	cf_dyn_buf_append_int(db, g_partition_generation);
 }
 
 static void
-cmd_partition_info(const char* name, const char* params, cf_dyn_buf* db)
+cmd_partition_info(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	as_partition_getinfo_str(db);
 }
 
 static void
-cmd_partitions(const char* name, const char* params, cf_dyn_buf* db)
+cmd_partitions(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_uint32(db, AS_PARTITIONS);
 }
 
 static void
-cmd_physical_devices(const char* name, const char* params, cf_dyn_buf* db)
+cmd_physical_devices(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: "physical-devices:path=<path>"
 	//
 	// <path> can specify a device partition, file path, mount directory, etc.
@@ -2403,8 +2528,10 @@ cmd_physical_devices(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_query_abort_all(const char* name, const char* params, cf_dyn_buf* db)
+cmd_query_abort_all(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	uint32_t n_queries_killed = as_query_manager_abort_all_jobs();
 
 	cf_dyn_buf_append_string(db, "number-of-queries-killed:");
@@ -2412,8 +2539,12 @@ cmd_query_abort_all(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_query_abort(const char* name, const char* params, cf_dyn_buf* db)
+cmd_query_abort(const as_info_cmd_args* args)
 {
+	const char* name = args->name;
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	(void)name;
 
 	char trid_str[1 + 24 + 1]; // allow octal, decimal, hex
@@ -2444,8 +2575,12 @@ cmd_query_abort(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_query_show(const char* name, const char* params, cf_dyn_buf* db)
+cmd_query_show(const as_info_cmd_args* args)
 {
+	const char* name = args->name;
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	(void)name;
 
 	char trid_str[1 + 24 + 1]; // allow octal, decimal, hex
@@ -2477,8 +2612,10 @@ cmd_query_show(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_quiesce(const char* name, const char* params, cf_dyn_buf* db)
+cmd_quiesce(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	// Command format: quiesce:
 
 	if (g_config.stay_quiesced) {
@@ -2497,8 +2634,10 @@ cmd_quiesce(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_quiesce_undo(const char* name, const char* params, cf_dyn_buf* db)
+cmd_quiesce_undo(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	// Command format: quiesce-undo:
 
 	if (g_config.stay_quiesced) {
@@ -2516,14 +2655,19 @@ cmd_quiesce_undo(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_rack_ids(const char* name, const char* params, cf_dyn_buf* db)
+cmd_rack_ids(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	as_partition_balance_effective_rack_ids(db);
 }
 
 static void
-cmd_racks(const char* name, const char* params, cf_dyn_buf* db)
+cmd_racks(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: racks:{namespace=<namespace-name>}
 
 	char param_str[AS_ID_NAMESPACE_SZ] = { 0 };
@@ -2582,14 +2726,18 @@ cmd_racks(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_rebalance_generation(const char* name, const char* params, cf_dyn_buf* db)
+cmd_rebalance_generation(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_uint64(db, g_rebalance_generation);
 }
 
 static void
-cmd_recluster(const char* name, const char* params, cf_dyn_buf* db)
+cmd_recluster(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	// Command format: recluster:
 
 	int rv = as_clustering_cluster_reform();
@@ -2609,8 +2757,11 @@ cmd_recluster(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_replicas(const char* name, const char* params, cf_dyn_buf* db)
+cmd_replicas(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	char max_str[4];
 	int len = (int)sizeof(max_str);
 	info_param_result rv = as_info_parameter_get(params, "max", max_str, &len);
@@ -2633,20 +2784,27 @@ cmd_replicas(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_replicas_all(const char* name, const char* params, cf_dyn_buf* db)
+cmd_replicas_all(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	as_partition_get_replicas_all_str(db, false, 0);
 }
 
 static void
-cmd_replicas_master(const char* name, const char* params, cf_dyn_buf* db)
+cmd_replicas_master(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	as_partition_get_replicas_master_str(db);
 }
 
 static void
-cmd_revive(const char* name, const char* params, cf_dyn_buf* db)
+cmd_revive(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: revive:{namespace=<ns-name>}
 
 	char ns_name[AS_ID_NAMESPACE_SZ] = { 0 };
@@ -2690,8 +2848,11 @@ cmd_revive(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_roster(const char* name, const char* params, cf_dyn_buf* db)
+cmd_roster(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: roster:{namespace=<ns-name>}
 
 	char ns_name[AS_ID_NAMESPACE_SZ] = { 0 };
@@ -2727,8 +2888,11 @@ cmd_roster(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_roster_set(const char* name, const char* params, cf_dyn_buf* db)
+cmd_roster_set(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// roster-set:namespace=<ns-name>;nodes=<nodes-string>
 	// where <nodes-string> is comma-separated list of node-id:rack-id pairs, and
@@ -2760,8 +2924,11 @@ cmd_roster_set(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_sets(const char* name, const char* params, cf_dyn_buf* db)
+cmd_sets(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// format w/o namespace is
 	//   ns1:set1:prop1=val1:prop2=val2:..propn=valn;ns1:set2...;ns2:set1...;
@@ -2807,8 +2974,11 @@ cmd_sets(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_sindex(const char* name, const char* params, cf_dyn_buf* db)
+cmd_sindex(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// format w/o namespace is:
 	//    ns=ns1:set=set1:indexname=index1:prop1=val1:...:propn=valn;ns=ns1:set=set2:indexname=index2:...;ns=ns2:set=set1:...;
@@ -2863,8 +3033,11 @@ cmd_sindex(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_sindex_create(const char* name, const char* params, cf_dyn_buf* db)
+cmd_sindex_create(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// sindex-create:ns=usermap;set=demo;indexname=um_age;indextype=list;indexdata=age,numeric
 	// sindex-create:ns=usermap;set=demo;indexname=um_state;indexdata=state,string
@@ -3100,8 +3273,11 @@ cmd_sindex_create(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_sindex_delete(const char* name, const char* params, cf_dyn_buf* db)
+cmd_sindex_delete(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// sindex-delete:ns=usermap;set=demo;indexname=um_state
 
@@ -3164,8 +3340,11 @@ cmd_sindex_delete(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_sindex_exists(const char* name, const char* params, cf_dyn_buf* db)
+cmd_sindex_exists(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// sindex-exists:ns=usermap;indexname=um_state
 
@@ -3195,8 +3374,11 @@ cmd_sindex_exists(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_sindex_list(const char* name, const char* params, cf_dyn_buf* db)
+cmd_sindex_list(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	char ns_str[128];
 	int ns_len = sizeof(ns_str);
 	info_param_result rv = as_info_param_get_namespace_ns(params, ns_str, &ns_len);
@@ -3247,8 +3429,11 @@ cmd_sindex_list(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_sindex_stat(const char* name, const char* params, cf_dyn_buf* db)
+cmd_sindex_stat(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// get indexname
 	char index_name_str[INAME_MAX_SZ];
 	int  index_len = sizeof(index_name_str);
@@ -3281,14 +3466,19 @@ cmd_sindex_stat(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_smd_info(const char* name, const char* params, cf_dyn_buf* db)
+cmd_smd_info(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	as_smd_get_info(db);
 }
 
 static void
-cmd_smd_show(const char* name, const char* params, cf_dyn_buf* db)
+cmd_smd_show(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format:
 	// smd-show:module=sindex
 
@@ -3344,8 +3534,10 @@ cmd_smd_show(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_statistics(const char* name, const char* params, cf_dyn_buf* db)
+cmd_statistics(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	uint64_t now_sec = cf_get_seconds();
 
 	info_append_bool(db, "failed_best_practices", g_bad_practices.used_sz != 0);
@@ -3493,20 +3685,29 @@ cmd_statistics(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_status(const char* name, const char* params, cf_dyn_buf* db)
+cmd_status(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	as_info_respond_ok(db);
 }
 
 static void
-cmd_thread_traces(const char* name, const char* params, cf_dyn_buf* db)
+cmd_thread_traces(const as_info_cmd_args* args)
 {
+	const char* name = args->name;
+	cf_dyn_buf* db = args->db;
+
 	cf_thread_traces(name, db);
 }
 
 static void
-cmd_tip(const char* name, const char* params, cf_dyn_buf* db)
+cmd_tip(const as_info_cmd_args* args)
 {
+	const char* name = args->name;
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: tip:host=<IPAddr>;port=<PortNum>[;tls=<Bool>]
 	// where <IPAddr> is an IP address and <PortNum> is a valid TCP port number.
 
@@ -3579,8 +3780,11 @@ cmd_tip(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_tip_clear(const char* name, const char* params, cf_dyn_buf* db)
+cmd_tip_clear(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: tip-clear:{host-port-list=<hpl>}
 	// "host-port-list" argument is optional]
 	// where <hpl> is either "all" or else a comma-separated list of items
@@ -3664,8 +3868,11 @@ cmd_tip_clear(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_truncate(const char* name, const char* params, cf_dyn_buf* db)
+cmd_truncate(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: truncate:namespace=<ns-name>;set=<set-name>[;lut=<UTC-nanosec-string>]
 	// where no lut value means use this server's current time.
 
@@ -3711,8 +3918,11 @@ cmd_truncate(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_truncate_namespace(const char* name, const char* params, cf_dyn_buf* db)
+cmd_truncate_namespace(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: truncate-namespace:namespace=<ns-name>[;lut=<UTC-nanosec-string>]
 	// where no lut value means use this server's current time.
 
@@ -3760,9 +3970,11 @@ cmd_truncate_namespace(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_truncate_namespace_undo(const char* name, const char* params,
-		cf_dyn_buf* db)
+cmd_truncate_namespace_undo(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: truncate-namespace-undo:namespace=<ns-name>
 
 	// Get the namespace name.
@@ -3795,8 +4007,11 @@ cmd_truncate_namespace_undo(const char* name, const char* params,
 }
 
 static void
-cmd_truncate_undo(const char* name, const char* params, cf_dyn_buf* db)
+cmd_truncate_undo(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+
 	// Command format: truncate-undo:namespace=<ns-name>;set=<set-name>
 
 	// Get the namespace name.
@@ -3827,8 +4042,10 @@ cmd_truncate_undo(const char* name, const char* params, cf_dyn_buf* db)
 }
 
 static void
-cmd_version(const char* name, const char* params, cf_dyn_buf* db)
+cmd_version(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* db = args->db;
+
 	cf_dyn_buf_append_format(db, "%s build %s",
 			aerospike_build_type, aerospike_build_id);
 }

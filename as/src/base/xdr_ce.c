@@ -36,6 +36,7 @@
 
 #include "base/datamodel.h"
 #include "base/transaction.h"
+#include "base/thr_info.h"
 
 
 //==========================================================
@@ -148,16 +149,16 @@ as_xdr_get_stats(const char* cmd, cf_dyn_buf* db)
 }
 
 void
-as_xdr_dc_state(const char* name, const char* cmd, cf_dyn_buf* db)
+as_xdr_dc_state(const as_info_cmd_args* args)
 {
 }
 
 void
-as_xdr_get_filter(const char* name, const char* cmd, cf_dyn_buf* db)
+as_xdr_get_filter(const as_info_cmd_args* args)
 {
 }
 
 void
-as_xdr_set_filter(const char* name, const char* cmd, cf_dyn_buf* db)
+as_xdr_set_filter(const as_info_cmd_args* args)
 {
 }

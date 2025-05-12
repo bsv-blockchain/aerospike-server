@@ -141,8 +141,10 @@ udf_cask_init(void)
 //
 
 void
-udf_cask_info_clear_cache(const char* name, const char* params, cf_dyn_buf* out)
+udf_cask_info_clear_cache(const as_info_cmd_args* args)
 {
+	cf_dyn_buf* out = args->db;
+
 	cf_debug(AS_UDF, "udf cask info clear cache");
 
 	// Command format:
@@ -160,8 +162,11 @@ udf_cask_info_clear_cache(const char* name, const char* params, cf_dyn_buf* out)
 }
 
 void
-udf_cask_info_get(const char* name, const char* params, cf_dyn_buf* out)
+udf_cask_info_get(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* out = args->db;
+
 	cf_debug(AS_UDF, "udf cask info get");
 
 	// Command format:
@@ -223,10 +228,9 @@ udf_cask_info_get(const char* name, const char* params, cf_dyn_buf* out)
 }
 
 void
-udf_cask_info_list(const char* name, const char* params, cf_dyn_buf* out)
+udf_cask_info_list(const as_info_cmd_args* args)
 {
-	(void)params;
-
+	cf_dyn_buf* out = args->db;
 	cf_debug(AS_UDF, "udf cask info list");
 
 	// Command format:
@@ -246,8 +250,11 @@ udf_cask_info_list(const char* name, const char* params, cf_dyn_buf* out)
 }
 
 void
-udf_cask_info_put(const char* name, const char* params, cf_dyn_buf* out)
+udf_cask_info_put(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* out = args->db;
+
 	cf_debug(AS_UDF, "UDF CASK INFO PUT");
 
 	// Command format:
@@ -406,8 +413,11 @@ udf_cask_info_put(const char* name, const char* params, cf_dyn_buf* out)
 }
 
 void
-udf_cask_info_remove(const char* name, const char* params, cf_dyn_buf* out)
+udf_cask_info_remove(const as_info_cmd_args* args)
 {
+	const char* params = args->params;
+	cf_dyn_buf* out = args->db;
+
 	cf_debug(AS_UDF, "udf cask info remove");
 
 	// Command format:

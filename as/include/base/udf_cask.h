@@ -27,7 +27,7 @@
 //
 
 #include "dynbuf.h"
-
+#include "cfg_info.h"
 
 //==========================================================
 // Public API.
@@ -37,8 +37,8 @@
 void udf_cask_init(void);
 
 // Info commands.
-void udf_cask_info_clear_cache(const char* name, const char* params, cf_dyn_buf* out);
-void udf_cask_info_get(const char* name, const char* params, cf_dyn_buf* out);
-void udf_cask_info_list(const char* name, const char* params, cf_dyn_buf* out);
-void udf_cask_info_put(const char* name, const char* params, cf_dyn_buf* out);
-void udf_cask_info_remove(const char* name, const char* params, cf_dyn_buf* out);
+void udf_cask_info_clear_cache(const struct as_info_cmd_args_s* args);
+void udf_cask_info_get(const struct as_info_cmd_args_s* args);
+void udf_cask_info_list(const struct as_info_cmd_args_s* args);
+void udf_cask_info_put(const struct as_info_cmd_args_s* args);
+void udf_cask_info_remove(const struct as_info_cmd_args_s* args);
