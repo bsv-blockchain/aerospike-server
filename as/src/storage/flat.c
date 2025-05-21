@@ -272,6 +272,55 @@ as_flat_unpack_remote_bins(as_remote_record* rr, as_bin* bins)
 	return as_flat_unpack_bins(ns, flat_bins, end, rr->n_bins, bins);
 }
 
+const uint8_t*
+as_flat_unpack_bin_data(as_bin* bin, const uint8_t* at, const uint8_t* end)
+{
+	if ((*at & BIN_HAS_META) != 0) {
+		uint8_t flags = *at++;
+
+		if ((flags & BIN_UNKNOWN_FLAGS) != 0) {
+			cf_warning(AS_FLAT, "unknown bin flags");
+			return NULL;
+		}
+
+		unpack_bin_xdr_write(flags, bin);
+
+		if ((flags & BIN_HAS_LUT) != 0) {
+			if (at + sizeof(flat_bin_lut) > end) {
+				cf_warning(AS_FLAT, "incomplete flat bin");
+				return NULL;
+			}
+
+			bin->lut = ((flat_bin_lut*)at)->lut;
+			at += sizeof(flat_bin_lut);
+		}
+
+		if ((at = unpack_bin_src_id(flags, at, end, bin)) == NULL) {
+			return NULL;
+		}
+	}
+
+	return as_bin_particle_from_flat(bin, at, end);
+}
+
+const uint8_t*
+as_flat_skip_bin_data(const uint8_t* at, const uint8_t* end)
+{
+	if ((*at & BIN_HAS_META) != 0) {
+		uint8_t flags = *at++;
+
+		if ((flags & BIN_HAS_LUT) != 0) {
+			at += sizeof(flat_bin_lut);
+		}
+
+		if ((at = skip_bin_src_id(flags, at, end)) == NULL) {
+			return NULL;
+		}
+	}
+
+	return as_particle_skip_flat(at, end);
+}
+
 int
 as_flat_unpack_bins(as_namespace* ns, const uint8_t* at, const uint8_t* end,
 		uint16_t n_bins, as_bin* bins)
@@ -310,33 +359,7 @@ as_flat_unpack_bins(as_namespace* ns, const uint8_t* at, const uint8_t* end,
 			break;
 		}
 
-		if ((*at & BIN_HAS_META) != 0) {
-			uint8_t flags = *at++;
-
-			if ((flags & BIN_UNKNOWN_FLAGS) != 0) {
-				cf_warning(AS_FLAT, "unknown bin flags");
-				break;
-			}
-
-			unpack_bin_xdr_write(flags, b);
-
-			if ((flags & BIN_HAS_LUT) != 0) {
-				if (at + sizeof(flat_bin_lut) > end) {
-					cf_warning(AS_FLAT, "incomplete flat bin");
-					break;
-				}
-
-				b->lut = ((flat_bin_lut*)at)->lut;
-				at += sizeof(flat_bin_lut);
-			}
-
-			if ((at = unpack_bin_src_id(flags, at, end, b)) == NULL) {
-				break;
-			}
-		}
-
-		at = as_bin_particle_from_flat(b, at, end);
-
+		at = as_flat_unpack_bin_data(b, at, end);
 		if (at == NULL) {
 			break;
 		}
@@ -377,21 +400,7 @@ as_flat_check_packed_bins(const uint8_t* at, const uint8_t* end,
 			return NULL;
 		}
 
-		at += name_len;
-
-		if ((*at & BIN_HAS_META) != 0) {
-			uint8_t flags = *at++;
-
-			if ((flags & BIN_HAS_LUT) != 0) {
-				at += sizeof(flat_bin_lut);
-			}
-
-			if ((at = skip_bin_src_id(flags, at, end)) == NULL) {
-				return NULL;
-			}
-		}
-
-		if ((at = as_particle_skip_flat(at, end)) == NULL) {
+		if ((at = as_flat_skip_bin_data(at + name_len, end)) == NULL) {
 			return NULL;
 		}
 	}

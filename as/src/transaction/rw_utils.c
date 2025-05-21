@@ -274,7 +274,7 @@ read_and_filter_bins(as_storage_rd* rd, as_exp* exp)
 
 	as_bin stack_bins[RECORD_MAX_BINS];
 
-	int result = as_storage_rd_load_bins(rd, stack_bins);
+	int result = as_storage_rd_lazy_load_bins(rd, stack_bins);
 
 	if (result < 0) {
 		return -result;

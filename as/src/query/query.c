@@ -1943,8 +1943,11 @@ basic_query_job_reduce_cb(as_index_ref* r_ref, int64_t bval, void* udata)
 	}
 	else {
 		as_bin stack_bins[RECORD_MAX_BINS];
+		int result = (job->bin_names ?
+				as_storage_rd_lazy_load_bins(&rd, stack_bins) :
+				as_storage_rd_load_bins(&rd, stack_bins));
 
-		if (as_storage_rd_load_bins(&rd, stack_bins) < 0) {
+		if (result < 0) {
 			cf_warning(AS_QUERY, "job %lu - record unreadable", _job->trid);
 			as_storage_record_close(&rd);
 			as_record_done(r_ref, ns);

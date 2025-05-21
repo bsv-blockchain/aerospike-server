@@ -591,7 +591,11 @@ read_local(as_transaction* tr)
 
 	as_bin stack_bins[RECORD_MAX_BINS];
 
-	if ((result = as_storage_rd_load_bins(&rd, stack_bins)) < 0) {
+	result = ((m->info1 & AS_MSG_INFO1_GET_ALL) ?
+				as_storage_rd_load_bins(&rd, stack_bins) :
+				as_storage_rd_lazy_load_bins(&rd, stack_bins));
+
+	if (result < 0) {
 		cf_warning(AS_RW, "{%s} read_local: failed as_storage_rd_load_bins() %pD", ns->name, &tr->keyd);
 		read_local_done(tr, &r_ref, &rd, -result);
 		return TRANS_DONE;

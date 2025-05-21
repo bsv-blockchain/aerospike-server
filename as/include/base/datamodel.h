@@ -410,6 +410,7 @@ as_bin *as_bin_get_or_create(struct as_storage_rd_s *rd, const char *name);
 as_bin *as_bin_get_or_create_w_len(struct as_storage_rd_s *rd, const uint8_t *name, size_t len);
 void as_bin_delete(struct as_storage_rd_s* rd, const char* name);
 void as_bin_delete_w_len(struct as_storage_rd_s* rd, const uint8_t* name, size_t len);
+int as_storage_rd_lazy_load_bins(struct as_storage_rd_s *rd, as_bin* stack_bins);
 
 
 typedef enum {

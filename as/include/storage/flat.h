@@ -183,6 +183,8 @@ uint32_t as_flat_orig_pickle_size(const struct as_remote_record_s* rr, uint32_t 
 bool as_flat_skip_bins(const as_flat_comp_meta* cm, struct as_storage_rd_s* rd);
 bool as_flat_decompress_bins(const as_flat_comp_meta* cm, struct as_storage_rd_s* rd);
 bool as_flat_decompress_buffer(const as_flat_comp_meta* cm, uint32_t max_orig_sz, const uint8_t** at, const uint8_t** end, const uint8_t** cb_end);
+const uint8_t* as_flat_unpack_bin_data(struct as_bin_s* bin, const uint8_t* at, const uint8_t* end);
+const uint8_t* as_flat_skip_bin_data(const uint8_t* at, const uint8_t* end);
 
 // Round size in bytes up to a multiple of rblock size.
 static inline uint32_t

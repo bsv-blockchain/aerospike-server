@@ -133,6 +133,7 @@ typedef struct as_storage_rd_s {
 	const uint8_t*			flat_end;
 	const uint8_t*			flat_bins;
 	uint16_t				flat_n_bins;
+	bool				check_flat;
 
 	union {
 		struct drv_ssd_s*	ssd;
