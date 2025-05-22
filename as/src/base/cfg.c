@@ -445,6 +445,7 @@ typedef enum {
 	// Namespace options:
 	CASE_NAMESPACE_ACTIVE_RACK,
 	CASE_NAMESPACE_ALLOW_TTL_WITHOUT_NSUP,
+	CASE_NAMESPACE_APPLY_TTL_REDUCTIONS,
 	CASE_NAMESPACE_AUTO_REVIVE,
 	CASE_NAMESPACE_BACKGROUND_QUERY_MAX_RPS,
 	CASE_NAMESPACE_CONFLICT_RESOLUTION_POLICY,
@@ -1047,6 +1048,7 @@ const cfg_opt NETWORK_TLS_OPTS[] = {
 const cfg_opt NAMESPACE_OPTS[] = {
 		{ "active-rack",					CASE_NAMESPACE_ACTIVE_RACK },
 		{ "allow-ttl-without-nsup",			CASE_NAMESPACE_ALLOW_TTL_WITHOUT_NSUP },
+		{ "apply-ttl-reductions",			CASE_NAMESPACE_APPLY_TTL_REDUCTIONS },
 		{ "auto-revive",					CASE_NAMESPACE_AUTO_REVIVE },
 		{ "background-query-max-rps",		CASE_NAMESPACE_BACKGROUND_QUERY_MAX_RPS },
 		{ "conflict-resolution-policy",		CASE_NAMESPACE_CONFLICT_RESOLUTION_POLICY },
@@ -2901,6 +2903,9 @@ as_config_init(const char* config_file)
 				break;
 			case CASE_NAMESPACE_ALLOW_TTL_WITHOUT_NSUP:
 				ns->allow_ttl_without_nsup = cfg_bool(&line);
+				break;
+			case CASE_NAMESPACE_APPLY_TTL_REDUCTIONS:
+				ns->apply_ttl_reductions = cfg_bool(&line);
 				break;
 			case CASE_NAMESPACE_AUTO_REVIVE:
 				cfg_enterprise_only(&line);

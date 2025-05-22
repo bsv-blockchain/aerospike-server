@@ -4723,6 +4723,8 @@ info_get_namespace_info(as_namespace* ns, cf_dyn_buf* db)
 
 	info_append_uint64(db, "deleted_last_bin", ns->n_deleted_last_bin);
 	info_append_uint64(db, "mrt_monitor_roll_tombstone_creates", ns->n_mrt_monitor_roll_tombstone_creates);
+	info_append_uint64(db, "ttl_reductions_ignored", ns->n_ttl_reductions_ignored);
+	info_append_uint64(db, "ttl_reductions_applied", ns->n_ttl_reductions_applied);
 }
 
 static void

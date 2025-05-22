@@ -98,6 +98,7 @@ as_namespace_create(char *name)
 	ns->pi_xmem_type = CF_XMEM_TYPE_MEM;
 	ns->si_xmem_type = CF_XMEM_TYPE_MEM;
 
+	ns->apply_ttl_reductions = true; // TODO - may want to make this false by default later
 	ns->background_query_max_rps = 10000; // internal write generation limit
 	ns->conflict_resolution_policy = AS_NAMESPACE_CONFLICT_RESOLUTION_POLICY_UNDEF;
 	ns->evict_hist_buckets = 10000; // for 30 day TTL, bucket width is 4 minutes 20 seconds

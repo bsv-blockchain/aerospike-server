@@ -783,6 +783,7 @@ typedef struct as_namespace_s {
 	uint32_t		cfg_active_rack; // relevant only for enterprise edition
 	uint32_t		active_rack; // indirect config - can become disabled if any other node reports a different value
 	bool			allow_ttl_without_nsup;
+	bool			apply_ttl_reductions;
 	bool			auto_revive;
 	uint32_t		background_query_max_rps;
 	conflict_resolution_pol conflict_resolution_policy;
@@ -1303,6 +1304,8 @@ typedef struct as_namespace_s {
 
 	uint64_t		n_deleted_last_bin;
 	uint64_t		n_mrt_monitor_roll_tombstone_creates; // relevant only for enterprise edition
+	uint64_t		n_ttl_reductions_ignored;
+	uint64_t		n_ttl_reductions_applied;
 
 	// One-way automatically activated histograms.
 

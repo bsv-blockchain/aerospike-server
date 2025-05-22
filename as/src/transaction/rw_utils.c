@@ -373,9 +373,10 @@ advance_record_version(as_transaction* tr, as_record* r)
 {
 	// Shortcut pointers.
 	const as_msg* m = &tr->msgp->msg;
-	const as_namespace* ns = tr->rsv.ns;
+	as_namespace* ns = tr->rsv.ns;
 
 	uint64_t now = as_transaction_epoch_ms(tr);
+	uint64_t void_time = r->void_time;
 
 	switch (m->record_ttl) {
 	case TTL_USE_DEFAULT: {
@@ -384,17 +385,17 @@ advance_record_version(as_transaction* tr, as_record* r)
 
 			if (default_ttl != 0) {
 				// Set record void-time using default TTL value.
-				r->void_time = (now / 1000) + default_ttl;
+				void_time = (now / 1000) + default_ttl;
 			}
 			else {
 				// Default TTL is "never expire".
-				r->void_time = 0;
+				void_time = 0;
 			}
 		}
 		break;
 	case TTL_NEVER_EXPIRE:
 		// Set record to "never expire".
-		r->void_time = 0;
+		void_time = 0;
 		break;
 	case TTL_DONT_UPDATE:
 		// Do not change record's void time.
@@ -402,10 +403,22 @@ advance_record_version(as_transaction* tr, as_record* r)
 	default:
 		// Apply non-special m->record_ttl directly. Have already checked
 		// m->record_ttl <= 10 years, so no overflow etc.
-		r->void_time = (now / 1000) + m->record_ttl;
+		void_time = (now / 1000) + m->record_ttl;
 		break;
 	}
 
+	if (r->generation != 0 && ((r->void_time == 0 && void_time != 0) ||
+			(void_time < r->void_time))) {
+		if (! ns->apply_ttl_reductions) {
+			void_time = r->void_time;
+			as_incr_uint64(&ns->n_ttl_reductions_ignored);
+		}
+		else {
+			as_incr_uint64(&ns->n_ttl_reductions_applied);
+		}
+	}
+
+	r->void_time = void_time;
 	as_record_set_lut(r, tr->rsv.regime, now, ns);
 	as_record_increment_generation(r, ns);
 }
