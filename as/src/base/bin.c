@@ -106,7 +106,7 @@ as_bin_get_w_len(as_storage_rd* rd, const uint8_t* name, size_t len)
 	while (bi < rd->flat_n_bins) {
 		uint8_t flat_name_len = *at++;
 
-		if ((flat_name_len == len) && memcmp(at, name, len) != 0) {
+		if ((flat_name_len == len) && memcmp(at, name, len) == 0) {
 			break;
 		}
 
