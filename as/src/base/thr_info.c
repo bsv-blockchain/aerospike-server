@@ -227,6 +227,7 @@ static void cmd_logs(const as_info_cmd_args* args);
 static void cmd_namespace(const as_info_cmd_args* args);
 static void cmd_namespaces(const as_info_cmd_args* args);
 static void cmd_node(const as_info_cmd_args* args);
+static void cmd_name(const as_info_cmd_args* args);
 static void cmd_objects(const as_info_cmd_args* args);
 static void cmd_partition_generation(const as_info_cmd_args* args);
 static void cmd_partition_info(const as_info_cmd_args* args);
@@ -320,10 +321,14 @@ as_info_param_get_aliases(const char* params, const char* aliases[],
 	for (const char** select = aliases; *select != NULL; select++) {
 		if ((rv = as_info_parameter_get(params, *select, value, value_len)) !=
 				INFO_PARAM_FAIL_NOT_FOUND) {
-			//	if (select != aliases) {
-			//		cf_ticker_warning(AS_INFO, "'%s' has been deprecated - please use '%s' instead",
-			//				*select, *aliases);
-			//	}
+			if (select != aliases) {
+				char msg[256];
+
+				snprintf(msg, sizeof(msg), "info paramter '%s' is deprecated, use '%s' instead",
+					*select, *aliases);
+				as_info_warn_deprecated(msg);
+			}
+
 			return rv;
 		}
 	}
@@ -373,11 +378,11 @@ static const as_info_cmd SPECS[] = {
 	{ .name="best-practices",          .fn=cmd_best_practices,          .client_only=false, .ee_only=false, .perm=PERM_NONE           },
 	{ .name="cluster-name",            .fn=cmd_cluster_name,            .client_only=false, .ee_only=false, .perm=PERM_NONE           },
 	{ .name="cluster-stable",          .fn=cmd_cluster_stable,          .client_only=false, .ee_only=false, .perm=PERM_NONE           },
-	{ .name="config-get",              .fn=as_cfg_info_cmd_config_get,  .client_only=false, .ee_only=false, .perm=PERM_NONE           },
-	{ .name="config-set",              .fn=as_cfg_info_cmd_config_set,  .client_only=false, .ee_only=false, .perm=PERM_SET_CONFIG     },
+	{ .name="config-get",              .fn=as_cfg_info_cmd_get_config,  .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
+	{ .name="config-set",              .fn=as_cfg_info_cmd_set_config,  .client_only=true,  .ee_only=false, .perm=PERM_SET_CONFIG     },
 	{ .name="debug-record",            .fn=cmd_debug_record,            .client_only=false, .ee_only=false, .perm=PERM_RECORD_INFO    },
 	{ .name="debug-record-meta",       .fn=cmd_debug_record_meta,       .client_only=false, .ee_only=false, .perm=PERM_RECORD_INFO    },
-	{ .name="digests",                 .fn=cmd_digests,                 .client_only=false, .ee_only=false, .perm=PERM_NONE           },
+	{ .name="digests",                 .fn=cmd_digests,                 .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="dump-cluster",            .fn=cmd_dump_cluster,            .client_only=false, .ee_only=false, .perm=PERM_LOGGING_CTRL   },
 	{ .name="dump-fabric",             .fn=cmd_dump_fabric,             .client_only=false, .ee_only=false, .perm=PERM_LOGGING_CTRL   },
 	{ .name="dump-hb",                 .fn=cmd_dump_hb,                 .client_only=false, .ee_only=false, .perm=PERM_LOGGING_CTRL   },
@@ -389,7 +394,7 @@ static const as_info_cmd SPECS[] = {
 	{ .name="endpoints",               .fn=cmd_endpoints,               .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="eviction-reset",          .fn=cmd_eviction_reset,          .client_only=false, .ee_only=false, .perm=PERM_EVICT_ADMIN    },
 	{ .name="feature-key",             .fn=cmd_features_key,            .client_only=false, .ee_only=true,  .perm=PERM_NONE           },
-	{ .name="get-config",              .fn=as_cfg_info_cmd_config_get,  .client_only=false, .ee_only=false, .perm=PERM_NONE           },
+	{ .name="get-config",              .fn=as_cfg_info_cmd_get_config,  .client_only=false, .ee_only=false, .perm=PERM_NONE           },
 	{ .name="get-sl",                  .fn=cmd_get_sl,                  .client_only=false, .ee_only=false, .perm=PERM_NONE           },
 	{ .name="get-stats",               .fn=cmd_get_stats,               .client_only=false, .ee_only=false, .perm=PERM_NONE           },
 	{ .name="health-outliers",         .fn=cmd_health_outliers,         .client_only=false, .ee_only=false, .perm=PERM_NONE           },
@@ -403,9 +408,9 @@ static const as_info_cmd SPECS[] = {
 	{ .name="log-message",             .fn=cmd_log_message,             .client_only=false, .ee_only=false, .perm=PERM_LOGGING_CTRL   },
 	{ .name="log-set",                 .fn=cmd_log_set,                 .client_only=false, .ee_only=false, .perm=PERM_LOGGING_CTRL   },
 	{ .name="logs",                    .fn=cmd_logs,                    .client_only=false, .ee_only=false, .perm=PERM_NONE           },
-	{ .name="mcast",                   .fn=cmd_hb_addr,                 .client_only=false, .ee_only=false, .perm=PERM_NONE           },
-	{ .name="mesh",                    .fn=cmd_hb_addr,                 .client_only=false, .ee_only=false, .perm=PERM_NONE           },
-	{ .name="name",                    .fn=cmd_node,                    .client_only=false, .ee_only=false, .perm=PERM_NONE           },
+	{ .name="mcast",                   .fn=cmd_hb_addr,                 .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
+	{ .name="mesh",                    .fn=cmd_hb_addr,                 .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
+	{ .name="name",                    .fn=cmd_name,                    .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="namespace",               .fn=cmd_namespace,               .client_only=false, .ee_only=false, .perm=PERM_NONE           },
 	{ .name="namespaces",              .fn=cmd_namespaces,              .client_only=false, .ee_only=false, .perm=PERM_NONE           },
 	{ .name="objects",                 .fn=cmd_objects,                 .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
@@ -433,16 +438,16 @@ static const as_info_cmd SPECS[] = {
 	{ .name="roster",                  .fn=cmd_roster,                  .client_only=false, .ee_only=true,  .perm=PERM_NONE           },
 	{ .name="roster-set",              .fn=cmd_roster_set,              .client_only=false, .ee_only=true,  .perm=PERM_SERVICE_CTRL   },
 	{ .name="service",                 .fn=as_service_list_dynamic,     .client_only=false, .ee_only=false, .perm=PERM_NONE           },
-	{ .name="service-clear-alt",       .fn=as_service_list_dynamic,     .client_only=false, .ee_only=false, .perm=PERM_NONE           },
-	{ .name="service-clear-std",       .fn=as_service_list_dynamic,     .client_only=false, .ee_only=false, .perm=PERM_NONE           },
-	{ .name="service-tls-alt",         .fn=as_service_list_dynamic,     .client_only=false, .ee_only=true,  .perm=PERM_NONE           },
-	{ .name="service-tls-std",         .fn=as_service_list_dynamic,     .client_only=false, .ee_only=true,  .perm=PERM_NONE           },
-	{ .name="services-alternate",      .fn=as_service_list_dynamic,     .client_only=false, .ee_only=false, .perm=PERM_NONE           },
+	{ .name="service-clear-alt",       .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
+	{ .name="service-clear-std",       .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
+	{ .name="service-tls-alt",         .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=true,  .perm=PERM_NONE           },
+	{ .name="service-tls-std",         .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=true,  .perm=PERM_NONE           },
+	{ .name="services-alternate",      .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="services-alumni-reset",   .fn=as_service_list_dynamic,     .client_only=false, .ee_only=false, .perm=PERM_SERVICE_CTRL   },
-	{ .name="set-config",              .fn=as_cfg_info_cmd_config_set,  .client_only=false, .ee_only=false, .perm=PERM_SET_CONFIG     },
+	{ .name="set-config",              .fn=as_cfg_info_cmd_set_config,  .client_only=false, .ee_only=false, .perm=PERM_SET_CONFIG     },
 	{ .name="set-log",                 .fn=cmd_log_set,                 .client_only=false, .ee_only=false, .perm=PERM_LOGGING_CTRL   },
 	{ .name="sets",                    .fn=cmd_sets,                    .client_only=false, .ee_only=false, .perm=PERM_NONE           },
-	{ .name="sindex",                  .fn=cmd_sindex,                  .client_only=false, .ee_only=false, .perm=PERM_NONE           },
+	{ .name="sindex",                  .fn=cmd_sindex,                  .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="sindex-create",           .fn=cmd_sindex_create,           .client_only=false, .ee_only=false, .perm=PERM_SINDEX_ADMIN   },
 	{ .name="sindex-delete",           .fn=cmd_sindex_delete,           .client_only=false, .ee_only=false, .perm=PERM_SINDEX_ADMIN   },
 	{ .name="sindex-exists",           .fn=cmd_sindex_exists,           .client_only=false, .ee_only=false, .perm=PERM_SINDEX_ADMIN   },
@@ -960,6 +965,13 @@ sys_mem_info(uint64_t* free_mem_kbytes, uint32_t* free_mem_pct,
 	*thp_mem_kbytes = anon_huge_pages;
 }
 
+void
+as_info_warn_deprecated(const char* msg)
+{
+	as_incr_uint64(&g_stats.n_deprecated_requests);
+	cf_ticker_warning(AS_DEPRECATION, "%s", msg);
+}
+
 
 //==========================================================
 // Local helpers - info execution.
@@ -1061,6 +1073,8 @@ authenticate(const as_file_handle* fd_h, cf_dyn_buf* db)
 static void
 info_summary(cf_dyn_buf* db)
 {
+	as_info_warn_deprecated("info summary is deprecated");
+
 	for (uint32_t i = 0; i < N_SPECS; i++) {
 		const as_info_cmd* cmd = &SPECS[i];
 
@@ -1439,6 +1453,7 @@ cmd_digests(const as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
+	as_info_warn_deprecated("'digests' command is deprecated");
 	cf_dyn_buf_append_string(db, "RIPEMD160");
 }
 
@@ -1896,6 +1911,8 @@ cmd_hb_addr(const as_info_cmd_args* args)
 
 	as_hb_mode hb_mode;
 	char addr_port_str[1024];
+
+	as_info_warn_deprecated("'mesh' and 'mcast' commands are deprecated");
 
 	as_hb_info_listen_addr_get(&hb_mode, addr_port_str, sizeof(addr_port_str));
 
@@ -2419,7 +2436,7 @@ cmd_namespace(const as_info_cmd_args* args)
 	}
 
 	info_get_namespace_info(ns, db);
-	as_cfg_info_namespace_config_get(ns, db);
+	as_cfg_info_namespace_get_config(ns, db);
 
 	cf_dyn_buf_chomp(db);
 }
@@ -2448,9 +2465,18 @@ cmd_node(const as_info_cmd_args* args)
 }
 
 static void
+cmd_name(const as_info_cmd_args* args)
+{
+	as_info_warn_deprecated("'name' command is deprecated");
+	cmd_node(args);
+}
+
+static void
 cmd_objects(const as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
+
+	as_info_warn_deprecated("'objects' command is deprecated");
 
 	uint64_t objects = 0;
 
@@ -2483,6 +2509,7 @@ cmd_partitions(const as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
+	as_info_warn_deprecated("'partitions' command is deprecated");
 	cf_dyn_buf_append_uint32(db, AS_PARTITIONS);
 }
 
@@ -2788,6 +2815,7 @@ cmd_replicas_all(const as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
+	as_info_warn_deprecated("'replicas-all' command is deprecated");
 	as_partition_get_replicas_all_str(db, false, 0);
 }
 
@@ -2796,6 +2824,7 @@ cmd_replicas_master(const as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
+	as_info_warn_deprecated("'replicas-master' command is deprecated");
 	as_partition_get_replicas_master_str(db);
 }
 
@@ -2986,6 +3015,8 @@ cmd_sindex(const as_info_cmd_args* args)
 	//    ns=ns1:set=set1:indexname=index1:prop1=val1:...:propn=valn;ns=ns1:set=set2:indexname=indexname2:...;
 	// format w namespace & index name is:
 	//    prop1=val1;prop2=val2;...;propn=valn
+	
+	as_info_warn_deprecated("'sindex' command is deprecated");
 
 	char* index_name = NULL;
 	as_namespace* ns = NULL;
@@ -3680,6 +3711,8 @@ cmd_statistics(const as_info_cmd_args* args)
 	info_append_uint64(db, "fabric_meta_recv_rate", g_stats.fabric_meta_r_rate);
 	info_append_uint64(db, "fabric_rw_send_rate", g_stats.fabric_rw_s_rate);
 	info_append_uint64(db, "fabric_rw_recv_rate", g_stats.fabric_rw_r_rate);
+
+	info_append_uint64(db, "deprecated_requests", g_stats.n_deprecated_requests);
 
 	cf_dyn_buf_chomp(db);
 }

@@ -76,7 +76,7 @@ static cf_mutex g_set_cfg_lock = CF_MUTEX_INIT;
 // Forward declarations.
 //
 
-// Command config-get helpers.
+// Command get-config helpers.
 static void cfg_get_service(cf_dyn_buf* db);
 static void cfg_get_network(cf_dyn_buf* db);
 static void cfg_get_namespace(const as_namespace* ns, cf_dyn_buf* db);
@@ -85,7 +85,7 @@ static void cfg_get_namespace(const as_namespace* ns, cf_dyn_buf* db);
 static const char* auto_pin_string(void);
 static void append_addrs(cf_dyn_buf* db, const char* name, const cf_addr_list* list);
 
-// Command config-set helpers.
+// Command set-config helpers.
 static void cfg_set(const char* name, const char* cmd, cf_dyn_buf* db);
 static bool cfg_set_service(const char* cmd);
 static bool cfg_set_network(const char* cmd);
@@ -108,7 +108,7 @@ static bool any_benchmarks_enabled(void);
 //
 
 void
-as_cfg_info_cmd_config_get_with_params(const as_info_cmd_args* args)
+as_cfg_info_cmd_get_config_with_params(const as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -151,21 +151,25 @@ as_cfg_info_cmd_config_get_with_params(const as_info_cmd_args* args)
 }
 
 void
-as_cfg_info_cmd_config_get(const as_info_cmd_args* args)
+as_cfg_info_cmd_get_config(const as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
 
+	if (strcmp(args->name, "config-get") == 0) {
+		as_info_warn_deprecated("'config-get' command is deprecated");
+	}
+	
 	if (params && *params != 0) {
-		cf_debug(AS_INFO, "config-get command received: params %s", params);
+		cf_debug(AS_INFO, "get-config command received: params %s", params);
 
-		as_cfg_info_cmd_config_get_with_params(args);
+		as_cfg_info_cmd_get_config_with_params(args);
 		// Response may be an error string (without a semicolon).
 		cf_dyn_buf_chomp_char(db, ';');
 		return;
 	}
 
-	cf_debug(AS_INFO, "config-get command received");
+	cf_debug(AS_INFO, "get-config command received");
 
 	// No context - collect everything.
 	cfg_get_service(db);
@@ -176,20 +180,24 @@ as_cfg_info_cmd_config_get(const as_info_cmd_args* args)
 }
 
 void
-as_cfg_info_namespace_config_get(const as_namespace* ns, cf_dyn_buf* db)
+as_cfg_info_namespace_get_config(const as_namespace* ns, cf_dyn_buf* db)
 {
 	cfg_get_namespace(ns, db);
 }
 
-// config-set:context=service;variable=value;
-// config-set:context=network;variable=heartbeat.value;
-// config-set:context=namespace;id=test;variable=value;
+// set-config:context=service;variable=value;
+// set-config:context=network;variable=heartbeat.value;
+// set-config:context=namespace;id=test;variable=value;
 void
-as_cfg_info_cmd_config_set(const as_info_cmd_args* args)
+as_cfg_info_cmd_set_config(const as_info_cmd_args* args)
 {
 	const char* name = args->name;
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
+
+	if (strcmp(name, "config-set") == 0) {
+		as_info_warn_deprecated("'config-set' command is deprecated");
+	}
 
 	cf_mutex_lock(&g_set_cfg_lock);
 
@@ -200,7 +208,7 @@ as_cfg_info_cmd_config_set(const as_info_cmd_args* args)
 
 
 //==========================================================
-// Local helpers - command config-get helpers.
+// Local helpers - command get-config helpers.
 //
 
 static void
@@ -664,13 +672,13 @@ append_addrs(cf_dyn_buf* db, const char* name, const cf_addr_list* list)
 
 
 //==========================================================
-// Local helpers - command config-set helpers.
+// Local helpers - command set-config helpers.
 //
 
 static void
 cfg_set(const char* name, const char* cmd, cf_dyn_buf* db)
 {
-	cf_debug(AS_INFO, "config-set command received: params %s", cmd);
+	cf_debug(AS_INFO, "set-config command received: params %s", cmd);
 
 	char context[1024];
 	int context_len = sizeof(context);
@@ -740,7 +748,7 @@ cfg_set(const char* name, const char* cmd, cf_dyn_buf* db)
 		return;
 	}
 
-	cf_info(AS_INFO, "config-set command completed: params %s", cmd);
+	cf_info(AS_INFO, "set-config command completed: params %s", cmd);
 	as_info_respond_ok(db);
 }
 

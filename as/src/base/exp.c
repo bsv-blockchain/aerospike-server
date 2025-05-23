@@ -48,6 +48,7 @@
 #include "base/proto.h"
 #include "base/particle.h"
 #include "base/particle_blob.h"
+#include "base/thr_info.h"
 #include "geospatial/geospatial.h"
 #include "storage/storage.h"
 
@@ -478,6 +479,8 @@ static bool build_math_vargs(build_args* args);
 static bool build_number_op(build_args* args);
 static bool build_float_op(build_args* args);
 static bool build_int_op(build_args* args);
+static bool build_device_size(build_args* args);
+static bool build_memory_size(build_args* args);
 static bool build_math_pow(build_args* args);
 static bool build_math_log(build_args* args);
 static bool build_math_mod(build_args* args);
@@ -711,7 +714,7 @@ static const op_table_entry op_table[] = {
 		OP_TABLE_ENTRY(EXP_MAX, "max", op_base_mem, build_math_vargs, eval_max, display_math_vargs, 0, 0, TYPE_END)
 
 		OP_TABLE_ENTRY(EXP_META_DIGEST_MOD, "digest_modulo", op_meta_digest_modulo, build_meta_digest_mod, eval_meta_digest_mod, display_meta_digest_mod, 1, 0, TYPE_INT)
-		OP_TABLE_ENTRY(EXP_META_DEVICE_SIZE, "device_size", op_base_mem, build_default, eval_meta_device_size, display_0_args, 0, 0, TYPE_INT)
+		OP_TABLE_ENTRY(EXP_META_DEVICE_SIZE, "device_size", op_base_mem, build_device_size, eval_meta_device_size, display_0_args, 0, 0, TYPE_INT)
 		OP_TABLE_ENTRY(EXP_META_LAST_UPDATE, "last_update", op_base_mem, build_default, eval_meta_last_update, display_0_args, 0, 0, TYPE_INT)
 		OP_TABLE_ENTRY(EXP_META_SINCE_UPDATE, "since_update", op_base_mem, build_default, eval_meta_since_update, display_0_args, 0, 0, TYPE_INT)
 		OP_TABLE_ENTRY(EXP_META_VOID_TIME, "void_time", op_base_mem, build_default, eval_meta_void_time, display_0_args, 0, 0, TYPE_INT)
@@ -719,7 +722,7 @@ static const op_table_entry op_table[] = {
 		OP_TABLE_ENTRY(EXP_META_SET_NAME, "set_name", op_base_mem, build_default, eval_meta_set_name, display_0_args, 0, 0, TYPE_STR)
 		OP_TABLE_ENTRY(EXP_META_KEY_EXISTS, "key_exists", op_base_mem, build_default, eval_meta_key_exists, display_0_args, 0, 0, TYPE_TRILEAN)
 		OP_TABLE_ENTRY(EXP_META_IS_TOMBSTONE, "is_tombstone", op_base_mem, build_default, eval_meta_is_tombstone, display_0_args, 0, 0, TYPE_TRILEAN)
-		OP_TABLE_ENTRY(EXP_META_MEMORY_SIZE, "memory_size", op_base_mem, build_default, eval_meta_memory_size, display_0_args, 0, 0, TYPE_INT)
+		OP_TABLE_ENTRY(EXP_META_MEMORY_SIZE, "memory_size", op_base_mem, build_memory_size, eval_meta_memory_size, display_0_args, 0, 0, TYPE_INT)
 		OP_TABLE_ENTRY(EXP_META_RECORD_SIZE, "record_size", op_base_mem, build_default, eval_meta_record_size, display_0_args, 0, 0, TYPE_INT)
 
 		OP_TABLE_ENTRY(EXP_REC_KEY, "key", op_rec_key, build_rec_key, eval_rec_key, display_0_args, 1, 0, TYPE_END)
@@ -1654,6 +1657,20 @@ build_math_vargs(build_args* args)
 			VOP_VALUE_FLOAT : VOP_VALUE_INT];
 
 	return true;
+}
+
+static bool
+build_device_size(build_args* args)
+{
+	as_info_warn_deprecated("expression 'device_size' is deprecated, use 'record_size' instead");
+	return build_default(args);
+}
+
+static bool
+build_memory_size(build_args* args)
+{
+	as_info_warn_deprecated("expression 'memory_size' is deprecated, use 'record_size' instead");
+	return build_default(args);
 }
 
 static bool

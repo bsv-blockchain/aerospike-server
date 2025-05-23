@@ -45,6 +45,7 @@
 #include "base/exp.h"
 #include "base/expop.h"
 #include "base/proto.h"
+#include "base/thr_info.h"
 #include "fabric/partition.h"
 #include "storage/storage.h"
 #include "transaction/write.h"
@@ -99,18 +100,30 @@ safe_particle_type(uint8_t type)
 	case AS_PARTICLE_TYPE_FLOAT:
 	case AS_PARTICLE_TYPE_STRING:
 	case AS_PARTICLE_TYPE_BLOB:
-	case AS_PARTICLE_TYPE_JAVA_BLOB:
-	case AS_PARTICLE_TYPE_CSHARP_BLOB:
-	case AS_PARTICLE_TYPE_PYTHON_BLOB:
-	case AS_PARTICLE_TYPE_RUBY_BLOB:
-	case AS_PARTICLE_TYPE_PHP_BLOB:
-	case AS_PARTICLE_TYPE_ERLANG_BLOB:
 	case AS_PARTICLE_TYPE_VECTOR:
 	case AS_PARTICLE_TYPE_BOOL:
 	case AS_PARTICLE_TYPE_HLL:
 	case AS_PARTICLE_TYPE_MAP:
 	case AS_PARTICLE_TYPE_LIST:
 	case AS_PARTICLE_TYPE_GEOJSON:
+		return (as_particle_type)type;
+	case AS_PARTICLE_TYPE_JAVA_BLOB:
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_JAVA_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		return (as_particle_type)type;
+	case AS_PARTICLE_TYPE_CSHARP_BLOB:
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_CSHARP_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		return (as_particle_type)type;
+	case AS_PARTICLE_TYPE_PYTHON_BLOB:
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_PYTHON_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		return (as_particle_type)type;
+	case AS_PARTICLE_TYPE_RUBY_BLOB:
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_RUBY_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		return (as_particle_type)type;
+	case AS_PARTICLE_TYPE_PHP_BLOB:
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_PHP_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		return (as_particle_type)type;
+	case AS_PARTICLE_TYPE_ERLANG_BLOB:
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_ERLANG_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
 		return (as_particle_type)type;
 	// Note - AS_PARTICLE_TYPE_NULL is considered bad here.
 	default:

@@ -96,6 +96,9 @@ typedef struct as_stats_s {
 	uint64_t		fabric_rw_s_rate;
 	uint64_t		fabric_rw_r_rate;
 
+	// Deprecated feature usage stats.
+	uint64_t		n_deprecated_requests;
+
 	//--------------------------------------------
 	// Histograms.
 	//

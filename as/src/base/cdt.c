@@ -39,6 +39,7 @@
 
 #include "base/cfg.h"
 #include "base/particle.h"
+#include "base/thr_info.h"
 
 
 //==========================================================
@@ -1462,6 +1463,8 @@ cdt_process_state_init_from_vec(cdt_process_state *cdt_state,
 			cf_warning(AS_PARTICLE, "cdt_parse_state_init() as_msg_op data too small to be valid: size=%u", sz);
 			return false;
 		}
+
+		as_info_warn_deprecated("the cdt parameter protocol using 16 bit param count is deprecated");
 
 		const uint16_t *type_ptr = (const uint16_t *)data;
 

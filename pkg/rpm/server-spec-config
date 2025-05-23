@@ -7,4 +7,3 @@
 %dir /etc/aerospike/sample
 /etc/aerospike/sample/README.md
 /etc/aerospike/sample/aerospike_ssd.conf
-/etc/aerospike/sample/aerospike_mesh.conf

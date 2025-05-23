@@ -373,9 +373,7 @@ typedef enum {
 	CASE_NETWORK_SERVICE_TLS_NAME,
 	CASE_NETWORK_SERVICE_TLS_PORT,
 	// Obsoleted:
-	CASE_NETWORK_SERVICE_ALTERNATE_ADDRESS,
 	CASE_NETWORK_SERVICE_EXTERNAL_ADDRESS,
-	CASE_NETWORK_SERVICE_NETWORK_INTERFACE_NAME,
 
 	// Network heartbeat options:
 	CASE_NETWORK_HEARTBEAT_ADDRESS,
@@ -394,7 +392,6 @@ typedef enum {
 	CASE_NETWORK_HEARTBEAT_TLS_NAME,
 	CASE_NETWORK_HEARTBEAT_TLS_PORT,
 	// Obsoleted:
-	CASE_NETWORK_HEARTBEAT_INTERFACE_ADDRESS,
 	CASE_NETWORK_HEARTBEAT_MCAST_TTL,
 
 	// Network heartbeat mode options (value tokens):
@@ -964,9 +961,7 @@ const cfg_opt NETWORK_SERVICE_OPTS[] = {
 		{ "tls-name",						CASE_NETWORK_SERVICE_TLS_NAME },
 		{ "tls-port",						CASE_NETWORK_SERVICE_TLS_PORT },
 		// Obsoleted:
-		{ "alternate-address",				CASE_NETWORK_SERVICE_ALTERNATE_ADDRESS },
 		{ "external-address",				CASE_NETWORK_SERVICE_EXTERNAL_ADDRESS },
-		{ "network-interface-name",			CASE_NETWORK_SERVICE_NETWORK_INTERFACE_NAME },
 		{ "}",								CASE_CONTEXT_END }
 };
 
@@ -987,7 +982,6 @@ const cfg_opt NETWORK_HEARTBEAT_OPTS[] = {
 		{ "tls-name",						CASE_NETWORK_HEARTBEAT_TLS_NAME },
 		{ "tls-port",						CASE_NETWORK_HEARTBEAT_TLS_PORT },
 		// Obsoleted:
-		{ "interface-address",				CASE_NETWORK_HEARTBEAT_INTERFACE_ADDRESS },
 		{ "mcast-ttl",						CASE_NETWORK_HEARTBEAT_MCAST_TTL },
 		{ "}",								CASE_CONTEXT_END }
 };
@@ -2226,6 +2220,7 @@ as_config_init(const char* config_file)
 					c->auto_pin = CF_TOPO_AUTO_PIN_NUMA;
 					break;
 				case CASE_SERVICE_AUTO_PIN_ADQ:
+					as_info_warn_deprecated("'auto-pin-adq' is deprecated");
 					c->auto_pin = CF_TOPO_AUTO_PIN_ADQ;
 					break;
 				case CASE_NOT_FOUND:
@@ -2331,6 +2326,7 @@ as_config_init(const char* config_file)
 				c->poison_allocations = cfg_bool(&line);
 				break;
 			case CASE_SERVICE_PROTO_FD_IDLE_MS:
+				as_info_warn_deprecated("'proto-fd-idle-ms' is deprecated");
 				c->proto_fd_idle_ms = cfg_u32_no_checks(&line);
 				break;
 			case CASE_SERVICE_PROTO_FD_MAX:
@@ -2397,22 +2393,27 @@ as_config_init(const char* config_file)
 				}
 				break;
 			case CASE_SERVICE_VAULT_CA:
+				as_info_warn_deprecated("'vault-ca' is deprecated, please use the Aerospike Secret Agent instead");
 				cfg_enterprise_only(&line);
 				g_vault_cfg.ca = cfg_strdup_no_checks(&line);
 				break;
 			case CASE_SERVICE_VAULT_NAMESPACE:
+				as_info_warn_deprecated("'vault-namespace' is deprecated, please use the Aerospike Secret Agent instead");
 				cfg_enterprise_only(&line);
 				g_vault_cfg.namespace = cfg_strdup_no_checks(&line);
 				break;
 			case CASE_SERVICE_VAULT_PATH:
+				as_info_warn_deprecated("'vault-path' is deprecated, please use the Aerospike Secret Agent instead");
 				cfg_enterprise_only(&line);
 				g_vault_cfg.path = cfg_strdup_no_checks(&line);
 				break;
 			case CASE_SERVICE_VAULT_TOKEN_FILE:
+				as_info_warn_deprecated("'vault-token-file' is deprecated, please use the Aerospike Secret Agent instead");
 				cfg_enterprise_only(&line);
 				g_vault_cfg.token_file = cfg_strdup_no_checks(&line);
 				break;
 			case CASE_SERVICE_VAULT_URL:
+				as_info_warn_deprecated("'vault-url' is deprecated, please use the Aerospike Secret Agent instead");
 				cfg_enterprise_only(&line);
 				g_vault_cfg.url = cfg_strdup_no_checks(&line);
 				break;
@@ -2633,14 +2634,8 @@ as_config_init(const char* config_file)
 				c->tls_service.bind_port = cfg_port(&line);
 				break;
 			// Obsoleted:
-			case CASE_NETWORK_SERVICE_ALTERNATE_ADDRESS:
-				cfg_obsolete(&line, "see Aerospike documentation http://www.aerospike.com/docs/operations/upgrade/network_to_3_10");
-				break;
 			case CASE_NETWORK_SERVICE_EXTERNAL_ADDRESS:
 				cfg_obsolete(&line, "pleas use 'access-address'");
-				break;
-			case CASE_NETWORK_SERVICE_NETWORK_INTERFACE_NAME:
-				cfg_obsolete(&line, "see Aerospike documentation http://www.aerospike.com/docs/operations/upgrade/network_to_3_10");
 				break;
 			case CASE_CONTEXT_END:
 				cfg_end_context(&state);
@@ -2658,6 +2653,7 @@ as_config_init(const char* config_file)
 		case NETWORK_HEARTBEAT:
 			switch (cfg_find_tok(line.name_tok, NETWORK_HEARTBEAT_OPTS, NUM_NETWORK_HEARTBEAT_OPTS)) {
 			case CASE_NETWORK_HEARTBEAT_ADDRESS:
+				as_info_warn_deprecated("'heartbeat-address' is deprecated");
 				cfg_add_addr_bind(line.val_tok_1, &c->hb_serv_spec);
 				break;
 			case CASE_NETWORK_HEARTBEAT_CONNECT_TIMEOUT_MS:
@@ -2672,6 +2668,7 @@ as_config_init(const char* config_file)
 			case CASE_NETWORK_HEARTBEAT_MODE:
 				switch (cfg_find_tok(line.val_tok_1, NETWORK_HEARTBEAT_MODE_OPTS, NUM_NETWORK_HEARTBEAT_MODE_OPTS)) {
 				case CASE_NETWORK_HEARTBEAT_MODE_MULTICAST:
+					as_info_warn_deprecated("'multicast' is deprecated");
 					c->hb_config.mode = AS_HB_MODE_MULTICAST;
 					break;
 				case CASE_NETWORK_HEARTBEAT_MODE_MESH:
@@ -2728,9 +2725,6 @@ as_config_init(const char* config_file)
 				c->hb_tls_serv_spec.bind_port = cfg_port(&line);
 				break;
 			// Obsoleted:
-			case CASE_NETWORK_HEARTBEAT_INTERFACE_ADDRESS:
-				cfg_obsolete(&line, "see Aerospike documentation http://www.aerospike.com/docs/operations/upgrade/network_to_3_10");
-				break;
 			case CASE_NETWORK_HEARTBEAT_MCAST_TTL:
 				cfg_obsolete(&line, "please use 'multicast-ttl'");
 				break;
@@ -4551,6 +4545,13 @@ as_config_post_process(as_config* c, const char* config_file)
 
 	cf_serv_cfg_init(&g_config.hb_config.bind_cfg);
 
+	if (c->hb_serv_spec.bind.n_addrs == 0) {
+		// Default hb bind addresses to the same as fabric.
+		c->hb_serv_spec.bind.n_addrs = c->fabric.bind.n_addrs;
+		memcpy(c->hb_serv_spec.bind.addrs, c->fabric.bind.addrs,
+			c->hb_serv_spec.bind.n_addrs * sizeof(c->hb_serv_spec.bind.addrs[0]));
+	}
+
 	if (c->hb_serv_spec.bind_port != 0) {
 		cfg_serv_spec_to_bind(&c->hb_serv_spec, &c->hb_tls_serv_spec, &c->hb_config.bind_cfg,
 				CF_SOCK_OWNER_HEARTBEAT);
@@ -5025,7 +5026,16 @@ cfg_mserv_config_from_addrs(cf_addr_list* addrs, cf_addr_list* bind_addrs,
 	};
 
 	if (bind_addrs->n_addrs == 0) {
+		as_info_warn_deprecated("'address' parameter defaulting to 'any' is deprecated, will require explicit configuration in future");
 		bind_addrs = &def_addrs;
+	}
+	else if (bind_addrs->n_addrs == 1) {
+		if (strcmp(bind_addrs->addrs[0], "any") == 0) {
+			as_info_warn_deprecated("'address' parameter value 'any' is deprecated, will require explicit configuration in future");
+		}
+		else if (strcmp(bind_addrs->addrs[0], "local") == 0) {
+			as_info_warn_deprecated("'address' parameter value 'local' is deprecated, will require explicit configuration in future");
+		}
 	}
 
 	for (uint32_t i = 0; i < addrs->n_addrs; ++i) {

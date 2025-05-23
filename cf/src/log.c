@@ -94,6 +94,7 @@ static const char* context_strings[] = {
 		"bin",
 		"config",
 		"clustering",
+		"deprecation",
 		"drv-mem",
 		"drv_pmem",
 		"drv_ssd",

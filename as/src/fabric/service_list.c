@@ -384,6 +384,16 @@ as_service_list_dynamic(const as_info_cmd_args* args)
 		return;
 	}
 
+	if (strcmp(key, "services") == 0) {
+		as_info_warn_deprecated("'services' command is deprecated");
+	}
+	else if (strcmp(key, "services-alternate") == 0) {
+		as_info_warn_deprecated("'services-alternate' command is deprecated");
+	}
+	else if (strcmp(key, "services-alumni") == 0) {
+		as_info_warn_deprecated("'services-alumni' command is deprecated");
+	}
+
 	print_info_val(key, db);
 }
 

@@ -11,5 +11,4 @@ environment and use case.
 
 |      Filename       |              Description                           |
 | ------------------- | -------------------------------------------------- |
-| aerospike_mesh.conf | Sample using TCP mesh for clustering               |
 | aerospike_ssd.conf  | Sample using SSD devices for storage               |
