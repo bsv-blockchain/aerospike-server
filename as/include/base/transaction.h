@@ -137,7 +137,6 @@ typedef struct as_file_handle_s {
 } as_file_handle;
 
 // Helpers to release transaction file handles.
-void as_release_file_handle(as_file_handle *proto_fd_h);
 void as_end_of_transaction(as_file_handle *proto_fd_h, bool force_close);
 void as_end_of_transaction_ok(as_file_handle *proto_fd_h);
 void as_end_of_transaction_force_close(as_file_handle *proto_fd_h);

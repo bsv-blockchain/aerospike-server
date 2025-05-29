@@ -43,7 +43,8 @@ typedef struct as_stats_s {
 	// Connection stats.
 	uint64_t		proto_connections_opened; // not just a statistic
 	uint64_t		proto_connections_closed; // not just a statistic
-	// In ticker but not collected via info:
+	uint64_t		admin_connections_opened; // not just a statistic
+	uint64_t		admin_connections_closed; // not just a statistic
 	uint64_t		heartbeat_connections_opened;
 	uint64_t		heartbeat_connections_closed;
 	uint64_t		fabric_connections_opened;

@@ -109,9 +109,11 @@ static void cfg_add_addr_bind(const char* name, cf_serv_spec* spec);
 static void cfg_add_addr_std(const char* name, cf_serv_spec* spec);
 static void cfg_add_addr_alt(const char* name, cf_serv_spec* spec);
 static void cfg_mserv_config_from_addrs(cf_addr_list* addrs, cf_addr_list* bind_addrs, cf_mserv_cfg* serv_cfg, cf_ip_port port, cf_sock_owner owner, uint8_t ttl);
-static void cfg_serv_spec_to_bind(const cf_serv_spec* spec, const cf_serv_spec* def_spec, cf_serv_cfg* bind, cf_sock_owner owner);
+static void cfg_serv_spec_to_bind(const cf_serv_spec* spec, cf_serv_cfg* bind, cf_sock_owner owner);
+static cf_tls_info* cfg_setup_tls_server(cf_serv_spec* spec, const char* which);
 static void cfg_serv_spec_std_to_access(const cf_serv_spec* spec, cf_addr_list* access);
 static void cfg_serv_spec_alt_to_access(const cf_serv_spec* spec, cf_addr_list* access);
+static void addrs_to_access(const cf_addr_list* addrs, cf_addr_list* access);
 static void cfg_add_mesh_seed_addr_port(char* addr, cf_ip_port port, bool tls);
 static void cfg_add_secrets_addr_port(char* addr, char* port, char* tls_name);
 static as_set* cfg_add_set(as_namespace* ns);
@@ -157,6 +159,8 @@ cfg_set_defaults()
 
 	cfg_init_serv_spec(&c->service);
 	cfg_init_serv_spec(&c->tls_service);
+	cfg_init_serv_spec(&c->admin);
+	cfg_init_serv_spec(&c->tls_admin);
 	cfg_init_serv_spec(&c->hb_serv_spec);
 	cfg_init_serv_spec(&c->hb_tls_serv_spec);
 	cfg_init_serv_spec(&c->fabric);
@@ -351,6 +355,7 @@ typedef enum {
 	// Network options:
 	// Sub-contexts, in canonical configuration file order:
 	CASE_NETWORK_SERVICE_BEGIN,
+	CASE_NETWORK_ADMIN_BEGIN,
 	CASE_NETWORK_HEARTBEAT_BEGIN,
 	CASE_NETWORK_FABRIC_BEGIN,
 	CASE_NETWORK_INFO_BEGIN,
@@ -374,6 +379,15 @@ typedef enum {
 	CASE_NETWORK_SERVICE_TLS_PORT,
 	// Obsoleted:
 	CASE_NETWORK_SERVICE_EXTERNAL_ADDRESS,
+
+	// Network admin options:
+	CASE_NETWORK_ADMIN_ADDRESS,
+	CASE_NETWORK_ADMIN_DISABLE_LOCALHOST,
+	CASE_NETWORK_ADMIN_PORT,
+	CASE_NETWORK_ADMIN_TLS_ADDRESS,
+	CASE_NETWORK_ADMIN_TLS_AUTHENTICATE_CLIENT,
+	CASE_NETWORK_ADMIN_TLS_NAME,
+	CASE_NETWORK_ADMIN_TLS_PORT,
 
 	// Network heartbeat options:
 	CASE_NETWORK_HEARTBEAT_ADDRESS,
@@ -937,6 +951,7 @@ const cfg_opt LOGGING_SYSLOG_OPTS[] = {
 const cfg_opt NETWORK_OPTS[] = {
 		// Sub-contexts, in canonical configuration file order:
 		{ "service",						CASE_NETWORK_SERVICE_BEGIN },
+		{ "admin",					CASE_NETWORK_ADMIN_BEGIN },
 		{ "heartbeat",						CASE_NETWORK_HEARTBEAT_BEGIN },
 		{ "fabric",							CASE_NETWORK_FABRIC_BEGIN },
 		{ "info",							CASE_NETWORK_INFO_BEGIN },
@@ -962,6 +977,17 @@ const cfg_opt NETWORK_SERVICE_OPTS[] = {
 		{ "tls-port",						CASE_NETWORK_SERVICE_TLS_PORT },
 		// Obsoleted:
 		{ "external-address",				CASE_NETWORK_SERVICE_EXTERNAL_ADDRESS },
+		{ "}",								CASE_CONTEXT_END }
+};
+
+const cfg_opt NETWORK_ADMIN_OPTS[] = {
+		{ "address",						CASE_NETWORK_ADMIN_ADDRESS },
+		{ "disable-localhost",				CASE_NETWORK_ADMIN_DISABLE_LOCALHOST },
+		{ "port",							CASE_NETWORK_ADMIN_PORT },
+		{ "tls-address",					CASE_NETWORK_ADMIN_TLS_ADDRESS },
+		{ "tls-authenticate-client",		CASE_NETWORK_ADMIN_TLS_AUTHENTICATE_CLIENT },
+		{ "tls-name",						CASE_NETWORK_ADMIN_TLS_NAME },
+		{ "tls-port",						CASE_NETWORK_ADMIN_TLS_PORT },
 		{ "}",								CASE_CONTEXT_END }
 };
 
@@ -1467,6 +1493,7 @@ const int NUM_LOGGING_CONTEXT_OPTS					= sizeof(LOGGING_CONTEXT_OPTS) / sizeof(c
 const int NUM_LOGGING_SYSLOG_OPTS					= sizeof(LOGGING_SYSLOG_OPTS) / sizeof(cfg_opt);
 const int NUM_NETWORK_OPTS							= sizeof(NETWORK_OPTS) / sizeof(cfg_opt);
 const int NUM_NETWORK_SERVICE_OPTS					= sizeof(NETWORK_SERVICE_OPTS) / sizeof(cfg_opt);
+const int NUM_NETWORK_ADMIN_OPTS			= sizeof(NETWORK_ADMIN_OPTS) / sizeof(cfg_opt);
 const int NUM_NETWORK_HEARTBEAT_OPTS				= sizeof(NETWORK_HEARTBEAT_OPTS) / sizeof(cfg_opt);
 const int NUM_NETWORK_HEARTBEAT_MODE_OPTS			= sizeof(NETWORK_HEARTBEAT_MODE_OPTS) / sizeof(cfg_opt);
 const int NUM_NETWORK_HEARTBEAT_PROTOCOL_OPTS		= sizeof(NETWORK_HEARTBEAT_PROTOCOL_OPTS) / sizeof(cfg_opt);
@@ -1526,7 +1553,7 @@ typedef enum {
 	GLOBAL,
 	SERVICE,
 	LOGGING, LOGGING_CONTEXT, LOGGING_SYSLOG,
-	NETWORK, NETWORK_SERVICE, NETWORK_HEARTBEAT, NETWORK_FABRIC, NETWORK_INFO, NETWORK_TLS,
+	NETWORK, NETWORK_SERVICE, NETWORK_ADMIN, NETWORK_HEARTBEAT, NETWORK_FABRIC, NETWORK_INFO, NETWORK_TLS,
 	NAMESPACE, NAMESPACE_INDEX_TYPE_PMEM, NAMESPACE_INDEX_TYPE_FLASH, NAMESPACE_SINDEX_TYPE_PMEM, NAMESPACE_SINDEX_TYPE_FLASH, NAMESPACE_STORAGE_MEMORY, NAMESPACE_STORAGE_PMEM, NAMESPACE_STORAGE_DEVICE, NAMESPACE_SET, NAMESPACE_GEO2DSPHERE_WITHIN,
 	MOD_LUA,
 	SECURITY, SECURITY_LDAP, SECURITY_LOG,
@@ -1540,7 +1567,7 @@ const char* CFG_PARSER_STATES[] = {
 		"GLOBAL",
 		"SERVICE",
 		"LOGGING", "LOGGING_CONTEXT", "LOGGING_SYSLOG",
-		"NETWORK", "NETWORK_SERVICE", "NETWORK_HEARTBEAT", "NETWORK_FABRIC", "NETWORK_INFO", "NETWORK_TLS",
+		"NETWORK", "NETWORK_SERVICE", "NETWORK_ADMIN", "NETWORK_HEARTBEAT", "NETWORK_FABRIC", "NETWORK_INFO", "NETWORK_TLS",
 		"NAMESPACE", "NAMESPACE_INDEX_TYPE_PMEM", "NAMESPACE_INDEX_TYPE_SSD", "NAMESPACE_SINDEX_TYPE_PMEM", "NAMESPACE_SINDEX_TYPE_FLASH", "NAMESPACE_STORAGE_MEMORY", "NAMESPACE_STORAGE_PMEM", "NAMESPACE_STORAGE_DEVICE", "NAMESPACE_SET", "NAMESPACE_GEO2DSPHERE_WITHIN",
 		"MOD_LUA",
 		"SECURITY", "SECURITY_LDAP", "SECURITY_LOG",
@@ -2551,6 +2578,9 @@ as_config_init(const char* config_file)
 			case CASE_NETWORK_SERVICE_BEGIN:
 				cfg_begin_context(&state, NETWORK_SERVICE);
 				break;
+			case CASE_NETWORK_ADMIN_BEGIN:
+				cfg_begin_context(&state, NETWORK_ADMIN);
+				break;
 			case CASE_NETWORK_HEARTBEAT_BEGIN:
 				cfg_begin_context(&state, NETWORK_HEARTBEAT);
 				break;
@@ -2635,7 +2665,47 @@ as_config_init(const char* config_file)
 				break;
 			// Obsoleted:
 			case CASE_NETWORK_SERVICE_EXTERNAL_ADDRESS:
-				cfg_obsolete(&line, "pleas use 'access-address'");
+				cfg_obsolete(&line, "please use 'access-address'");
+				break;
+			case CASE_CONTEXT_END:
+				cfg_end_context(&state);
+				break;
+			case CASE_NOT_FOUND:
+			default:
+				cfg_unknown_name_tok(&line);
+				break;
+			}
+			break;
+
+		//----------------------------------------
+		// Parse network::admin context items.
+		//
+		case NETWORK_ADMIN:
+			switch (cfg_find_tok(line.name_tok, NETWORK_ADMIN_OPTS, NUM_NETWORK_ADMIN_OPTS)) {
+			case CASE_NETWORK_ADMIN_ADDRESS:
+				cfg_add_addr_std(line.val_tok_1, &c->admin);
+				break;
+			case CASE_NETWORK_ADMIN_DISABLE_LOCALHOST:
+				c->admin_localhost_disabled = cfg_bool(&line);
+				break;
+			case CASE_NETWORK_ADMIN_PORT:
+				c->admin.bind_port = cfg_port(&line);
+				break;
+			case CASE_NETWORK_ADMIN_TLS_ADDRESS:
+				cfg_enterprise_only(&line);
+				cfg_add_addr_bind(line.val_tok_1, &c->tls_admin);
+				break;
+			case CASE_NETWORK_ADMIN_TLS_AUTHENTICATE_CLIENT:
+				cfg_enterprise_only(&line);
+				add_tls_peer_name(line.val_tok_1, &c->tls_admin);
+				break;
+			case CASE_NETWORK_ADMIN_TLS_NAME:
+				cfg_enterprise_only(&line);
+				c->tls_admin.tls_our_name = cfg_strdup_no_checks(&line);
+				break;
+			case CASE_NETWORK_ADMIN_TLS_PORT:
+				cfg_enterprise_only(&line);
+				c->tls_admin.bind_port = cfg_port(&line);
 				break;
 			case CASE_CONTEXT_END:
 				cfg_end_context(&state);
@@ -4483,62 +4553,42 @@ as_config_post_process(as_config* c, const char* config_file)
 	// Client service bind addresses.
 
 	if (g_config.service.bind_port != 0) {
-		cfg_serv_spec_to_bind(&g_config.service, &g_config.tls_service, &g_service_bind,
+		cfg_serv_spec_to_bind(&g_config.service, &g_service_bind,
 				CF_SOCK_OWNER_SERVICE);
 	}
 
 	// Client TLS service bind addresses.
 
 	if (g_config.tls_service.bind_port != 0) {
-		cfg_serv_spec_to_bind(&g_config.tls_service, &g_config.service, &g_service_bind,
+		cfg_serv_spec_to_bind(&g_config.tls_service, &g_service_bind,
 				CF_SOCK_OWNER_SERVICE_TLS);
 
-		cf_tls_spec* tls_spec = cfg_link_tls("service", &g_config.tls_service.tls_our_name);
-
-		if (tls_spec == NULL) {
-			cf_crash_nostack(AS_CFG, "failed to resolve service tls-name");
-		}
-
-		uint32_t n_peer_names = g_config.tls_service.n_tls_peer_names;
-		char **peer_names = g_config.tls_service.tls_peer_names;
-
-		bool has_any = false;
-		bool has_false = false;
-
-		for (uint32_t i = 0; i < n_peer_names; ++i) {
-			has_any = has_any || strcmp(peer_names[i], "any") == 0;
-			has_false = has_false || strcmp(peer_names[i], "false") == 0;
-		}
-
-		if ((has_any || has_false) && n_peer_names > 1) {
-			cf_crash_nostack(AS_CFG, "\"any\" and \"false\" are incompatible with other tls-authenticate-client arguments");
-		}
-
-		bool auth_client;
-
-		if (has_any || n_peer_names == 0) {
-			auth_client = true;
-			n_peer_names = 0;
-			peer_names = NULL;
-		}
-		else if (has_false) {
-			auth_client = false;
-			n_peer_names = 0;
-			peer_names = NULL;
-		}
-		else {
-			auth_client = true;
-		}
-
-		g_service_tls = tls_config_server_context(tls_spec, auth_client, n_peer_names, peer_names);
-
-		if (g_service_tls == NULL) {
-			cf_crash_nostack(AS_CFG, "failed to set up service tls");
-		}
+		g_tls_service = cfg_setup_tls_server(&g_config.tls_service, "service");
 	}
 
 	if (g_service_bind.n_cfgs == 0) {
 		cf_crash_nostack(AS_CFG, "no service ports configured");
+	}
+
+	cf_serv_cfg_init(&g_admin_bind);
+
+	// Admin bind addresses.
+	if (g_config.admin.bind_port != 0) {
+		cfg_serv_spec_to_bind(&g_config.admin, &g_admin_bind,
+				CF_SOCK_OWNER_ADMIN);
+	}
+
+	// Admin TLS bind addresses.
+	if (g_config.tls_admin.bind_port != 0) {
+		cfg_serv_spec_to_bind(&g_config.tls_admin, &g_admin_bind,
+				CF_SOCK_OWNER_ADMIN_TLS);
+
+		g_tls_admin = cfg_setup_tls_server(&g_config.tls_admin, "admin");
+	}
+
+	if ((g_config.admin.bind_port != 0 || g_config.tls_admin.bind_port != 0) &&
+			g_admin_bind.n_cfgs == 0) {
+		cf_crash_nostack(AS_CFG, "no admin ports configured");
 	}
 
 	// Heartbeat service bind addresses.
@@ -4553,7 +4603,7 @@ as_config_post_process(as_config* c, const char* config_file)
 	}
 
 	if (c->hb_serv_spec.bind_port != 0) {
-		cfg_serv_spec_to_bind(&c->hb_serv_spec, &c->hb_tls_serv_spec, &c->hb_config.bind_cfg,
+		cfg_serv_spec_to_bind(&c->hb_serv_spec, &c->hb_config.bind_cfg,
 				CF_SOCK_OWNER_HEARTBEAT);
 	}
 
@@ -4564,7 +4614,7 @@ as_config_post_process(as_config* c, const char* config_file)
 			cf_crash_nostack(AS_CFG, "multicast heartbeats do not support TLS");
 		}
 
-		cfg_serv_spec_to_bind(&c->hb_tls_serv_spec, &c->hb_serv_spec, &c->hb_config.bind_cfg,
+		cfg_serv_spec_to_bind(&c->hb_tls_serv_spec, &c->hb_config.bind_cfg,
 				CF_SOCK_OWNER_HEARTBEAT_TLS);
 
 		cf_tls_spec* tls_spec = cfg_link_tls("heartbeat", &c->hb_tls_serv_spec.tls_our_name);
@@ -4597,14 +4647,14 @@ as_config_post_process(as_config* c, const char* config_file)
 	cf_serv_cfg_init(&g_fabric_bind);
 
 	if (g_config.fabric.bind_port != 0) {
-		cfg_serv_spec_to_bind(&g_config.fabric, &g_config.tls_fabric, &g_fabric_bind,
+		cfg_serv_spec_to_bind(&g_config.fabric, &g_fabric_bind,
 				CF_SOCK_OWNER_FABRIC);
 	}
 
 	// Fabric TLS service bind addresses.
 
 	if (g_config.tls_fabric.bind_port != 0) {
-		cfg_serv_spec_to_bind(&g_config.tls_fabric, &g_config.fabric, &g_fabric_bind,
+		cfg_serv_spec_to_bind(&g_config.tls_fabric, &g_fabric_bind,
 				CF_SOCK_OWNER_FABRIC_TLS);
 
 		cf_tls_spec* tls_spec = cfg_link_tls("fabric", &g_config.tls_fabric.tls_our_name);
@@ -4631,7 +4681,7 @@ as_config_post_process(as_config* c, const char* config_file)
 	// Info service bind addresses.
 
 	cf_serv_cfg_init(&g_info_bind);
-	cfg_serv_spec_to_bind(&g_config.info, NULL, &g_info_bind, CF_SOCK_OWNER_INFO);
+	cfg_serv_spec_to_bind(&g_config.info, &g_info_bind, CF_SOCK_OWNER_INFO);
 
 	// XDR TLS setup.
 
@@ -5074,7 +5124,7 @@ cfg_mserv_config_from_addrs(cf_addr_list* addrs, cf_addr_list* bind_addrs,
 }
 
 static void
-cfg_serv_spec_to_bind(const cf_serv_spec* spec, const cf_serv_spec* def_spec, cf_serv_cfg* bind,
+cfg_serv_spec_to_bind(const cf_serv_spec* spec, cf_serv_cfg* bind,
 		cf_sock_owner owner)
 {
 	static cf_addr_list def_addrs = {
@@ -5089,9 +5139,6 @@ cfg_serv_spec_to_bind(const cf_serv_spec* spec, const cf_serv_spec* def_spec, cf
 
 	if (spec->bind.n_addrs != 0) {
 		addrs = &spec->bind;
-	}
-	else if (def_spec != NULL && def_spec->bind.n_addrs != 0) {
-		addrs = &def_spec->bind;
 	}
 	else {
 		addrs = &def_addrs;
@@ -5115,6 +5162,68 @@ cfg_serv_spec_to_bind(const cf_serv_spec* spec, const cf_serv_spec* def_spec, cf
 			}
 		}
 	}
+}
+
+static cf_tls_info*
+cfg_setup_tls_server(cf_serv_spec* spec, const char* which)
+{
+	cf_tls_spec* tls_spec = cfg_link_tls(which, &spec->tls_our_name);
+
+	if (tls_spec == NULL) {
+		cf_crash_nostack(AS_CFG, "failed to resolve %s tls-name", which);
+	}
+
+	uint32_t n_peer_names = spec->n_tls_peer_names;
+	char** peer_names = spec->tls_peer_names;
+
+	bool has_any = false;
+	bool has_false = false;
+
+	for (uint32_t i = 0; i < n_peer_names; ++i) {
+		has_any = has_any || strcmp(peer_names[i], "any") == 0;
+		has_false = has_false || strcmp(peer_names[i], "false") == 0;
+	}
+
+	if ((has_any || has_false) && n_peer_names > 1) {
+		cf_crash_nostack(AS_CFG, "\"any\" and \"false\" are incompatible with other tls-authenticate-client arguments");
+	}
+
+	bool auth_client;
+
+	if (has_any || n_peer_names == 0) {
+		auth_client = true;
+		n_peer_names = 0;
+		peer_names = NULL;
+	}
+	else if (has_false) {
+		auth_client = false;
+		n_peer_names = 0;
+		peer_names = NULL;
+	}
+	else {
+		auth_client = true;
+	}
+
+	cf_tls_info* tls_info = tls_config_server_context(tls_spec, auth_client,
+			n_peer_names, peer_names);
+
+	if (tls_info == NULL) {
+		cf_crash_nostack(AS_CFG, "failed to set up %s tls", which);
+	}
+
+	return tls_info;
+}
+
+static void
+cfg_serv_spec_std_to_access(const cf_serv_spec* spec, cf_addr_list* access)
+{
+	addrs_to_access(&spec->std, access);
+}
+
+static void
+cfg_serv_spec_alt_to_access(const cf_serv_spec* spec, cf_addr_list* access)
+{
+	addrs_to_access(&spec->alt, access);
 }
 
 static void
@@ -5145,18 +5254,6 @@ addrs_to_access(const cf_addr_list* addrs, cf_addr_list* access)
 			}
 		}
 	}
-}
-
-static void
-cfg_serv_spec_std_to_access(const cf_serv_spec* spec, cf_addr_list* access)
-{
-	addrs_to_access(&spec->std, access);
-}
-
-static void
-cfg_serv_spec_alt_to_access(const cf_serv_spec* spec, cf_addr_list* access)
-{
-	addrs_to_access(&spec->alt, access);
 }
 
 static void

@@ -74,6 +74,8 @@
 #define XDR_WRITE_BUFFER_SIZE (5 * 1024 * 1024)
 #define XDR_READ_BUFFER_SIZE (15 * 1024 * 1024)
 
+#define MAX_ADMIN_CONNECTIONS 100
+
 typedef struct thread_ctx_s {
 	cf_topo_cpu_index i_cpu;
 	cf_mutex* lock;
@@ -94,9 +96,14 @@ as_service_access g_access = {
 };
 
 cf_serv_cfg g_service_bind = { .n_cfgs = 0 };
-cf_tls_info* g_service_tls;
+cf_tls_info* g_tls_service;
+cf_serv_cfg g_admin_bind = { .n_cfgs = 0 };
+cf_tls_info* g_tls_admin;
 
 static cf_sockets g_sockets;
+static cf_sockets g_admin_sockets;
+
+static cf_poll g_admin_poll;
 
 static cf_mutex g_thread_locks[MAX_SERVICE_THREADS];
 static thread_ctx* g_thread_ctxs[MAX_SERVICE_THREADS];
@@ -113,13 +120,19 @@ static cf_queue g_free_slots;
 
 // Setup.
 static void create_service_thread(uint32_t sid);
+static void create_admin_thread(void);
 static void add_localhost(cf_serv_cfg* serv_cfg, cf_sock_owner owner);
 
 // Accept client connections.
 static void* run_accept(void* udata);
 
 // Assign connections to threads.
-static void assign_socket(as_file_handle* fd_h);
+static void accept_service_connection(cf_sock_cfg* cfg, cf_socket* csock, cf_sock_addr* caddr);
+static void accept_admin_connection(cf_sock_cfg* cfg, cf_socket* csock, cf_sock_addr* caddr);
+
+static void assign_service_socket(as_file_handle* fd_h);
+static void assign_admin_socket(as_file_handle* fd_h);
+
 static uint32_t select_sid(void);
 static uint32_t select_sid_pinned(cf_topo_cpu_index i_cpu);
 static uint32_t select_sid_adq(cf_topo_napi_id id);
@@ -128,8 +141,12 @@ static void schedule_redistribution(void);
 
 // Demarshal requests.
 static void* run_service(void* udata);
+static void* run_admin(void* udata);
+
+static bool handle_client_io_event(as_file_handle* fd_h, uint32_t mask, uint64_t events_ns, const char* which);
 static void stop_service(thread_ctx* ctx);
-static void service_release_file_handle(as_file_handle* fd_h);
+static void delete_file_handle(as_file_handle* fd_h);
+static void release_file_handle(as_file_handle* fd_h);
 static bool process_readable(as_file_handle* fd_h);
 static void start_transaction(as_file_handle* fd_h);
 static void config_xdr_socket(cf_socket* sock);
@@ -145,6 +162,24 @@ static bool start_internal_transaction(thread_ctx* ctx);
 //==========================================================
 // Inlines & macros.
 //
+
+static inline as_file_handle* 
+init_file_handle(cf_socket* sock, cf_sock_addr* caddr, cf_poll_data_type type)
+{
+	as_file_handle* fd_h = cf_rc_alloc(sizeof(as_file_handle));
+	
+	*fd_h = (as_file_handle) {
+		.poll_data_type = type,
+		.last_used = cf_getns(),
+		.proto_unread = sizeof(as_proto),
+		.security_filter = as_security_filter_create(),
+	};
+
+	cf_sock_addr_to_string_safe(caddr, fd_h->client, sizeof(fd_h->client));
+	cf_socket_copy(sock, &fd_h->sock);
+
+	return fd_h;
+}
 
 static inline void
 rearm(as_file_handle* fd_h, uint32_t events)
@@ -281,7 +316,7 @@ as_service_rearm(as_file_handle* fd_h)
 {
 	if (fd_h->move_me) {
 		cf_poll_delete_socket(fd_h->poll, &fd_h->sock);
-		assign_socket(fd_h); // rearms (EPOLLIN)
+		assign_service_socket(fd_h); // rearms (EPOLLIN)
 
 		fd_h->move_me = false;
 		return;
@@ -331,12 +366,41 @@ as_service_enqueue_internal_keyd(as_transaction* tr)
 	}
 }
 
+void
+as_admin_init(void)
+{
+	if (g_admin_bind.n_cfgs == 0) {
+		return;
+	}
+
+	create_admin_thread();
+}
+
+void
+as_admin_start(void)
+{
+	if (g_admin_bind.n_cfgs == 0) {
+		return;
+	}
+
+	if (! g_config.admin_localhost_disabled) {
+		add_localhost(&g_admin_bind, CF_SOCK_OWNER_ADMIN);
+		add_localhost(&g_admin_bind, CF_SOCK_OWNER_ADMIN_TLS);
+	}
+
+	if (cf_socket_init_server(&g_admin_bind, &g_admin_sockets) < 0) {
+		cf_crash(AS_SERVICE, "couldn't initialize admin socket");
+	}
+
+	cf_socket_show_server(AS_SERVICE, "admin", &g_admin_sockets);
+}
+
 
 //==========================================================
 // Local helpers - setup.
 //
 
-void
+static void
 create_service_thread(uint32_t sid)
 {
 	thread_ctx* ctx = cf_malloc(sizeof(thread_ctx));
@@ -358,6 +422,14 @@ create_service_thread(uint32_t sid)
 	g_thread_ctxs[sid] = ctx;
 
 	cf_mutex_unlock(&g_thread_locks[sid]);
+}
+
+static void
+create_admin_thread(void)
+{
+	cf_poll_create(&g_admin_poll);
+
+	cf_thread_create_detached(run_admin, &g_admin_poll);
 }
 
 static void
@@ -410,6 +482,7 @@ run_accept(void* udata)
 	cf_poll_create(&poll);
 
 	cf_poll_add_sockets(poll, &g_sockets, EPOLLIN);
+	cf_poll_add_sockets(poll, &g_admin_sockets, EPOLLIN);
 
 	while (true) {
 		cf_poll_event events[N_EVENTS];
@@ -434,65 +507,13 @@ run_accept(void* udata)
 
 			cf_sock_cfg* cfg = ssock->cfg;
 
-			// Ensure that proto_connections_closed is read first.
-			uint64_t n_closed =
-					as_load_uint64(&g_stats.proto_connections_closed);
-			// TODO - ARM TSO plugin - will need barrier.
-			uint64_t n_opened =
-					as_load_uint64(&g_stats.proto_connections_opened);
-
-			if (n_opened - n_closed >= g_config.n_proto_fd_max) {
-				cf_ticker_warning(AS_SERVICE,
-						"refusing client connection - proto-fd-max %u",
-						g_config.n_proto_fd_max);
-
-				cf_socket_close(&csock);
-				cf_socket_term(&csock);
-				continue;
+			if (cfg->owner == CF_SOCK_OWNER_SERVICE ||
+					cfg->owner == CF_SOCK_OWNER_SERVICE_TLS) {
+				accept_service_connection(cfg, &csock, &caddr);
 			}
-
-			cf_socket_keep_alive(&csock, 60, 60, 2);
-
-			if (cfg->owner == CF_SOCK_OWNER_SERVICE_TLS) {
-				tls_socket_prepare_server(&csock, g_service_tls);
+			else {
+				accept_admin_connection(cfg, &csock, &caddr);
 			}
-
-			as_file_handle* fd_h = cf_rc_alloc(sizeof(as_file_handle));
-			// Ref for epoll instance.
-
-			fd_h->poll_data_type = CF_POLL_DATA_CLIENT_IO;
-
-			cf_sock_addr_to_string_safe(&caddr, fd_h->client,
-					sizeof(fd_h->client));
-			cf_socket_copy(&csock, &fd_h->sock);
-
-			fd_h->last_used = cf_getns();
-			fd_h->in_transaction = 0;
-			fd_h->move_me = false;
-			fd_h->reap_me = false;
-			fd_h->is_xdr = false;
-			fd_h->proto = NULL;
-			fd_h->proto_unread = sizeof(as_proto);
-			fd_h->security_filter = as_security_filter_create();
-
-			cf_rc_reserve(fd_h); // ref for reaper
-
-			cf_mutex_lock(&g_reaper_lock);
-
-			uint32_t slot;
-
-			if (cf_queue_pop(&g_free_slots, &slot, CF_QUEUE_NOWAIT) !=
-					CF_QUEUE_OK) {
-				cf_crash(AS_SERVICE, "cannot get free slot");
-			}
-
-			g_file_handles[slot] = fd_h;
-
-			cf_mutex_unlock(&g_reaper_lock);
-
-			assign_socket(fd_h); // arms (EPOLLIN)
-
-			as_incr_uint64(&g_stats.proto_connections_opened);
 		}
 	}
 
@@ -505,7 +526,93 @@ run_accept(void* udata)
 //
 
 static void
-assign_socket(as_file_handle* fd_h)
+accept_service_connection(cf_sock_cfg* cfg, cf_socket* csock,
+		cf_sock_addr* caddr)
+{
+	// Ensure that proto_connections_closed is read first.
+	uint64_t n_closed =
+			as_load_uint64(&g_stats.proto_connections_closed);
+	// TODO - ARM TSO plugin - will need barrier.
+	uint64_t n_opened =
+			as_load_uint64(&g_stats.proto_connections_opened);
+
+	if (n_opened - n_closed >= g_config.n_proto_fd_max) {
+		cf_ticker_warning(AS_SERVICE,
+				"refusing client connection - proto-fd-max %u",
+				g_config.n_proto_fd_max);
+
+		cf_socket_close(csock);
+		cf_socket_term(csock);
+		return;
+	}
+
+	cf_socket_keep_alive(csock, 60, 60, 2);
+
+	if (cfg->owner == CF_SOCK_OWNER_SERVICE_TLS) {
+		tls_socket_prepare_server(csock, g_tls_service);
+	}
+
+	// Ref for epoll instance.
+	as_file_handle* fd_h = init_file_handle(csock, caddr, 
+			CF_POLL_DATA_CLIENT_IO);
+
+	cf_rc_reserve(fd_h); // ref for reaper
+
+	cf_mutex_lock(&g_reaper_lock);
+
+	uint32_t slot;
+
+	if (cf_queue_pop(&g_free_slots, &slot, CF_QUEUE_NOWAIT) !=
+			CF_QUEUE_OK) {
+		cf_crash(AS_SERVICE, "cannot get free slot");
+	}
+
+	g_file_handles[slot] = fd_h;
+
+	cf_mutex_unlock(&g_reaper_lock);
+
+	assign_service_socket(fd_h); // arms (EPOLLIN)
+
+	as_incr_uint64(&g_stats.proto_connections_opened);
+}
+
+static void
+accept_admin_connection(cf_sock_cfg* cfg, cf_socket* csock, cf_sock_addr* caddr)
+{
+	// Ensure that admin_connections_closed is read first.
+	uint64_t n_closed =
+			as_load_uint64(&g_stats.admin_connections_closed);
+	// TODO - ARM TSO plugin - will need barrier.
+	uint64_t n_opened =
+			as_load_uint64(&g_stats.admin_connections_opened);
+
+	if (n_opened - n_closed >= MAX_ADMIN_CONNECTIONS) {
+		cf_ticker_warning(AS_SERVICE,
+				"refusing admin connection - breached connection limit of %u",
+				MAX_ADMIN_CONNECTIONS);
+
+		cf_socket_close(csock);
+		cf_socket_term(csock);
+		return;
+	}
+
+	cf_socket_keep_alive(csock, 60, 60, 2);
+
+	if (cfg->owner == CF_SOCK_OWNER_ADMIN_TLS) {
+		tls_socket_prepare_server(csock, g_tls_admin);
+	}
+
+	// Ref for epoll instance.
+	as_file_handle* fd_h = init_file_handle(csock, caddr, 
+			CF_POLL_DATA_ADMIN_IO);
+
+	assign_admin_socket(fd_h); // arms (EPOLLIN)
+
+	as_incr_uint64(&g_stats.admin_connections_opened);
+}
+
+static void
+assign_service_socket(as_file_handle* fd_h)
 {
 	while (true) {
 		uint32_t sid;
@@ -542,6 +649,15 @@ assign_socket(as_file_handle* fd_h)
 
 		cf_mutex_unlock(&g_thread_locks[sid]);
 	}
+}
+
+static void
+assign_admin_socket(as_file_handle* fd_h)
+{
+	fd_h->poll = g_admin_poll;
+
+	cf_poll_add_socket(fd_h->poll, &fd_h->sock,
+			EPOLLIN | EPOLLONESHOT | EPOLLRDHUP, fd_h);
 }
 
 static uint32_t
@@ -655,44 +771,43 @@ run_service(void* udata)
 
 			as_file_handle* fd_h = data;
 
-			if ((mask & (EPOLLRDHUP | EPOLLERR | EPOLLHUP)) != 0) {
-				service_release_file_handle(fd_h);
+			if (! handle_client_io_event(fd_h, mask, events_ns, "service")) {
+				continue;
+			}
+			
+			// Note that epoll cannot trigger again for this file handle during
+			// the transaction. We'll rearm at the end of the transaction.
+			start_transaction(fd_h);
+		}
+	}
+
+	return NULL;
+}
+
+static void*
+run_admin(void* udata)
+{
+	cf_poll poll = *(cf_poll*)udata;
+
+	while (true) {
+		cf_poll_event events[N_EVENTS];
+		int32_t n_events = cf_poll_wait(poll, events, N_EVENTS, -1);
+		uint64_t events_ns = cf_getns();
+
+		for (uint32_t i = 0; i < (uint32_t)n_events; i++) {
+			uint32_t mask = events[i].events;
+			as_file_handle* fd_h = events[i].data;
+
+			if (! handle_client_io_event(fd_h, mask, events_ns, "admin")) {
 				continue;
 			}
 
-			if (tls_socket_needs_handshake(&fd_h->sock)) {
-				int32_t tls_ev = tls_socket_accept(&fd_h->sock);
+			uint8_t type = fd_h->proto->type;
 
-				if (tls_ev == EPOLLERR) {
-					service_release_file_handle(fd_h);
-					continue;
-				}
-
-				if (tls_ev == 0) {
-					tls_socket_must_not_have_data(&fd_h->sock,
-							"service handshake");
-					tls_ev = EPOLLIN;
-				}
-
-				rearm(fd_h, (uint32_t)tls_ev);
-				continue;
-			}
-
-			if (fd_h->proto == NULL && fd_h->proto_unread == sizeof(as_proto)) {
-				// Overload last_used for request start time. Note - latency
-				// will include unrelated events ahead of this one in this loop.
-				fd_h->last_used = events_ns;
-			}
-
-			if (! process_readable(fd_h)) {
-				service_release_file_handle(fd_h);
-				continue;
-			}
-
-			tls_socket_must_not_have_data(&fd_h->sock, "full client read");
-
-			if (fd_h->proto_unread != 0) {
-				rearm(fd_h, EPOLLIN);
+			if (type != PROTO_TYPE_INFO && type != PROTO_TYPE_SECURITY) {
+				cf_warning(AS_SERVICE, "from %s - expected info or security type on admin port, got %u",
+						fd_h->client, type);
+				delete_file_handle(fd_h);
 				continue;
 			}
 
@@ -703,6 +818,58 @@ run_service(void* udata)
 	}
 
 	return NULL;
+}
+
+static bool
+handle_client_io_event(as_file_handle* fd_h, uint32_t mask, uint64_t events_ns, 
+		const char* which)
+{
+	if ((mask & (EPOLLRDHUP | EPOLLERR | EPOLLHUP)) != 0) {
+		delete_file_handle(fd_h);
+		return false;
+	}
+
+	if (tls_socket_needs_handshake(&fd_h->sock)) {
+		int32_t tls_ev = tls_socket_accept(&fd_h->sock);
+
+		if (tls_ev == EPOLLERR) {
+			delete_file_handle(fd_h);
+			return false;
+		}
+
+		if (tls_ev == 0) {
+			char ctx[32];
+			snprintf(ctx, sizeof(ctx), "%s handshake", which);
+			tls_socket_must_not_have_data(&fd_h->sock, ctx);
+			tls_ev = EPOLLIN;
+		}
+
+		rearm(fd_h, (uint32_t)tls_ev);
+		return false;
+	}
+
+	if (fd_h->proto == NULL && fd_h->proto_unread == sizeof(as_proto)) {
+		// Overload last_used for request start time. Note - latency
+		// will include unrelated events ahead of this one.
+		fd_h->last_used = events_ns;
+	}
+
+	if (! process_readable(fd_h)) {
+		delete_file_handle(fd_h);
+		return false;
+	}
+
+	char ctx[32];
+	snprintf(ctx, sizeof(ctx), "full %s read", which);
+
+	tls_socket_must_not_have_data(&fd_h->sock, ctx);
+
+	if (fd_h->proto_unread != 0) {
+		rearm(fd_h, EPOLLIN);
+		return false;
+	}
+
+	return true;
 }
 
 static void
@@ -736,7 +903,7 @@ stop_service(thread_ctx* ctx)
 
 			// Don't transfer during TLS handshake - might need EPOLLOUT.
 			if (tls_socket_needs_handshake(&fd_h->sock)) {
-				service_release_file_handle(fd_h);
+				delete_file_handle(fd_h);
 				continue;
 			}
 
@@ -746,7 +913,7 @@ stop_service(thread_ctx* ctx)
 			}
 
 			cf_poll_delete_socket(fd_h->poll, &fd_h->sock);
-			assign_socket(fd_h); // keeps armed (EPOLLIN)
+			assign_service_socket(fd_h); // keeps armed (EPOLLIN)
 		}
 
 		cf_mutex_unlock(&g_reaper_lock);
@@ -767,12 +934,40 @@ stop_service(thread_ctx* ctx)
 }
 
 static void
-service_release_file_handle(as_file_handle* fd_h)
+delete_file_handle(as_file_handle* fd_h)
 {
 	cf_poll_delete_socket(fd_h->poll, &fd_h->sock);
 	fd_h->poll = INVALID_POLL;
 	fd_h->reap_me = true;
-	as_release_file_handle(fd_h);
+	release_file_handle(fd_h);
+}
+
+static void
+release_file_handle(as_file_handle* proto_fd_h)
+{
+	if (cf_rc_release(proto_fd_h) != 0) {
+		return;
+	}
+
+	cf_socket_close(&proto_fd_h->sock);
+	cf_socket_term(&proto_fd_h->sock);
+
+	if (proto_fd_h->proto != NULL) {
+		cf_free(proto_fd_h->proto);
+	}
+
+	if (proto_fd_h->security_filter != NULL) {
+		as_security_filter_destroy(proto_fd_h->security_filter);
+	}
+
+	cf_rc_free(proto_fd_h);
+
+	if (proto_fd_h->poll_data_type == CF_POLL_DATA_CLIENT_IO) {
+		as_incr_uint64_rls(&g_stats.proto_connections_closed);
+	}
+	else {
+		as_incr_uint64_rls(&g_stats.admin_connections_closed);
+	}
 }
 
 static bool
@@ -979,7 +1174,7 @@ run_reaper(void* udata)
 			if (fd_h->reap_me) {
 				g_file_handles[i] = NULL;
 				cf_queue_push_head(&g_free_slots, &i);
-				as_release_file_handle(fd_h);
+				release_file_handle(fd_h);
 				continue;
 			}
 
@@ -992,7 +1187,7 @@ run_reaper(void* udata)
 
 				g_file_handles[i] = NULL;
 				cf_queue_push_head(&g_free_slots, &i);
-				as_release_file_handle(fd_h);
+				release_file_handle(fd_h);
 
 				g_stats.reaper_count++;
 			}

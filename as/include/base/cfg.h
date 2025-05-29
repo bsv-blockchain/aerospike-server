@@ -140,6 +140,19 @@ typedef struct as_config_s {
 	cf_serv_spec	tls_service; // TLS client service
 
 	//--------------------------------------------
+	// network::admin context.
+	//
+
+	// Normally visible, in canonical configuration file order:
+
+	cf_serv_spec	admin; // admin client service
+
+	// Normally hidden:
+
+	cf_serv_spec	tls_admin; // TLS admin client service
+	bool			admin_localhost_disabled;
+
+	//--------------------------------------------
 	// network::heartbeat context.
 	//
 

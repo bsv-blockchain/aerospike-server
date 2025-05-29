@@ -68,7 +68,9 @@ typedef struct as_service_access_s {
 
 extern as_service_access g_access;
 extern cf_serv_cfg g_service_bind;
-extern cf_tls_info* g_service_tls;
+extern cf_tls_info* g_tls_service;
+extern cf_serv_cfg g_admin_bind;
+extern cf_tls_info* g_tls_admin;
 
 
 //==========================================================
@@ -82,3 +84,6 @@ bool as_service_set_proto_fd_max(uint32_t val);
 void as_service_rearm(struct as_file_handle_s* fd_h);
 void as_service_enqueue_internal(struct as_transaction_s* tr);
 void as_service_enqueue_internal_keyd(struct as_transaction_s* tr);
+
+void as_admin_init(void);
+void as_admin_start(void);

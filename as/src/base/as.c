@@ -388,6 +388,7 @@ as_run(int argc, char **argv)
 	cf_dns_init();				// DNS resolver
 	as_security_init();			// security features
 	as_service_init();			// server may process internal transactions
+	as_admin_init();			// admin connection handling
 	as_hb_init();				// inter-node heartbeat
 	as_skew_monitor_init();		// clock skew monitor
 	as_fabric_init();			// inter-node communications
@@ -416,8 +417,9 @@ as_run(int argc, char **argv)
 	as_exchange_start();		// start the cluster exchange subsystem
 	as_clustering_start();		// clustering-v5 start
 	as_nsup_start();			// may send evict-void-time(s) to other nodes
-	as_service_start();			// server will now receive client transactions
-	as_info_port_start();		// server will now receive info transactions
+	as_admin_start();			// admin should start before service
+	as_service_start();			// will now accept client and admin transactions
+	as_info_port_start();		// will now accept info transactions
 	as_ticker_start();			// only after everything else is started
 
 	// Relevant for enterprise edition only.

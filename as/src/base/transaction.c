@@ -465,30 +465,6 @@ as_multi_rec_transaction_error(as_transaction* tr, uint32_t error_code)
 	}
 }
 
-// Helper to release transaction file handles.
-void
-as_release_file_handle(as_file_handle *proto_fd_h)
-{
-	if (cf_rc_release(proto_fd_h) != 0) {
-		return;
-	}
-
-	cf_socket_close(&proto_fd_h->sock);
-	cf_socket_term(&proto_fd_h->sock);
-
-	if (proto_fd_h->proto != NULL) {
-		cf_free(proto_fd_h->proto);
-	}
-
-	if (proto_fd_h->security_filter != NULL) {
-		as_security_filter_destroy(proto_fd_h->security_filter);
-	}
-
-	cf_rc_free(proto_fd_h);
-
-	as_incr_uint64_rls(&g_stats.proto_connections_closed);
-}
-
 void
 as_end_of_transaction(as_file_handle *proto_fd_h, bool force_close)
 {

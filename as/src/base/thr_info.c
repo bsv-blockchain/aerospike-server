@@ -1776,6 +1776,20 @@ cmd_endpoints(const as_info_cmd_args* args)
 	info_append_string(db, "service.tls-alternate-access-addresses", string);
 	cf_free(string);
 
+	port = bind_to_port(&g_admin_bind, CF_SOCK_OWNER_ADMIN);
+	info_append_int(db, "admin.port", port);
+
+	string = as_info_bind_to_string(&g_admin_bind, CF_SOCK_OWNER_ADMIN);
+	info_append_string(db, "admin.addresses", string);
+	cf_free(string);
+
+	port = bind_to_port(&g_admin_bind, CF_SOCK_OWNER_ADMIN_TLS);
+	info_append_int(db, "admin.tls-port", port);
+
+	string = as_info_bind_to_string(&g_admin_bind, CF_SOCK_OWNER_ADMIN_TLS);
+	info_append_string(db, "admin.tls-addresses", string);
+	cf_free(string);
+
 	as_hb_info_endpoints_get(db);
 
 	port = bind_to_port(&g_fabric_bind, CF_SOCK_OWNER_FABRIC);
@@ -3634,20 +3648,26 @@ cmd_statistics(const as_info_cmd_args* args)
 
 	// Read closed before opened.
 	uint64_t n_proto_fds_closed = as_load_uint64(&g_stats.proto_connections_closed);
+	uint64_t n_admin_fds_closed = as_load_uint64(&g_stats.admin_connections_closed);
 	uint64_t n_hb_fds_closed = as_load_uint64(&g_stats.heartbeat_connections_closed);
 	uint64_t n_fabric_fds_closed = as_load_uint64(&g_stats.fabric_connections_closed);
 	// TODO - ARM TSO plugin - will need barrier.
 	uint64_t n_proto_fds_opened = as_load_uint64(&g_stats.proto_connections_opened);
+	uint64_t n_admin_fds_opened = as_load_uint64(&g_stats.admin_connections_opened);
 	uint64_t n_hb_fds_opened = as_load_uint64(&g_stats.heartbeat_connections_opened);
 	uint64_t n_fabric_fds_opened = as_load_uint64(&g_stats.fabric_connections_opened);
 
 	uint64_t n_proto_fds_open = n_proto_fds_opened - n_proto_fds_closed;
+	uint64_t n_admin_fds_open = n_admin_fds_opened - n_admin_fds_closed;
 	uint64_t n_hb_fds_open = n_hb_fds_opened - n_hb_fds_closed;
 	uint64_t n_fabric_fds_open = n_fabric_fds_opened - n_fabric_fds_closed;
 
 	info_append_uint64(db, "client_connections", n_proto_fds_open);
 	info_append_uint64(db, "client_connections_opened", n_proto_fds_opened);
 	info_append_uint64(db, "client_connections_closed", n_proto_fds_closed);
+	info_append_uint64(db, "admin_connections", n_admin_fds_open);
+	info_append_uint64(db, "admin_connections_opened", n_admin_fds_opened);
+	info_append_uint64(db, "admin_connections_closed", n_admin_fds_closed);
 	info_append_uint64(db, "heartbeat_connections", n_hb_fds_open);
 	info_append_uint64(db, "heartbeat_connections_opened", n_hb_fds_opened);
 	info_append_uint64(db, "heartbeat_connections_closed", n_hb_fds_closed);

@@ -47,6 +47,7 @@
 #include "base/cfg.h"
 #include "base/datamodel.h"
 #include "base/index.h"
+#include "base/service.h"
 #include "base/set_index.h"
 #include "base/stats.h"
 #include "base/thr_info.h"
@@ -319,10 +320,23 @@ log_line_fds()
 	uint64_t n_hb_fds_open = n_hb_fds_opened - n_hb_fds_closed;
 	uint64_t n_fabric_fds_open = n_fabric_fds_opened - n_fabric_fds_closed;
 
-	cf_info(AS_INFO, "   fds: proto (%lu,%lu,%lu) heartbeat (%lu,%lu,%lu) fabric (%lu,%lu,%lu)",
-			n_proto_fds_open, n_proto_fds_opened, n_proto_fds_closed,
-			n_hb_fds_open, n_hb_fds_opened, n_hb_fds_closed,
-			n_fabric_fds_open, n_fabric_fds_opened, n_fabric_fds_closed);
+	if (g_admin_bind.n_cfgs == 0) {
+		cf_info(AS_INFO, "   fds: proto (%lu,%lu,%lu) heartbeat (%lu,%lu,%lu) fabric (%lu,%lu,%lu)",
+				n_proto_fds_open, n_proto_fds_opened, n_proto_fds_closed,
+				n_hb_fds_open, n_hb_fds_opened, n_hb_fds_closed,
+				n_fabric_fds_open, n_fabric_fds_opened, n_fabric_fds_closed);
+	}
+	else {
+		uint64_t n_admin_fds_closed = as_load_uint64(&g_stats.admin_connections_closed);
+		uint64_t n_admin_fds_opened = as_load_uint64(&g_stats.admin_connections_opened);
+		uint64_t n_admin_fds_open = n_admin_fds_opened - n_admin_fds_closed;
+
+		cf_info(AS_INFO, "   fds: proto (%lu,%lu,%lu) heartbeat (%lu,%lu,%lu) fabric (%lu,%lu,%lu) admin (%lu,%lu,%lu)",
+				n_proto_fds_open, n_proto_fds_opened, n_proto_fds_closed,
+				n_hb_fds_open, n_hb_fds_opened, n_hb_fds_closed,
+				n_fabric_fds_open, n_fabric_fds_opened, n_fabric_fds_closed,
+				n_admin_fds_open, n_admin_fds_opened, n_admin_fds_closed);
+	}
 }
 
 void

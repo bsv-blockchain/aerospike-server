@@ -140,6 +140,8 @@ typedef struct cf_sockets_s {
 typedef enum {
 	CF_SOCK_OWNER_SERVICE,
 	CF_SOCK_OWNER_SERVICE_TLS,
+	CF_SOCK_OWNER_ADMIN,
+	CF_SOCK_OWNER_ADMIN_TLS,
 	CF_SOCK_OWNER_HEARTBEAT,
 	CF_SOCK_OWNER_HEARTBEAT_TLS,
 	CF_SOCK_OWNER_FABRIC,
@@ -166,10 +168,13 @@ typedef struct cf_poll_s {
 	int32_t fd;
 } __attribute__((packed)) cf_poll;
 
-#define CF_POLL_DATA_CLIENT_IO 0
-#define CF_POLL_DATA_EPOLL_QUEUE 1
-#define CF_POLL_DATA_XDR_IO 2
-#define CF_POLL_DATA_XDR_TIMER 3
+typedef enum cf_poll_data_type_s {
+	CF_POLL_DATA_CLIENT_IO,
+	CF_POLL_DATA_ADMIN_IO,
+	CF_POLL_DATA_EPOLL_QUEUE,
+	CF_POLL_DATA_XDR_IO,
+	CF_POLL_DATA_XDR_TIMER
+} cf_poll_data_type;
 
 // This precisely matches the epoll_event struct.
 typedef struct cf_poll_event_s {

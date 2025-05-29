@@ -300,12 +300,12 @@ static void
 cfg_get_network(cf_dyn_buf* db)
 {
 	// Service:
+	info_append_uint32(db, "service.port", g_config.service.bind_port);
+	append_addrs(db, "service.address", &g_config.service.bind);
 	info_append_uint32(db, "service.access-port", g_config.service.std_port);
 	append_addrs(db, "service.access-address", &g_config.service.std);
-	append_addrs(db, "service.address", &g_config.service.bind);
 	info_append_uint32(db, "service.alternate-access-port", g_config.service.alt_port);
 	append_addrs(db, "service.alternate-access-address", &g_config.service.alt);
-	info_append_uint32(db, "service.port", g_config.service.bind_port);
 
 	info_append_uint32(db, "service.tls-port", g_config.tls_service.bind_port);
 	append_addrs(db, "service.tls-address", &g_config.tls_service.bind);
@@ -321,6 +321,20 @@ cfg_get_network(cf_dyn_buf* db)
 	}
 
 	info_append_bool(db, "service.disable-localhost", g_config.service_localhost_disabled);
+
+	// Admin:
+	info_append_uint32(db, "admin.port", g_config.admin.bind_port);
+	append_addrs(db, "admin.address", &g_config.admin.bind);
+	info_append_uint32(db, "admin.tls-port", g_config.tls_admin.bind_port);
+	append_addrs(db, "admin.tls-address", &g_config.tls_admin.bind);
+	info_append_string_safe(db, "admin.tls-name", g_config.tls_admin.tls_our_name);
+
+	for (uint32_t i = 0; i < g_config.tls_admin.n_tls_peer_names; ++i) {
+		info_append_string(db, "admin.tls-authenticate-client",
+				g_config.tls_admin.tls_peer_names[i]);
+	}
+
+	info_append_bool(db, "admin.disable-localhost", g_config.admin_localhost_disabled);
 
 	// Heartbeat:
 	as_hb_info_config_get(db);
