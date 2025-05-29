@@ -465,7 +465,7 @@ populate_reduce_cb(as_index_ref* r_ref, void* udata)
 
 	as_bin stack_bins[RECORD_MAX_BINS];
 
-	if (as_storage_rd_load_bins(&rd, stack_bins) < 0) {
+	if (as_storage_rd_lazy_load_bins(&rd, stack_bins) < 0) {
 		cf_warning(AS_SINDEX, "{%s} populating sindex %s - failed to read %pD",
 				ns->name, si->iname, &r->keyd);
 		as_storage_record_close(&rd);
