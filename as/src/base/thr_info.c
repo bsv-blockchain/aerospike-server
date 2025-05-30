@@ -323,7 +323,7 @@ as_info_param_get_aliases(const char* params, const char* aliases[],
 			if (select != aliases) {
 				char msg[256];
 
-				snprintf(msg, sizeof(msg), "info paramter '%s' is deprecated, use '%s' instead",
+				snprintf(msg, sizeof(msg), "info parameter '%s' is deprecated, use '%s' instead",
 					*select, *aliases);
 				as_info_warn_deprecated(msg);
 			}
@@ -957,7 +957,8 @@ void
 as_info_warn_deprecated(const char* msg)
 {
 	as_incr_uint64(&g_stats.n_deprecated_requests);
-	cf_ticker_warning(AS_DEPRECATION, "%s", msg);
+	// TODO: This should be a warning, not an info - but not on initial release.
+	cf_ticker_info(AS_DEPRECATION, "%s", msg);
 }
 
 
@@ -1843,6 +1844,8 @@ static void
 cmd_features(const as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
+
+	as_info_warn_deprecated("'features' command is deprecated");
 
 	cf_dyn_buf_append_string(db,
 			"batch-any;batch-index;blob-bits;"

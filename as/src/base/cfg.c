@@ -2280,6 +2280,8 @@ as_config_init(const char* config_file)
 				break;
 			case CASE_SERVICE_GROUP:
 				{
+					as_info_warn_deprecated("'group' is deprecated");
+
 					struct group* grp;
 					if (NULL == (grp = getgrnam(line.val_tok_1))) {
 						cf_crash_nostack(AS_CFG, "line %d :: group not found: %s", line_num, line.val_tok_1);
@@ -2332,6 +2334,7 @@ as_config_init(const char* config_file)
 				cf_os_use_group_perms(cfg_bool(&line));
 				break;
 			case CASE_SERVICE_PIDFILE:
+				as_info_warn_deprecated("'pidfile' is deprecated");
 				c->pidfile = cfg_strdup_no_checks(&line);
 				break;
 			case CASE_SERVICE_POISON_ALLOCATIONS:
@@ -2396,6 +2399,8 @@ as_config_init(const char* config_file)
 				break;
 			case CASE_SERVICE_USER:
 				{
+					as_info_warn_deprecated("'user' is deprecated");
+
 					struct passwd* pwd;
 					if (NULL == (pwd = getpwnam(line.val_tok_1))) {
 						cf_crash_nostack(AS_CFG, "line %d :: user not found: %s", line_num, line.val_tok_1);
@@ -5030,14 +5035,6 @@ cfg_mserv_config_from_addrs(cf_addr_list* addrs, cf_addr_list* bind_addrs,
 	if (bind_addrs->n_addrs == 0) {
 		as_info_warn_deprecated("'address' parameter defaulting to 'any' is deprecated, will require explicit configuration in future");
 		bind_addrs = &def_addrs;
-	}
-	else if (bind_addrs->n_addrs == 1) {
-		if (strcmp(bind_addrs->addrs[0], "any") == 0) {
-			as_info_warn_deprecated("'address' parameter value 'any' is deprecated, will require explicit configuration in future");
-		}
-		else if (strcmp(bind_addrs->addrs[0], "local") == 0) {
-			as_info_warn_deprecated("'address' parameter value 'local' is deprecated, will require explicit configuration in future");
-		}
 	}
 
 	for (uint32_t i = 0; i < addrs->n_addrs; ++i) {

@@ -68,6 +68,7 @@
 #include "base/security.h"
 #include "base/service.h"
 #include "base/set_index.h"
+#include "base/thr_info.h"
 #include "base/transaction.h"
 #include "base/udf_record.h"
 #include "fabric/partition.h"
@@ -1796,6 +1797,8 @@ basic_query_get_bin_names(const as_transaction* tr, as_namespace* ns,
 		const uint8_t* data = f->data;
 		uint32_t n_bins = *data++; // only <= 255 bins (ops do more)
 
+		as_info_warn_deprecated("queries with a list of bin names is deprecated, use a list of read bin ops instead.");
+
 		*bin_names = cf_vector_create(AS_BIN_NAME_MAX_SZ, n_bins, 0);
 
 		for (uint32_t i = 0; i < n_bins; ++i) {
@@ -1831,6 +1834,13 @@ basic_query_get_bin_names(const as_transaction* tr, as_namespace* ns,
 			cf_warning(AS_QUERY, "ignoring bad bin name %.*s (%u)", op->name_sz,
 					op->name, op->name_sz);
 			continue;
+		}
+
+		if (op->op != AS_MSG_OP_READ) {
+			char msg[100];
+			snprintf(msg, sizeof(msg), "queries should only provide read bin ops, not %u",
+				op->op);
+			as_info_warn_deprecated(msg);
 		}
 
 		char bin_name[AS_BIN_NAME_MAX_SZ];
