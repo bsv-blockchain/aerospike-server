@@ -554,19 +554,6 @@ safe_fcntl(int32_t fd, int32_t cmd, int32_t arg)
 	return res;
 }
 
-static int32_t
-safe_ioctl(int32_t fd, int32_t req, int32_t *arg)
-{
-	int32_t res = ioctl(fd, req, arg);
-
-	if (res < 0) {
-		cf_crash(CF_SOCKET, "ioctl(%d) failed on FD %d: %d (%s)",
-				req, fd, errno, cf_strerror(errno));
-	}
-
-	return res;
-}
-
 static void
 safe_setsockopt(int32_t fd, int32_t level, int32_t name, const void *val, socklen_t len)
 {
@@ -1019,17 +1006,6 @@ int32_t
 cf_socket_local_name(const cf_socket *sock, cf_sock_addr *addr)
 {
 	return x_name(getsockname, "local", sock->fd, addr);
-}
-
-int32_t
-cf_socket_available(cf_socket *sock)
-{
-	int32_t size;
-	safe_ioctl(sock->fd, FIONREAD, &size);
-
-	size += tls_socket_pending(sock);
-
-	return size;
 }
 
 int32_t

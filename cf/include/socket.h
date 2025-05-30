@@ -146,7 +146,6 @@ typedef enum {
 	CF_SOCK_OWNER_HEARTBEAT_TLS,
 	CF_SOCK_OWNER_FABRIC,
 	CF_SOCK_OWNER_FABRIC_TLS,
-	CF_SOCK_OWNER_INFO,
 	CF_SOCK_OWNER_XDR_CLIENT,
 	CF_SOCK_OWNER_SECRETS,
 	CF_SOCK_OWNER_INVALID
@@ -293,7 +292,6 @@ CF_MUST_CHECK int32_t cf_socket_init_client(cf_sock_cfg *cfg, int32_t timeout, c
 CF_MUST_CHECK int32_t cf_socket_accept(cf_socket *lsock, cf_socket *sock, cf_sock_addr *addr);
 CF_MUST_CHECK int32_t cf_socket_remote_name(const cf_socket *sock, cf_sock_addr *addr);
 CF_MUST_CHECK int32_t cf_socket_local_name(const cf_socket *sock, cf_sock_addr *addr);
-CF_MUST_CHECK int32_t cf_socket_available(cf_socket *sock);
 
 CF_MUST_CHECK int32_t cf_socket_recv_from(cf_socket *sock, void *buff, size_t size, int32_t flags, cf_sock_addr *addr);
 CF_MUST_CHECK int32_t cf_socket_recv(cf_socket *sock, void *buff, size_t size, int32_t flags);

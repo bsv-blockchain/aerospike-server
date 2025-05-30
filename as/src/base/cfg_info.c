@@ -362,10 +362,6 @@ cfg_get_network(cf_dyn_buf* db)
 	info_append_uint32(db, "fabric.recv-rearm-threshold", g_config.fabric_recv_rearm_threshold);
 	info_append_uint32(db, "fabric.send-threads", g_config.n_fabric_send_threads);
 
-	// Info:
-	append_addrs(db, "info.address", &g_config.info.bind);
-	info_append_uint32(db, "info.port", g_config.info.bind_port);
-
 	// TLS:
 	for (uint32_t i = 0; i < g_config.n_tls_specs; ++i) {
 		cf_tls_spec* spec = g_config.tls_specs + i;

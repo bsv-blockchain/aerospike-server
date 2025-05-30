@@ -37,18 +37,6 @@ int cf_strtoul_u64(const char *s, uint64_t *value);
 int cf_strtoul_u64_raw(const char *s, uint64_t *value);
 int cf_strtol_i32(const char *s, int32_t *value);
 
-static inline int
-cf_str_strnchr(const uint8_t *s, int sz, int c)
-{
-	for (int i = 0; i < sz; i++) {
-		if (s[i] == c) {
-			return i;
-		}
-	}
-
-	return -1;
-}
-
 static inline const char *
 cf_str_safe_as_empty(const char *s)
 {

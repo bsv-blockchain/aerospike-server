@@ -78,7 +78,6 @@
 #include "base/set_index.h"
 #include "base/smd.h"
 #include "base/stats.h"
-#include "base/thr_info_port.h"
 #include "base/thr_tsvc.h"
 #include "base/transaction.h"
 #include "base/truncate.h"
@@ -692,17 +691,6 @@ info_param_optional_local_namespace_is_ok(cf_dyn_buf* db, char* value,
 	}
 
 	return INFO_PARAM_OK;
-}
-
-void
-as_info_buffer(uint8_t* req_buf, size_t req_buf_len, cf_dyn_buf* rsp)
-{
-	if (req_buf_len == 0) {
-		info_summary(rsp);
-	}
-	else {
-		handle_cmds((char*)req_buf, req_buf_len, NULL, rsp);
-	}
 }
 
 // Called via info command. Caller has sanity-checked n_threads.
@@ -1807,12 +1795,6 @@ cmd_endpoints(const as_info_cmd_args* args)
 	cf_free(string);
 
 	as_fabric_info_peer_endpoints_get(db);
-
-	info_append_int(db, "info.port", g_info_port);
-
-	string = as_info_bind_to_string(&g_info_bind, CF_SOCK_OWNER_INFO);
-	info_append_string(db, "info.addresses", string);
-	cf_free(string);
 
 	cf_dyn_buf_chomp(db);
 }

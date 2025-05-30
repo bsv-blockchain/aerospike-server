@@ -73,7 +73,6 @@
 #include "base/service.h"
 #include "base/stats.h"
 #include "base/thr_info.h"
-#include "base/thr_info_port.h"
 #include "base/transaction_policy.h"
 #include "base/truncate.h"
 #include "base/xdr.h"
@@ -165,7 +164,6 @@ cfg_set_defaults()
 	cfg_init_serv_spec(&c->hb_tls_serv_spec);
 	cfg_init_serv_spec(&c->fabric);
 	cfg_init_serv_spec(&c->tls_fabric);
-	cfg_init_serv_spec(&c->info);
 
 	c->uid = (uid_t)-1;
 	c->gid = (gid_t)-1;
@@ -358,7 +356,6 @@ typedef enum {
 	CASE_NETWORK_ADMIN_BEGIN,
 	CASE_NETWORK_HEARTBEAT_BEGIN,
 	CASE_NETWORK_FABRIC_BEGIN,
-	CASE_NETWORK_INFO_BEGIN,
 	CASE_NETWORK_TLS_BEGIN,
 
 	// Network service options:
@@ -438,10 +435,6 @@ typedef enum {
 	CASE_NETWORK_FABRIC_TLS_ADDRESS,
 	CASE_NETWORK_FABRIC_TLS_NAME,
 	CASE_NETWORK_FABRIC_TLS_PORT,
-
-	// Network info options:
-	CASE_NETWORK_INFO_ADDRESS,
-	CASE_NETWORK_INFO_PORT,
 
 	// Network TLS options:
 	CASE_NETWORK_TLS_CA_FILE,
@@ -954,7 +947,6 @@ const cfg_opt NETWORK_OPTS[] = {
 		{ "admin",					CASE_NETWORK_ADMIN_BEGIN },
 		{ "heartbeat",						CASE_NETWORK_HEARTBEAT_BEGIN },
 		{ "fabric",							CASE_NETWORK_FABRIC_BEGIN },
-		{ "info",							CASE_NETWORK_INFO_BEGIN },
 		{ "tls",							CASE_NETWORK_TLS_BEGIN },
 		{ "}",								CASE_CONTEXT_END }
 };
@@ -1044,12 +1036,6 @@ const cfg_opt NETWORK_FABRIC_OPTS[] = {
 		{ "tls-address",					CASE_NETWORK_FABRIC_TLS_ADDRESS },
 		{ "tls-name",						CASE_NETWORK_FABRIC_TLS_NAME },
 		{ "tls-port",						CASE_NETWORK_FABRIC_TLS_PORT },
-		{ "}",								CASE_CONTEXT_END }
-};
-
-const cfg_opt NETWORK_INFO_OPTS[] = {
-		{ "address",						CASE_NETWORK_INFO_ADDRESS },
-		{ "port",							CASE_NETWORK_INFO_PORT },
 		{ "}",								CASE_CONTEXT_END }
 };
 
@@ -1498,7 +1484,6 @@ const int NUM_NETWORK_HEARTBEAT_OPTS				= sizeof(NETWORK_HEARTBEAT_OPTS) / sizeo
 const int NUM_NETWORK_HEARTBEAT_MODE_OPTS			= sizeof(NETWORK_HEARTBEAT_MODE_OPTS) / sizeof(cfg_opt);
 const int NUM_NETWORK_HEARTBEAT_PROTOCOL_OPTS		= sizeof(NETWORK_HEARTBEAT_PROTOCOL_OPTS) / sizeof(cfg_opt);
 const int NUM_NETWORK_FABRIC_OPTS					= sizeof(NETWORK_FABRIC_OPTS) / sizeof(cfg_opt);
-const int NUM_NETWORK_INFO_OPTS						= sizeof(NETWORK_INFO_OPTS) / sizeof(cfg_opt);
 const int NUM_NETWORK_TLS_OPTS						= sizeof(NETWORK_TLS_OPTS) / sizeof(cfg_opt);
 const int NUM_NAMESPACE_OPTS						= sizeof(NAMESPACE_OPTS) / sizeof(cfg_opt);
 const int NUM_NAMESPACE_CONFLICT_RESOLUTION_OPTS	= sizeof(NAMESPACE_CONFLICT_RESOLUTION_OPTS) / sizeof(cfg_opt);
@@ -1553,7 +1538,7 @@ typedef enum {
 	GLOBAL,
 	SERVICE,
 	LOGGING, LOGGING_CONTEXT, LOGGING_SYSLOG,
-	NETWORK, NETWORK_SERVICE, NETWORK_ADMIN, NETWORK_HEARTBEAT, NETWORK_FABRIC, NETWORK_INFO, NETWORK_TLS,
+	NETWORK, NETWORK_SERVICE, NETWORK_ADMIN, NETWORK_HEARTBEAT, NETWORK_FABRIC, NETWORK_TLS,
 	NAMESPACE, NAMESPACE_INDEX_TYPE_PMEM, NAMESPACE_INDEX_TYPE_FLASH, NAMESPACE_SINDEX_TYPE_PMEM, NAMESPACE_SINDEX_TYPE_FLASH, NAMESPACE_STORAGE_MEMORY, NAMESPACE_STORAGE_PMEM, NAMESPACE_STORAGE_DEVICE, NAMESPACE_SET, NAMESPACE_GEO2DSPHERE_WITHIN,
 	MOD_LUA,
 	SECURITY, SECURITY_LDAP, SECURITY_LOG,
@@ -1567,7 +1552,7 @@ const char* CFG_PARSER_STATES[] = {
 		"GLOBAL",
 		"SERVICE",
 		"LOGGING", "LOGGING_CONTEXT", "LOGGING_SYSLOG",
-		"NETWORK", "NETWORK_SERVICE", "NETWORK_ADMIN", "NETWORK_HEARTBEAT", "NETWORK_FABRIC", "NETWORK_INFO", "NETWORK_TLS",
+		"NETWORK", "NETWORK_SERVICE", "NETWORK_ADMIN", "NETWORK_HEARTBEAT", "NETWORK_FABRIC", "NETWORK_TLS",
 		"NAMESPACE", "NAMESPACE_INDEX_TYPE_PMEM", "NAMESPACE_INDEX_TYPE_SSD", "NAMESPACE_SINDEX_TYPE_PMEM", "NAMESPACE_SINDEX_TYPE_FLASH", "NAMESPACE_STORAGE_MEMORY", "NAMESPACE_STORAGE_PMEM", "NAMESPACE_STORAGE_DEVICE", "NAMESPACE_SET", "NAMESPACE_GEO2DSPHERE_WITHIN",
 		"MOD_LUA",
 		"SECURITY", "SECURITY_LDAP", "SECURITY_LOG",
@@ -2587,9 +2572,6 @@ as_config_init(const char* config_file)
 			case CASE_NETWORK_FABRIC_BEGIN:
 				cfg_begin_context(&state, NETWORK_FABRIC);
 				break;
-			case CASE_NETWORK_INFO_BEGIN:
-				cfg_begin_context(&state, NETWORK_INFO);
-				break;
 			case CASE_NETWORK_TLS_BEGIN:
 				cfg_enterprise_only(&line);
 				tls_spec = cfg_create_tls_spec(c, line.val_tok_1);
@@ -2886,27 +2868,6 @@ as_config_init(const char* config_file)
 				if (c->n_fabric_channel_recv_threads[AS_FABRIC_CHANNEL_RW] % c->n_fabric_channel_recv_pools[AS_FABRIC_CHANNEL_RW] != 0) {
 					cf_crash_nostack(AS_CFG, "'channel-rw-recv-threads' must be a multiple of 'channel-rw-recv-pools'");
 				}
-				cfg_end_context(&state);
-				break;
-			case CASE_NOT_FOUND:
-			default:
-				cfg_unknown_name_tok(&line);
-				break;
-			}
-			break;
-
-		//----------------------------------------
-		// Parse network::info context items.
-		//
-		case NETWORK_INFO:
-			switch (cfg_find_tok(line.name_tok, NETWORK_INFO_OPTS, NUM_NETWORK_INFO_OPTS)) {
-			case CASE_NETWORK_INFO_ADDRESS:
-				cfg_add_addr_bind(line.val_tok_1, &c->info);
-				break;
-			case CASE_NETWORK_INFO_PORT:
-				c->info.bind_port = cfg_port(&line);
-				break;
-			case CASE_CONTEXT_END:
 				cfg_end_context(&state);
 				break;
 			case CASE_NOT_FOUND:
@@ -4673,15 +4634,6 @@ as_config_post_process(as_config* c, const char* config_file)
 	if (g_fabric_bind.n_cfgs == 0) {
 		cf_crash_nostack(AS_CFG, "no fabric ports configured");
 	}
-
-	// Info service port.
-
-	g_info_port = g_config.info.bind_port;
-
-	// Info service bind addresses.
-
-	cf_serv_cfg_init(&g_info_bind);
-	cfg_serv_spec_to_bind(&g_config.info, &g_info_bind, CF_SOCK_OWNER_INFO);
 
 	// XDR TLS setup.
 

@@ -184,14 +184,6 @@ typedef struct as_config_s {
 	uint32_t		n_fabric_send_threads;
 
 	//--------------------------------------------
-	// network::info context.
-	//
-
-	// Normally visible, in canonical configuration file order:
-
-	cf_serv_spec	info; // info service
-
-	//--------------------------------------------
 	// Remaining configuration top-level contexts.
 	//
 

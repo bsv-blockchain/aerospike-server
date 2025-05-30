@@ -97,7 +97,6 @@ info_param_result as_info_optional_param_is_ok(cf_dyn_buf* db, const char* param
 bool info_param_required_local_namespace_is_ok(cf_dyn_buf* db, char* value, struct as_namespace_s** ns, info_param_result result);
 info_param_result info_param_optional_local_namespace_is_ok(cf_dyn_buf* db, char* value, struct as_namespace_s** ns, info_param_result result);
 
-void as_info_buffer(uint8_t* req_buf, size_t req_buf_len, cf_dyn_buf* rsp);
 void as_info_set_num_info_threads(uint32_t n_threads);
 
 void as_info_respond_error(cf_dyn_buf* db, int num, const char* message, ...);

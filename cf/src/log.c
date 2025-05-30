@@ -109,7 +109,6 @@ static const char* context_strings[] = {
 		"index",
 		"info",
 		"info-command",
-		"info-port",
 		"key-busy",
 		"migrate",
 		"mrt-audit",

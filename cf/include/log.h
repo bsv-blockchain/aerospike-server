@@ -80,7 +80,6 @@ typedef enum {
 	AS_INDEX,
 	AS_INFO,
 	AS_INFO_COMMAND, // special detail context
-	AS_INFO_PORT,
 	AS_KEY_BUSY, // special detail context
 	AS_MIGRATE,
 	AS_MRT_AUDIT,

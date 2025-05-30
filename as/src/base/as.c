@@ -64,7 +64,6 @@
 #include "base/smd.h"
 #include "base/stats.h"
 #include "base/thr_info.h"
-#include "base/thr_info_port.h"
 #include "base/ticker.h"
 #include "base/truncate.h"
 #include "base/xdr.h"
@@ -419,7 +418,6 @@ as_run(int argc, char **argv)
 	as_nsup_start();			// may send evict-void-time(s) to other nodes
 	as_admin_start();			// admin should start before service
 	as_service_start();			// will now accept client and admin transactions
-	as_info_port_start();		// will now accept info transactions
 	as_ticker_start();			// only after everything else is started
 
 	// Relevant for enterprise edition only.

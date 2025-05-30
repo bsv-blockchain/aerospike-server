@@ -75,7 +75,6 @@ BASE_SOURCES += set_index.c
 BASE_SOURCES += signal.c
 BASE_SOURCES += smd.c
 BASE_SOURCES += thr_info.c
-BASE_SOURCES += thr_info_port.c
 BASE_SOURCES += thr_tsvc.c
 BASE_SOURCES += ticker.c
 BASE_SOURCES += transaction.c
