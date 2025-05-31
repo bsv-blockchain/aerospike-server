@@ -170,6 +170,12 @@ typedef struct as_config_s {
 	cf_serv_spec	fabric; // fabric service
 	cf_serv_spec	tls_fabric; // TLS fabric service
 
+	//--------------------------------------------
+	// network::info context - obsolete.
+	//
+
+	bool			has_info_section;
+
 	// Normally hidden:
 
 	uint32_t		n_fabric_channel_fds[AS_FABRIC_N_CHANNELS];
