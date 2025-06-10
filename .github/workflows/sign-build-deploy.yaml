@@ -1,0 +1,26 @@
+
+name: Sign, build, and deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version of the artifact to deploy'
+        required: true
+        default: '8.0.0.7'
+
+permissions:
+  id-token: write
+  contents: read
+env:
+    ORG: citrusleaf
+    JFROG_PROJECT: database
+    ARTIFACT_NAME: aerospike-server
+
+jobs:
+  no-op:
+    runs-on: ubuntu-22.04 # v24.04 is not supported by artifact signing action
+    steps:
+      - name: No-op
+        run: |
+          echo "No-op"
