@@ -1911,7 +1911,7 @@ cmd_hb_addr(const as_info_cmd_args* args)
 	as_hb_mode hb_mode;
 	char addr_port_str[1024];
 
-	as_info_warn_deprecated("'mesh' and 'mcast' commands are deprecated");
+	as_info_warn_deprecated("'mesh' and 'mcast' commands are deprecated, use 'get-config' instead");
 
 	as_hb_info_listen_addr_get(&hb_mode, addr_port_str, sizeof(addr_port_str));
 
@@ -2466,7 +2466,7 @@ cmd_node(const as_info_cmd_args* args)
 static void
 cmd_name(const as_info_cmd_args* args)
 {
-	as_info_warn_deprecated("'name' command is deprecated");
+	as_info_warn_deprecated("'name' command is deprecated, use 'node' instead");
 	cmd_node(args);
 }
 
@@ -2475,7 +2475,7 @@ cmd_objects(const as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
-	as_info_warn_deprecated("'objects' command is deprecated");
+	as_info_warn_deprecated("'objects' command is deprecated, use 'statistics' instead");
 
 	uint64_t objects = 0;
 
@@ -2814,7 +2814,7 @@ cmd_replicas_all(const as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
-	as_info_warn_deprecated("'replicas-all' command is deprecated");
+	as_info_warn_deprecated("'replicas-all' command is deprecated, use 'replicas' instead");
 	as_partition_get_replicas_all_str(db, false, 0);
 }
 
@@ -2823,7 +2823,7 @@ cmd_replicas_master(const as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
-	as_info_warn_deprecated("'replicas-master' command is deprecated");
+	as_info_warn_deprecated("'replicas-master' command is deprecated, use 'replicas' instead");
 	as_partition_get_replicas_master_str(db);
 }
 
@@ -3015,7 +3015,7 @@ cmd_sindex(const as_info_cmd_args* args)
 	// format w namespace & index name is:
 	//    prop1=val1;prop2=val2;...;propn=valn
 	
-	as_info_warn_deprecated("'sindex' command is deprecated");
+	as_info_warn_deprecated("'sindex' command is deprecated, use 'sindex-list' instead");
 
 	char* index_name = NULL;
 	as_namespace* ns = NULL;

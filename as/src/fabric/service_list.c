@@ -385,13 +385,13 @@ as_service_list_dynamic(const as_info_cmd_args* args)
 	}
 
 	if (strcmp(key, "services") == 0) {
-		as_info_warn_deprecated("'services' command is deprecated");
+		as_info_warn_deprecated("'services' command is deprecated, use 'peers-clear-std' instead");
 	}
 	else if (strcmp(key, "services-alternate") == 0) {
-		as_info_warn_deprecated("'services-alternate' command is deprecated");
+		as_info_warn_deprecated("'services-alternate' command is deprecated, use 'peers-clear-alt' instead");
 	}
 	else if (strcmp(key, "services-alumni") == 0) {
-		as_info_warn_deprecated("'services-alumni' command is deprecated");
+		as_info_warn_deprecated("'services-alumni' command is deprecated, use 'alumni-clear-std' instead");
 	}
 
 	print_info_val(key, db);
