@@ -126,7 +126,7 @@ cleangit:
 	$(GIT_CLEAN)
 
 .PHONY: rpm deb
-rpm deb src:
+rpm deb src: server
 	$(MAKE) -C pkg/$@ EDITION=$(EDITION)
 
 $(VERSION_SRC):	targetdirs

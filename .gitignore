@@ -19,3 +19,6 @@ cert.pem
 chain.pem
 cacert.pem
 cbl.txt
+
+# Build environment vars
+.env

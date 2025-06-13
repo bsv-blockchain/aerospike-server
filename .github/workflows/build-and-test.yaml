@@ -1,0 +1,66 @@
+name: build-and-test
+permissions:
+  contents: read
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - master
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Fetch app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: Checkout aerospike-server
+        uses: actions/checkout@v4
+        with:
+          repository: citrusleaf/aerospike-server
+          submodules: true
+          path: ./aerospike-server
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+      - name: Install required packages
+        run: |
+          cd "$GITHUB_WORKSPACE/aerospike-server"
+          ./bin/install-dependencies.sh
+      - name: Checkout aerospike-server-enterprise
+        uses: actions/checkout@v4
+        with:
+          repository: citrusleaf/aerospike-server-enterprise
+          submodules: true
+          path: ./aerospike-server-enterprise
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+      - name: Build and package Aerospike Server Enterprise
+        run: |
+          cd "$GITHUB_WORKSPACE/aerospike-server"
+          make EEREPO="$GITHUB_WORKSPACE/aerospike-server-enterprise" deb+ee
+      - name: Install Aerospike Deb
+        run: sudo dpkg -i $(find $GITHUB_WORKSPACE/aerospike-server/pkg/packages/*.deb)
+      - name: Set the feature key env var
+        run: |
+          FEATUREKEY_ENCODED=$(base64 -w 0 ./aerospike-server-enterprise/etc/features.conf)
+          echo "FEATUREKEY=$FEATUREKEY_ENCODED" >> "$GITHUB_ENV"
+      - name: Start Aerospike server
+        run: |
+          sudo chown -R $(id -u):$(id -g) /opt/aerospike/usr/udf/lua
+          /usr/bin/asd \
+            --config-file ./aerospike-server/as/etc/gh-action.conf \
+            --cold-start
+      - name: Checkout C client repo
+        uses: actions/checkout@v4
+        with:
+          repository: aerospike/aerospike-client-c
+          submodules: recursive
+          path: aerospike-client-c
+      - name: Build and run the client tests
+        run: |
+          cd ./aerospike-client-c
+          make
+          make test
