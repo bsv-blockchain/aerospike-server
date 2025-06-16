@@ -53,6 +53,7 @@ typedef struct cf_tls_spec_s {
 	char* key_file;
 	char* key_file_password;
 	char* name;
+	bool  pki_user_append_ou;
 	char* protocols;
 } cf_tls_spec;
 

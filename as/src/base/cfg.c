@@ -445,6 +445,7 @@ typedef enum {
 	CASE_NETWORK_TLS_CIPHER_SUITE,
 	CASE_NETWORK_TLS_KEY_FILE,
 	CASE_NETWORK_TLS_KEY_FILE_PASSWORD,
+	CASE_NETWORK_TLS_PKI_USER_APPEND_OU,
 	CASE_NETWORK_TLS_PROTOCOLS,
 
 	// Namespace options:
@@ -1053,6 +1054,7 @@ const cfg_opt NETWORK_TLS_OPTS[] = {
 		{ "cipher-suite",					CASE_NETWORK_TLS_CIPHER_SUITE },
 		{ "key-file",						CASE_NETWORK_TLS_KEY_FILE },
 		{ "key-file-password",				CASE_NETWORK_TLS_KEY_FILE_PASSWORD },
+		{ "pki-user-append-ou",				CASE_NETWORK_TLS_PKI_USER_APPEND_OU },
 		{ "protocols",						CASE_NETWORK_TLS_PROTOCOLS },
 		{ "}",								CASE_CONTEXT_END }
 };
@@ -2932,6 +2934,9 @@ as_config_init(const char* config_file)
 				break;
 			case CASE_NETWORK_TLS_KEY_FILE_PASSWORD:
 				tls_spec->key_file_password = cfg_strdup_no_checks(&line);
+				break;
+			case CASE_NETWORK_TLS_PKI_USER_APPEND_OU:
+				tls_spec->pki_user_append_ou = cfg_bool(&line);
 				break;
 			case CASE_NETWORK_TLS_PROTOCOLS:
 				tls_spec->protocols = cfg_strdup_no_checks(&line);
