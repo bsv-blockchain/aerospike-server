@@ -22,3 +22,6 @@ cbl.txt
 
 # Build environment vars
 .env
+
+# vscode settings
+.vscode/
