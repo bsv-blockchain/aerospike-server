@@ -121,7 +121,7 @@ as_exp_op_parse(const as_msg_op* msg_op, as_exp** exp, uint64_t* flags,
 		}
 	}
 
-	*exp = as_exp_build_buf(exp_buf, exp_buf_sz, cpy_wire);
+	*exp = as_exp_build_buf(exp_buf, exp_buf_sz, cpy_wire, NULL);
 
 	if (*exp == NULL) {
 		cf_warning(AS_PARTICLE, "parse_op - error %u unable to build expression op",

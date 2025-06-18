@@ -55,6 +55,29 @@
 
 
 //==========================================================
+// Typedefs & constants.
+//
+
+typedef struct bins_old_new_s {
+	as_namespace* ns;
+	as_record* r;
+
+	as_bin* old_bins;
+	uint16_t n_old_bins;
+	as_bin* new_bins;
+	uint16_t n_new_bins;
+} bins_old_new;
+
+
+//==========================================================
+// Forward declarations.
+//
+
+static uint32_t eval_and_populate_sbin(as_exp_ctx* ctx, as_sindex* si, as_sindex_bin* sbins, as_sindex_op op);
+static uint32_t update_sindex_exp(bins_old_new* old_new, as_bin** match_bins, uint32_t n_match_bins,  as_sindex_bin* sbins, bool* record_in_sindex_r);
+
+
+//==========================================================
 // Public API.
 //
 
@@ -441,9 +464,12 @@ update_sindex(as_namespace* ns, as_index_ref* r_ref, as_bin* old_bins,
 	uint16_t set_id = as_index_get_set_id(r);
 
 	bool bin_name_in_both[n_new_bins];
+	as_bin* changed_bins[n_old_bins + n_new_bins]; // only the 'name' is used
+	uint32_t n_changed_bins = 0;
 
 	// Initialize before the critical section to make it shorter.
 	memset(bin_name_in_both, 0, sizeof(bin_name_in_both));
+	memset(changed_bins, 0, sizeof(changed_bins));
 
 	SINDEX_GRLOCK();
 
@@ -491,16 +517,17 @@ update_sindex(as_namespace* ns, as_index_ref* r_ref, as_bin* old_bins,
 			if (as_bin_get_particle_type(b_old) !=
 					as_bin_get_particle_type(b_new) ||
 					b_old->particle != b_new->particle) {
-				n_populated += as_sindex_sbins_from_bin(ns, set_id, b_old,
+				n_populated += as_sindex_populate_sbins(ns, set_id, b_old,
 						&sbins[n_populated], AS_SINDEX_OP_DELETE);
 
-				uint32_t n = as_sindex_sbins_from_bin(ns, set_id, b_new,
+				uint32_t n = as_sindex_populate_sbins(ns, set_id, b_new,
 						&sbins[n_populated], AS_SINDEX_OP_INSERT);
 
 				if (n != 0) {
 					record_in_sindex = true;
 				}
 
+				changed_bins[n_changed_bins++] = b_new;
 				n_populated += n;
 			}
 			else if (r->in_sindex == 1 && ! record_in_sindex) {
@@ -508,7 +535,7 @@ update_sindex(as_namespace* ns, as_index_ref* r_ref, as_bin* old_bins,
 
 				as_sindex_bin dummy_sbins[n_sindexes];
 
-				uint32_t n = as_sindex_sbins_from_bin(ns, set_id, b_new,
+				uint32_t n = as_sindex_populate_sbins(ns, set_id, b_new,
 						dummy_sbins, AS_SINDEX_OP_INSERT);
 
 				if (n != 0) {
@@ -519,7 +546,8 @@ update_sindex(as_namespace* ns, as_index_ref* r_ref, as_bin* old_bins,
 			}
 		}
 		else {
-			n_populated += as_sindex_sbins_from_bin(ns, set_id, b_old,
+			changed_bins[n_changed_bins++] = b_old;
+			n_populated += as_sindex_populate_sbins(ns, set_id, b_old,
 					&sbins[n_populated], AS_SINDEX_OP_DELETE);
 		}
 	}
@@ -531,14 +559,47 @@ update_sindex(as_namespace* ns, as_index_ref* r_ref, as_bin* old_bins,
 			continue;
 		}
 
-		uint32_t n = as_sindex_sbins_from_bin(ns, set_id, &new_bins[i_new],
+		as_bin* b_new = &new_bins[i_new];
+		uint32_t n = as_sindex_populate_sbins(ns, set_id, b_new,
 				&sbins[n_populated], AS_SINDEX_OP_INSERT);
 
 		if (n != 0) {
 			record_in_sindex = true;
 		}
 
+		changed_bins[n_changed_bins++] = b_new;
 		n_populated += n;
+	}
+
+	bins_old_new old_new = {
+			.ns = ns,
+			.r = r,
+			.old_bins = old_bins,
+			.n_old_bins = n_old_bins,
+			.new_bins = new_bins,
+			.n_new_bins = n_new_bins
+	};
+
+	n_populated += update_sindex_exp(&old_new, changed_bins, n_changed_bins,
+			&sbins[n_populated], &record_in_sindex);
+
+	if (! record_in_sindex) {
+		// The record may be in some sindex with exp based on unchanged bins.
+
+		old_new.old_bins = NULL;
+		old_new.n_old_bins = 0;
+
+		as_sindex_bin dummy_sbins[n_sindexes];
+		as_bin* p_new_bins[n_new_bins];
+
+		for (uint32_t b_ix = 0; b_ix < n_new_bins; b_ix++) {
+			p_new_bins[b_ix] = &new_bins[b_ix];
+		}
+
+		uint32_t n = update_sindex_exp(&old_new, p_new_bins, n_new_bins,
+				dummy_sbins, &record_in_sindex);
+
+		as_sindex_sbin_free_all(dummy_sbins, n);
 	}
 
 	SINDEX_GRUNLOCK();
@@ -598,15 +659,32 @@ remove_from_sindex_bins(as_namespace* ns, as_index_ref* r_ref, as_bin* bins,
 	as_index* r = r_ref->r;
 	uint16_t set_id = as_index_get_set_id(r);
 
+	as_bin* changed_bins[n_bins]; // only the name field is used
+	uint32_t n_changed_bins = 0;
+
 	SINDEX_GRLOCK();
 
 	as_sindex_bin sbins[as_sindex_n_sindexes(ns)];
 	uint32_t n_populated = 0;
 
 	for (uint32_t i = 0; i < n_bins; i++) {
-		n_populated += as_sindex_sbins_from_bin(ns, set_id, &bins[i],
+		as_bin* old_bin = &bins[i];
+
+		n_populated += as_sindex_populate_sbins(ns, set_id, old_bin,
 				&sbins[n_populated], AS_SINDEX_OP_DELETE);
+
+		changed_bins[n_changed_bins++] = old_bin; // consider all bins changed
 	}
+
+	bins_old_new old_new = {
+			.ns = ns,
+			.r = r,
+			.old_bins = bins,
+			.n_old_bins = n_bins
+	};
+
+	n_populated += update_sindex_exp(&old_new, changed_bins, n_changed_bins,
+			&sbins[n_populated], NULL);
 
 	SINDEX_GRUNLOCK();
 
@@ -617,4 +695,147 @@ remove_from_sindex_bins(as_namespace* ns, as_index_ref* r_ref, as_bin* bins,
 
 	// Unmark record for sindex after deletion.
 	as_index_clear_in_sindex(r);
+}
+
+
+//==========================================================
+// Local helpers.
+//
+
+static uint32_t
+eval_and_populate_sbin(as_exp_ctx* ctx, as_sindex* si, as_sindex_bin* sbins,
+		as_sindex_op op)
+{
+	if (ctx == NULL) {
+		return 0;
+	}
+
+	as_bin rb;
+	as_bin_set_empty(&rb);
+
+	if (! as_exp_eval(si->exp, ctx, &rb, NULL)) {
+		return 0;
+	}
+
+	uint32_t n_populated = 0;
+
+	n_populated += as_sindex_populate_sbin_si(si, &rb, &sbins[n_populated], op);
+
+	as_bin_particle_destroy(&rb);
+
+	return n_populated;
+}
+
+static uint32_t
+update_sindex_exp(bins_old_new* old_new, as_bin** match_bins,
+		uint32_t n_match_bins, as_sindex_bin* sbins, bool* record_in_sindex_r)
+{
+	as_namespace* ns = old_new->ns;
+	as_record* r = old_new->r;
+
+	// Fake eval_rd for exp evaluation.
+	as_storage_rd eval_old_rd = {
+			.bins = old_new->old_bins,
+			.n_bins = old_new->n_old_bins
+	};
+	as_exp_ctx ctx_old_rd = {
+			.ns = ns,
+			.r = r,
+			.rd = &eval_old_rd
+	};
+	as_storage_rd eval_new_rd = {
+			.bins = old_new->new_bins,
+			.n_bins = old_new->n_new_bins
+	};
+	as_exp_ctx ctx_new_rd = {
+			.ns = ns,
+			.r = r,
+			.rd = &eval_new_rd
+	};
+	uint32_t n_populated = 0;
+
+	for (uint32_t si_ix = 0; si_ix < MAX_N_SINDEXES; si_ix++) {
+		as_sindex* si = ns->sindexes[si_ix];
+
+		if (si == NULL || si->exp == NULL) {
+			continue;
+		}
+
+		uint16_t set_id = si->set_id;
+
+		if (set_id != INVALID_SET_ID && set_id != as_index_get_set_id(r)) {
+			continue;
+		}
+
+		bool matched = false;
+		cf_vector* exp_bnames = si->exp_bin_names;
+		uint32_t exp_bcount = cf_vector_size(exp_bnames);
+		bool has_digest_mod = (si->exp->flags & AS_EXP_HAS_DIGEST_MOD) != 0;
+
+		if (has_digest_mod) {
+			matched = true; // need to update sindex, also skip bin name check
+		}
+
+		for (uint32_t b_ix = 0; b_ix < exp_bcount && ! matched; b_ix++) {
+			char exp_bname[AS_BIN_NAME_MAX_SZ];
+
+			cf_vector_get(exp_bnames, b_ix, exp_bname);
+
+			for (uint32_t c_ix = 0; c_ix < n_match_bins; c_ix++) {
+				if (strcmp(match_bins[c_ix]->name, exp_bname) == 0) {
+					matched = true; // done with this si
+					break;
+				}
+			}
+		}
+
+		if (! matched) {
+			continue;
+		}
+
+		// Optimise if the sindex exp has a digest mod and no bin names.
+		if (has_digest_mod && cf_vector_size(si->exp_bin_names) == 0 &&
+				old_new->n_old_bins != 0 && old_new->n_new_bins != 0) {
+			// Optimisation - as digest will never change, exp result will
+			// be the same and we can skip sindex update. But, we need to know
+			// if the record is in the sindex.
+
+			as_sindex_bin dummy_sbin;
+
+			as_exp_ctx dummy_ctx = {
+				.ns = ns,
+				.r = old_new->r,
+				.rd = NULL
+			};
+
+			uint32_t n = eval_and_populate_sbin(&dummy_ctx, si,
+					&dummy_sbin, AS_SINDEX_OP_INSERT);
+
+			if (n != 0) {
+				*record_in_sindex_r = true;
+			}
+
+			as_sindex_sbin_free_all(&dummy_sbin, n);
+		}
+		else {
+			if (old_new->n_old_bins != 0) {
+				n_populated += eval_and_populate_sbin(&ctx_old_rd, si,
+						&sbins[n_populated], AS_SINDEX_OP_DELETE);
+			}
+
+			if (old_new->n_new_bins != 0) {
+				uint32_t n = eval_and_populate_sbin(&ctx_new_rd, si,
+						&sbins[n_populated], AS_SINDEX_OP_INSERT);
+
+				if (n != 0) {
+					// Must be update (not delete) - the flag will be non-NULL.
+					*record_in_sindex_r = true;
+				}
+
+				n_populated += n;
+			}
+		}
+	}
+
+	return n_populated;
 }

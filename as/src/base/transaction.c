@@ -190,8 +190,14 @@ as_transaction_set_msg_field_flag(as_transaction *tr, uint8_t type)
 	case AS_MSG_FIELD_TYPE_BVAL_ARRAY:
 		tr->msg_fields |= AS_MSG_FIELD_BIT_BVAL_ARRAY;
 		break;
+	case AS_MSG_FIELD_TYPE_INDEX_NAME:
+		tr->msg_fields |= AS_MSG_FIELD_BIT_INDEX_NAME;
+		break;
 	case AS_MSG_FIELD_TYPE_INDEX_RANGE:
 		tr->msg_fields |= AS_MSG_FIELD_BIT_INDEX_RANGE;
+		break;
+	case AS_MSG_FIELD_TYPE_INDEX_EXPRESSION:
+		tr->msg_fields |= AS_MSG_FIELD_BIT_INDEX_EXPRESSION;
 		break;
 	case AS_MSG_FIELD_TYPE_INDEX_TYPE:
 		tr->msg_fields |= AS_MSG_FIELD_BIT_INDEX_TYPE;

@@ -129,13 +129,19 @@ static query_type get_query_type(const as_transaction* tr);
 
 static bool get_query_set(const as_transaction* tr, as_namespace* ns, char* set_name, uint16_t* set_id);
 static bool get_query_pids(const as_transaction* tr, as_query_pid** p_pids, uint16_t* n_pids_requested, uint16_t* n_keyds_requested);
-static bool get_query_range(const as_transaction* tr, as_namespace* ns, as_query_range** range_r);
+static bool get_query_range_and_def(const as_transaction* tr, as_namespace* ns, as_query_range* range, as_query_sindex_def* si_def);
 static bool get_query_rps(const as_transaction* tr, uint32_t* rps);
+static bool get_query_si_name(const as_transaction* tr, as_namespace* ns, char* si_name);
 
 static bool get_query_socket_timeout(const as_transaction* tr, int32_t* timeout);
 
 static bool get_query_sample_max(const as_transaction* tr, uint64_t* sample_max);
 static bool get_query_filter_exp(const as_transaction* tr, as_exp** exp);
+
+static bool get_range_field(const as_transaction* tr, as_namespace* ns, as_query_range* range, as_query_sindex_def* si_def);
+static bool get_index_type_field(const as_transaction* tr, as_query_sindex_def* si_def);
+static bool get_index_expression_field(const as_transaction* tr, as_query_sindex_def* si_def);
+static bool get_index_context_field(const as_transaction* tr, as_query_sindex_def* si_def);
 
 static bool range_from_msg_integer(const uint8_t* data, as_query_range* range, uint32_t len);
 static bool range_from_msg_string(const uint8_t* data, as_query_range* range, uint32_t len);
@@ -433,147 +439,27 @@ get_query_pids(const as_transaction* tr, as_query_pid** p_pids,
 }
 
 static bool
-get_query_range(const as_transaction* tr, as_namespace* ns,
-		as_query_range** range_r)
+get_query_range_and_def(const as_transaction* tr, as_namespace* ns,
+		as_query_range* range, as_query_sindex_def* si_def)
 {
 	if (! as_transaction_has_where_clause(tr)) {
 		return true;
 	}
 
-	const as_msg_field* f = as_msg_field_get(&tr->msgp->msg,
-			AS_MSG_FIELD_TYPE_INDEX_RANGE);
-	const uint8_t* data = f->data;
-	uint32_t len = as_msg_field_get_value_sz(f);
-
-	if (len == 0) {
-		cf_warning(AS_QUERY, "cannot parse index range");
+	if (! get_range_field(tr, ns, range, si_def)) {
 		return false;
 	}
 
-	uint8_t n_ranges = *data++;
-	len--;
-
-	if (n_ranges != 1) {
-		cf_warning(AS_QUERY, "%u ranges - only 1 supported", n_ranges);
+	if (! get_index_type_field(tr, si_def)) {
 		return false;
 	}
 
-	if (len == 0) {
-		cf_warning(AS_QUERY, "cannot parse bin name");
+	if (! get_index_expression_field(tr, si_def)) {
 		return false;
 	}
 
-	uint8_t bin_name_len = *data++;
-	len--;
-
-	if (bin_name_len == 0 || bin_name_len >= AS_BIN_NAME_MAX_SZ) {
-		cf_warning(AS_QUERY, "invalid bin name length %u", bin_name_len);
+	if (! get_index_context_field(tr, si_def)) {
 		return false;
-	}
-
-	if (len < bin_name_len) {
-		cf_warning(AS_QUERY, "cannot parse bin name");
-		return false;
-	}
-
-	as_query_range* range = cf_calloc(1, sizeof(as_query_range));
-	*range_r = range; // link it to the job so that as_job_destroy will clean it
-
-	memcpy(range->bin_name, data, bin_name_len); // null-terminated via calloc
-
-	data += bin_name_len;
-	len -= bin_name_len;
-
-	if (len == 0) {
-		cf_warning(AS_QUERY, "cannot parse particle type");
-		return false;
-	}
-
-	range->bin_type = *data++;
-	len--;
-
-	bool success;
-
-	switch (range->bin_type) {
-	case AS_PARTICLE_TYPE_INTEGER:
-		success = range_from_msg_integer(data, range, len);
-		break;
-	case AS_PARTICLE_TYPE_STRING:
-		success = range_from_msg_string(data, range, len);
-		break;
-	case AS_PARTICLE_TYPE_BLOB:
-		success = range_from_msg_blob(data, range, len);
-		break;
-	case AS_PARTICLE_TYPE_GEOJSON:
-		success = range_from_msg_geojson(ns, data, range, len);
-		break;
-	default:
-		cf_warning(AS_QUERY, "invalid particle type %u", range->bin_type);
-		success = false;
-	}
-
-	if (! success) {
-		return false;
-	}
-
-	f = as_msg_field_get(&tr->msgp->msg, AS_MSG_FIELD_TYPE_INDEX_TYPE);
-
-	if (f != NULL && as_msg_field_get_value_sz(f) == 0) {
-		cf_warning(AS_QUERY, "cannot parse itype");
-		return false;
-	}
-
-	range->itype = f == NULL ? AS_SINDEX_ITYPE_DEFAULT : *f->data;
-
-	range->de_dup = range->isrange && range->itype != AS_SINDEX_ITYPE_DEFAULT;
-
-	f = as_msg_field_get(&tr->msgp->msg, AS_MSG_FIELD_TYPE_INDEX_CONTEXT);
-
-	if (f != NULL) {
-		if (as_msg_field_get_value_sz(f) == 0) {
-			cf_warning(AS_QUERY, "cannot parse index context");
-			return false;
-		}
-
-		range->ctx_buf_sz = as_msg_field_get_value_sz(f);
-
-		if (range->ctx_buf_sz == 0) {
-			cf_warning(AS_QUERY, "invalid index context");
-			return false;
-		}
-
-		range->ctx_buf = cf_malloc(range->ctx_buf_sz);
-		memcpy(range->ctx_buf, f->data, range->ctx_buf_sz);
-
-		bool was_modified;
-
-		range->ctx_buf_sz = msgpack_compactify(range->ctx_buf,
-				range->ctx_buf_sz, &was_modified);
-
-		if (range->ctx_buf_sz == 0) {
-			cf_warning(AS_QUERY, "invalid index context - could not compactify");
-			return false;
-		}
-
-		if (was_modified) {
-			cf_warning(AS_QUERY, "invalid index context - msgpack not normalized");
-			return false;
-		}
-
-		msgpack_vec vecs[1];
-		msgpack_in_vec mv = {
-				.n_vecs = 1,
-				.vecs = vecs
-		};
-
-		vecs[0].buf = range->ctx_buf;
-		vecs[0].buf_sz = range->ctx_buf_sz;
-		vecs[0].offset = 0;
-
-		if (! cdt_context_read_check_peek(&mv)) {
-			cf_warning(AS_QUERY, "invalid index context");
-			return false;
-		}
 	}
 
 	return true;
@@ -601,6 +487,33 @@ get_query_rps(const as_transaction* tr, uint32_t* rps)
 	}
 
 	*rps = cf_swap_from_be32(*(uint32_t*)f->data);
+
+	return true;
+}
+
+static bool
+get_query_si_name(const as_transaction* tr, as_namespace* ns, char* si_name)
+{
+	if (! as_transaction_has_index_name(tr)) {
+		return true;
+	}
+
+	if (as_transaction_has_index_expression(tr)) {
+		cf_warning(AS_QUERY, "specified both expression and index name");
+		return false;
+	}
+
+	const as_msg_field* f = as_msg_field_get(&tr->msgp->msg,
+			AS_MSG_FIELD_TYPE_INDEX_NAME);
+	uint32_t len = as_msg_field_get_value_sz(f);
+
+	if (len == 0 || len >= INAME_MAX_SZ) {
+		cf_warning(AS_SINDEX, "bad index name size %u", len);
+		return false;
+	}
+
+	memcpy(si_name, f->data, len);
+	si_name[len] = '\0';
 
 	return true;
 }
@@ -661,6 +574,217 @@ get_query_filter_exp(const as_transaction* tr, as_exp** exp)
 	*exp = as_exp_filter_build(f, true);
 
 	return *exp != NULL;
+}
+
+static bool
+get_range_field(const as_transaction* tr, as_namespace* ns,
+		as_query_range* range, as_query_sindex_def* si_def)
+{
+	const as_msg_field* f = as_msg_field_get(&tr->msgp->msg,
+			AS_MSG_FIELD_TYPE_INDEX_RANGE);
+	const uint8_t* data = f->data;
+	uint32_t len = as_msg_field_get_value_sz(f);
+
+	if (len == 0) {
+		cf_warning(AS_QUERY, "cannot parse index range");
+		return false;
+	}
+
+	uint8_t n_ranges = *data++;
+	len--;
+
+	if (n_ranges != 1) {
+		cf_warning(AS_QUERY, "%u ranges - only 1 supported", n_ranges);
+		return false;
+	}
+
+	if (len == 0) {
+		cf_warning(AS_QUERY, "cannot parse bin name length");
+		return false;
+	}
+
+	uint8_t bin_name_len = *data++;
+	len--;
+
+	bool has_index_name = as_transaction_has_index_name(tr);
+	bool has_index_exp = as_transaction_has_index_expression(tr);
+
+	if (bin_name_len == 0) {
+		if (! has_index_name && ! has_index_exp) {
+			cf_warning(AS_QUERY, "missing expression and index name and bin name");
+			return false;
+		}
+	}
+	else {
+		if (has_index_name || has_index_exp) {
+			cf_warning(AS_QUERY, "specified expression or index name with bin name");
+			return false;
+		}
+
+		if (bin_name_len >= AS_BIN_NAME_MAX_SZ) {
+			cf_warning(AS_QUERY, "invalid bin name length %u", bin_name_len);
+			return false;
+		}
+
+		if (len < bin_name_len) {
+			cf_warning(AS_QUERY, "cannot parse bin name");
+			return false;
+		}
+
+		// null-terminated by calloc.
+		memcpy(si_def->bin_name, data, bin_name_len);
+
+		data += bin_name_len;
+		len -= bin_name_len;
+	}
+
+	if (len == 0) {
+		cf_warning(AS_QUERY, "cannot parse particle type");
+		return false;
+	}
+
+	si_def->ktype = *data++;
+	len--;
+
+	bool ret;
+
+	switch (si_def->ktype) {
+	case AS_PARTICLE_TYPE_INTEGER:
+		ret = range_from_msg_integer(data, range, len);
+		break;
+	case AS_PARTICLE_TYPE_STRING:
+		ret = range_from_msg_string(data, range, len);
+		break;
+	case AS_PARTICLE_TYPE_BLOB:
+		ret = range_from_msg_blob(data, range, len);
+		break;
+	case AS_PARTICLE_TYPE_GEOJSON:
+		ret = range_from_msg_geojson(ns, data, range, len);
+		break;
+	default:
+		cf_warning(AS_QUERY, "invalid particle type %u", si_def->ktype);
+		ret = false;
+	}
+
+	return ret;
+}
+
+static bool
+get_index_type_field(const as_transaction* tr, as_query_sindex_def* si_def)
+{
+	const as_msg_field* f = as_msg_field_get(&tr->msgp->msg,
+			AS_MSG_FIELD_TYPE_INDEX_TYPE);
+
+	if (f != NULL && as_msg_field_get_value_sz(f) == 0) {
+		cf_warning(AS_QUERY, "cannot parse itype");
+		return false;
+	}
+
+	si_def->itype = f == NULL ? AS_SINDEX_ITYPE_DEFAULT : *f->data;
+
+	return true;
+}
+
+static bool
+get_index_expression_field(const as_transaction* tr,
+		as_query_sindex_def* si_def)
+{
+	if (! as_transaction_has_index_expression(tr)) {
+		return true;
+	}
+
+	if (as_transaction_has_index_name(tr)) {
+		cf_warning(AS_QUERY, "specified both expression and index name");
+		return false;
+	}
+
+	const as_msg_field* f = as_msg_field_get(&tr->msgp->msg,
+			AS_MSG_FIELD_TYPE_INDEX_EXPRESSION);
+
+	if (as_msg_field_get_value_sz(f) == 0) {
+		cf_warning(AS_QUERY, "cannot parse index expression");
+		return false;
+	}
+
+	si_def->exp_buf_sz = as_msg_field_get_value_sz(f);
+
+	if (si_def->exp_buf_sz == 0) {
+		cf_warning(AS_QUERY, "invalid index expression");
+		return false;
+	}
+
+	si_def->exp_buf = cf_malloc(si_def->exp_buf_sz);
+	memcpy(si_def->exp_buf, f->data, si_def->exp_buf_sz);
+
+	return true;
+}
+
+static bool
+get_index_context_field(const as_transaction* tr, as_query_sindex_def* si_def)
+{
+	const as_msg_field* f = as_msg_field_get(&tr->msgp->msg,
+			AS_MSG_FIELD_TYPE_INDEX_CONTEXT);
+
+	if (f == NULL) {
+		return true;
+	}
+
+	if (as_transaction_has_index_name(tr)) {
+		cf_warning(AS_QUERY, "specified both cdt context and index name");
+		return false;
+	}
+
+	if (as_transaction_has_index_expression(tr)) {
+		cf_warning(AS_QUERY, "specified both cdt context and expression");
+		return false;
+	}
+
+	if (as_msg_field_get_value_sz(f) == 0) {
+		cf_warning(AS_QUERY, "cannot parse index context");
+		return false;
+	}
+
+	si_def->ctx_buf_sz = as_msg_field_get_value_sz(f);
+
+	if (si_def->ctx_buf_sz == 0) {
+		cf_warning(AS_QUERY, "invalid index context");
+		return false;
+	}
+
+	si_def->ctx_buf = cf_malloc(si_def->ctx_buf_sz);
+	memcpy(si_def->ctx_buf, f->data, si_def->ctx_buf_sz);
+
+	bool was_modified;
+
+	si_def->ctx_buf_sz = msgpack_compactify(si_def->ctx_buf,
+			si_def->ctx_buf_sz, &was_modified);
+
+	if (si_def->ctx_buf_sz == 0) {
+		cf_warning(AS_QUERY, "invalid index context - could not compactify");
+		return false;
+	}
+
+	if (was_modified) {
+		cf_warning(AS_QUERY, "invalid index context - msgpack not normalized");
+		return false;
+	}
+
+	msgpack_vec vecs[1];
+	msgpack_in_vec mv = {
+			.n_vecs = 1,
+			.vecs = vecs
+	};
+
+	vecs[0].buf = si_def->ctx_buf;
+	vecs[0].buf_sz = si_def->ctx_buf_sz;
+	vecs[0].offset = 0;
+
+	if (! cdt_context_read_check_peek(&mv)) {
+		cf_warning(AS_QUERY, "invalid index context");
+		return false;
+	}
+
+	return true;
 }
 
 static bool
@@ -919,15 +1043,27 @@ find_sindex(as_query_job* _job)
 		return true;
 	}
 
-	_job->si = as_sindex_lookup_by_defn(_job->ns, _job->set_id, range->bin_name,
-			range->bin_type, range->itype, range->ctx_buf, range->ctx_buf_sz);
+	as_query_sindex_def* si_def = _job->si_def;
+	as_namespace* ns = _job->ns;
+	char* si_name = _job->si_name;
+
+	// si_name is populated if sent from client.
+	if (si_name[0] != '\0') {
+		_job->si = as_sindex_lookup_by_iname(ns, si_name);
+		return _job->si != NULL;
+	}
+
+	_job->si = as_sindex_lookup_by_defn(ns, _job->set_id, si_def->bin_name,
+			si_def->ktype, si_def->itype, si_def->exp_buf, si_def->exp_buf_sz,
+			si_def->ctx_buf, si_def->ctx_buf_sz);
 
 	if (_job->si == NULL) {
 		return false;
 	}
 
 	if (! _job->is_short) {
-		strcpy(_job->si_name, _job->si->iname);
+		// Save name to report via query job info in case the index is dropped.
+		strcpy(si_name, _job->si->iname);
 	}
 
 	return true;
@@ -997,16 +1133,38 @@ record_matches_query(as_query_job* _job, as_storage_rd* rd)
 	const as_query_range* range = _job->range;
 	const as_sindex* si = _job->si;
 
-	const as_bin* b = as_bin_get_live(rd, si->bin_name);
+	const as_bin* b = NULL;
+	as_bin rb;
 
-	if (b == NULL) {
-		return false;
+	if (si->exp == NULL) {
+		b = as_bin_get_live(rd, si->bin_name);
+
+		if (b == NULL) {
+			return false;
+		}
+	}
+	else {
+		as_bin_set_empty(&rb);
+
+		as_exp_ctx ctx_rd = {
+				.ns = _job->ns,
+				.r = rd->r,
+				.rd = rd
+		};
+
+		if (! as_exp_eval(si->exp, &ctx_rd, &rb, NULL)) {
+			return false;
+		}
+
+		b = &rb;
 	}
 
 	as_particle_type type = as_bin_get_particle_type(b);
 	as_bin ctx_bin = { 0 };
 
-	if (range->ctx_buf != NULL) {
+	if (si->ctx_buf != NULL) {
+		// rb will not be used - no need to destroy on return.
+
 		if (type != AS_PARTICLE_TYPE_LIST && type != AS_PARTICLE_TYPE_MAP) {
 			return false;
 		}
@@ -1089,7 +1247,11 @@ record_matches_query(as_query_job* _job, as_storage_rd* rd)
 			break;
 	}
 
-	if (range->ctx_buf != NULL) {
+	if (si->exp != NULL) {
+		as_bin_particle_destroy(&rb);
+	}
+
+	if (si->ctx_buf != NULL) {
 		as_bin_particle_destroy(&ctx_bin);
 	}
 
@@ -1501,8 +1663,9 @@ basic_query_job_start(as_transaction* tr, as_namespace* ns)
 	if (! get_query_set(tr, ns, _job->set_name, &_job->set_id) ||
 			! get_query_pids(tr, &_job->pids, &_job->n_pids_requested,
 					&_job->n_keyds_requested) ||
-			! get_query_range(tr, ns, &_job->range) ||
-			! get_query_rps(tr, &_job->rps)) {
+			! get_query_range_and_def(tr, ns, _job->range, _job->si_def) ||
+			! get_query_rps(tr, &_job->rps) ||
+			! get_query_si_name(tr, ns, _job->si_name)) {
 		cf_warning(AS_QUERY, "basic query job failed msg field processing");
 		as_query_job_destroy(_job);
 		return AS_ERR_PARAMETER;
@@ -1520,9 +1683,14 @@ basic_query_job_start(as_transaction* tr, as_namespace* ns)
 		return AS_ERR_SINDEX_NOT_FOUND;
 	}
 
-	if (_job->si != NULL && ! _job->si->readable) {
-		as_query_job_destroy(_job);
-		return AS_ERR_SINDEX_NOT_READABLE;
+	if (_job->si != NULL) {
+		if (! _job->si->readable) {
+			as_query_job_destroy(_job);
+			return AS_ERR_SINDEX_NOT_READABLE;
+		}
+
+		_job->range->de_dup = _job->range->isrange &&
+				_job->si->itype != AS_SINDEX_ITYPE_DEFAULT;
 	}
 
 	// Take ownership of socket from transaction.
@@ -2107,8 +2275,9 @@ aggr_query_job_start(as_transaction* tr, as_namespace* ns)
 	as_query_job_init(_job, &aggr_query_job_vtable, tr, ns);
 
 	if (! get_query_set(tr, ns, _job->set_name, &_job->set_id) ||
-			! get_query_range(tr, ns, &_job->range) ||
-			! get_query_rps(tr, &_job->rps)) {
+			! get_query_range_and_def(tr, ns, _job->range, _job->si_def) ||
+			! get_query_rps(tr, &_job->rps) ||
+			! get_query_si_name(tr, ns, _job->si_name)) {
 		cf_warning(AS_QUERY, "aggregation query job failed msg field processing");
 		as_query_job_destroy(_job);
 		return AS_ERR_PARAMETER;
@@ -2124,9 +2293,14 @@ aggr_query_job_start(as_transaction* tr, as_namespace* ns)
 		return AS_ERR_SINDEX_NOT_FOUND;
 	}
 
-	if (_job->si != NULL && ! _job->si->readable) {
-		as_query_job_destroy(_job);
-		return AS_ERR_SINDEX_NOT_READABLE;
+	if (_job->si != NULL) {
+		if (! _job->si->readable) {
+			as_query_job_destroy(_job);
+			return AS_ERR_SINDEX_NOT_READABLE;
+		}
+
+		_job->range->de_dup = _job->range->isrange &&
+				_job->si->itype != AS_SINDEX_ITYPE_DEFAULT;
 	}
 
 	// Take ownership of socket from transaction.
@@ -2577,8 +2751,9 @@ udf_bg_query_job_start(as_transaction* tr, as_namespace* ns)
 	as_query_job_init(_job, &udf_bg_query_job_vtable, tr, ns);
 
 	if (! get_query_set(tr, ns, _job->set_name, &_job->set_id) ||
-			! get_query_range(tr, ns, &_job->range) ||
-			! get_query_rps(tr, &_job->rps)) {
+			! get_query_range_and_def(tr, ns, _job->range, _job->si_def) ||
+			! get_query_rps(tr, &_job->rps) ||
+			! get_query_si_name(tr, ns, _job->si_name)) {
 		cf_warning(AS_QUERY, "udf-bg query job failed msg field processing");
 		as_query_job_destroy(_job);
 		return AS_ERR_PARAMETER;
@@ -2600,9 +2775,14 @@ udf_bg_query_job_start(as_transaction* tr, as_namespace* ns)
 		return AS_ERR_SINDEX_NOT_FOUND;
 	}
 
-	if (_job->si != NULL && ! _job->si->readable) {
-		as_query_job_destroy(_job);
-		return AS_ERR_SINDEX_NOT_READABLE;
+	if (_job->si != NULL) {
+		if (! _job->si->readable) {
+			as_query_job_destroy(_job);
+			return AS_ERR_SINDEX_NOT_READABLE;
+		}
+
+		_job->range->de_dup = _job->range->isrange &&
+				_job->si->itype != AS_SINDEX_ITYPE_DEFAULT;
 	}
 
 	udf_bg_query_job_init(job);
@@ -2929,8 +3109,9 @@ ops_bg_query_job_start(as_transaction* tr, as_namespace* ns)
 	as_query_job_init(_job, &ops_bg_query_job_vtable, tr, ns);
 
 	if (! get_query_set(tr, ns, _job->set_name, &_job->set_id) ||
-			! get_query_range(tr, ns, &_job->range) ||
-			! get_query_rps(tr, &_job->rps)) {
+			! get_query_range_and_def(tr, ns, _job->range, _job->si_def) ||
+			! get_query_rps(tr, &_job->rps) ||
+			! get_query_si_name(tr, ns, _job->si_name)) {
 		cf_warning(AS_QUERY, "ops-bg query job failed msg field processing");
 		as_query_job_destroy(_job);
 		return AS_ERR_PARAMETER;
@@ -2952,9 +3133,14 @@ ops_bg_query_job_start(as_transaction* tr, as_namespace* ns)
 		return AS_ERR_SINDEX_NOT_FOUND;
 	}
 
-	if (_job->si != NULL && ! _job->si->readable) {
-		as_query_job_destroy(_job);
-		return AS_ERR_SINDEX_NOT_READABLE;
+	if (_job->si != NULL) {
+		if (! _job->si->readable) {
+			as_query_job_destroy(_job);
+			return AS_ERR_SINDEX_NOT_READABLE;
+		}
+
+		_job->range->de_dup = _job->range->isrange &&
+				_job->si->itype != AS_SINDEX_ITYPE_DEFAULT;
 	}
 
 	ops_bg_query_job_init(job);

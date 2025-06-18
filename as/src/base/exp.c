@@ -417,6 +417,8 @@ typedef struct build_args_s {
 	uint32_t var_idx;
 	uint32_t max_var_idx;
 	var_scope* current;
+
+	cf_vector* bin_names_r; // only valid for secondary index expressions
 } build_args;
 
 typedef bool (*op_table_build_cb)(build_args* args);
@@ -464,12 +466,13 @@ static const uint8_t call_eval_token[1] = "";
 //
 
 // Build.
-static as_exp* build_internal(const uint8_t* buf, uint32_t buf_sz, bool cpy_wire);
+static as_exp* build_internal(const uint8_t* buf, uint32_t buf_sz, bool cpy_wire, cf_vector* bin_names_r);
 static bool build_next(build_args* args);
 static const op_table_entry* build_get_entry(result_type type);
 static bool build_count_sz(msgpack_in* mp, uint32_t* total_sz, uint32_t* cleanup_count, uint32_t* counter_r);
 static var_entry* build_find_var_entry(build_args* args, const uint8_t* name, uint32_t name_sz);
 static bool build_default(build_args* args);
+static bool build_meta_default(build_args* args);
 static bool build_compare(build_args* args);
 static bool build_cmp_regex(build_args* args);
 static bool build_cmp_geo(build_args* args);
@@ -715,15 +718,15 @@ static const op_table_entry op_table[] = {
 
 		OP_TABLE_ENTRY(EXP_META_DIGEST_MOD, "digest_modulo", op_meta_digest_modulo, build_meta_digest_mod, eval_meta_digest_mod, display_meta_digest_mod, 1, 0, TYPE_INT)
 		OP_TABLE_ENTRY(EXP_META_DEVICE_SIZE, "device_size", op_base_mem, build_device_size, eval_meta_device_size, display_0_args, 0, 0, TYPE_INT)
-		OP_TABLE_ENTRY(EXP_META_LAST_UPDATE, "last_update", op_base_mem, build_default, eval_meta_last_update, display_0_args, 0, 0, TYPE_INT)
-		OP_TABLE_ENTRY(EXP_META_SINCE_UPDATE, "since_update", op_base_mem, build_default, eval_meta_since_update, display_0_args, 0, 0, TYPE_INT)
-		OP_TABLE_ENTRY(EXP_META_VOID_TIME, "void_time", op_base_mem, build_default, eval_meta_void_time, display_0_args, 0, 0, TYPE_INT)
-		OP_TABLE_ENTRY(EXP_META_TTL, "ttl", op_base_mem, build_default, eval_meta_ttl, display_0_args, 0, 0, TYPE_INT)
-		OP_TABLE_ENTRY(EXP_META_SET_NAME, "set_name", op_base_mem, build_default, eval_meta_set_name, display_0_args, 0, 0, TYPE_STR)
-		OP_TABLE_ENTRY(EXP_META_KEY_EXISTS, "key_exists", op_base_mem, build_default, eval_meta_key_exists, display_0_args, 0, 0, TYPE_TRILEAN)
-		OP_TABLE_ENTRY(EXP_META_IS_TOMBSTONE, "is_tombstone", op_base_mem, build_default, eval_meta_is_tombstone, display_0_args, 0, 0, TYPE_TRILEAN)
+		OP_TABLE_ENTRY(EXP_META_LAST_UPDATE, "last_update", op_base_mem, build_meta_default, eval_meta_last_update, display_0_args, 0, 0, TYPE_INT)
+		OP_TABLE_ENTRY(EXP_META_SINCE_UPDATE, "since_update", op_base_mem, build_meta_default, eval_meta_since_update, display_0_args, 0, 0, TYPE_INT)
+		OP_TABLE_ENTRY(EXP_META_VOID_TIME, "void_time", op_base_mem, build_meta_default, eval_meta_void_time, display_0_args, 0, 0, TYPE_INT)
+		OP_TABLE_ENTRY(EXP_META_TTL, "ttl", op_base_mem, build_meta_default, eval_meta_ttl, display_0_args, 0, 0, TYPE_INT)
+		OP_TABLE_ENTRY(EXP_META_SET_NAME, "set_name", op_base_mem, build_meta_default, eval_meta_set_name, display_0_args, 0, 0, TYPE_STR)
+		OP_TABLE_ENTRY(EXP_META_KEY_EXISTS, "key_exists", op_base_mem, build_meta_default, eval_meta_key_exists, display_0_args, 0, 0, TYPE_TRILEAN)
+		OP_TABLE_ENTRY(EXP_META_IS_TOMBSTONE, "is_tombstone", op_base_mem, build_meta_default, eval_meta_is_tombstone, display_0_args, 0, 0, TYPE_TRILEAN)
 		OP_TABLE_ENTRY(EXP_META_MEMORY_SIZE, "memory_size", op_base_mem, build_memory_size, eval_meta_memory_size, display_0_args, 0, 0, TYPE_INT)
-		OP_TABLE_ENTRY(EXP_META_RECORD_SIZE, "record_size", op_base_mem, build_default, eval_meta_record_size, display_0_args, 0, 0, TYPE_INT)
+		OP_TABLE_ENTRY(EXP_META_RECORD_SIZE, "record_size", op_base_mem, build_meta_default, eval_meta_record_size, display_0_args, 0, 0, TYPE_INT)
 
 		OP_TABLE_ENTRY(EXP_REC_KEY, "key", op_rec_key, build_rec_key, eval_rec_key, display_0_args, 1, 0, TYPE_END)
 		OP_TABLE_ENTRY(EXP_BIN, "bin", op_bin, build_bin, eval_bin, display_bin, 2, 0, TYPE_END)
@@ -769,13 +772,10 @@ as_exp_filter_build_base64(const char* buf64, uint32_t buf64_sz)
 		return NULL;
 	}
 
-	cf_assert(buf_sz_out <= buf_sz, AS_EXP, "buf_sz_out %u buf_sz %u",
-			buf_sz_out, buf_sz);
-
 	cf_debug(AS_EXP, "as_exp_filter_build_base64 - buf_sz %u msg-dump:\n%*pH",
 			buf_sz_out, buf_sz_out, buf);
 
-	as_exp* exp = build_internal(buf, buf_sz_out, true);
+	as_exp* exp = build_internal(buf, buf_sz_out, true, NULL);
 
 	cf_free(buf);
 
@@ -789,22 +789,19 @@ as_exp_filter_build(const as_msg_field* m, bool cpy_wire)
 			m->field_sz, as_msg_field_get_value_sz(m), m->data);
 
 	as_exp* exp = build_internal(m->data, as_msg_field_get_value_sz(m),
-			cpy_wire);
+			cpy_wire, NULL);
 
-	if (exp == NULL) {
-		return NULL;
-	}
-
-	return check_filter_exp(exp);
+	return exp == NULL ? NULL : check_filter_exp(exp);
 }
 
 as_exp*
-as_exp_build_buf(const uint8_t* buf, uint32_t buf_sz, bool cpy_wire)
+as_exp_build_buf(const uint8_t* buf, uint32_t buf_sz, bool cpy_wire,
+		 cf_vector* bin_names_r)
 {
 	cf_debug(AS_EXP, "as_exp_build_buf - buf_sz %u buf-dump:\n%*pH",
 			buf_sz, buf_sz, buf);
 
-	return build_internal(buf, buf_sz, cpy_wire);
+	return build_internal(buf, buf_sz, cpy_wire, bin_names_r);
 }
 
 bool
@@ -988,7 +985,7 @@ as_exp_destroy(as_exp* exp)
 			break;
 		}
 	}
-	
+
 	cf_free(exp);
 }
 
@@ -998,7 +995,8 @@ as_exp_destroy(as_exp* exp)
 //
 
 static as_exp*
-build_internal(const uint8_t* buf, uint32_t buf_sz, bool cpy_wire)
+build_internal(const uint8_t* buf, uint32_t buf_sz, bool cpy_wire,
+		cf_vector* bin_names_r)
 {
 	msgpack_in mp = {
 			.buf = buf,
@@ -1046,7 +1044,8 @@ build_internal(const uint8_t* buf, uint32_t buf_sz, bool cpy_wire)
 	}
 
 	build_args args = {
-			.exp = cf_calloc(1, sizeof(as_exp) + total_sz)
+			.exp = cf_calloc(1, sizeof(as_exp) + total_sz),
+			.bin_names_r = bin_names_r
 	};
 
 	args.mem = args.exp->mem;
@@ -1396,6 +1395,14 @@ build_default(build_args* args)
 }
 
 static bool
+build_meta_default(build_args* args)
+{
+	args->exp->flags |= AS_EXP_HAS_NON_DIGEST_META;
+
+	return build_args_setup(args, "build_meta_default");
+}
+
+static bool
 build_compare(build_args* args)
 {
 	const op_table_entry* entry = args->entry;
@@ -1663,14 +1670,14 @@ static bool
 build_device_size(build_args* args)
 {
 	as_info_warn_deprecated("expression 'device_size' is deprecated, use 'record_size' instead");
-	return build_default(args);
+	return build_meta_default(args);
 }
 
 static bool
 build_memory_size(build_args* args)
 {
 	as_info_warn_deprecated("expression 'memory_size' is deprecated, use 'record_size' instead");
-	return build_default(args);
+	return build_meta_default(args);
 }
 
 static bool
@@ -2015,6 +2022,8 @@ build_meta_digest_mod(build_args* args)
 		return false;
 	}
 
+	args->exp->flags |= AS_EXP_HAS_DIGEST_MOD;
+
 	return true;
 }
 
@@ -2088,6 +2097,13 @@ build_bin(build_args* args)
 		return false;
 	}
 
+	if (args->bin_names_r != NULL) {
+		char bin_name[AS_BIN_NAME_MAX_SZ];
+
+		snprintf(bin_name, op->name_sz + 1, "%s", op->name);
+		cf_vector_append(args->bin_names_r, bin_name);
+	}
+
 	if ((args->entry = build_get_entry(op->type)) == NULL) {
 		cf_warning(AS_EXP, "build_bin - error %u invalid result_type %d (%s)",
 				AS_ERR_PARAMETER, op->type, result_type_to_str(op->type));
@@ -2118,6 +2134,13 @@ build_bin_type(build_args* args)
 		cf_warning(AS_EXP, "build_bin_type - error %u parsed invalid bin name",
 				AS_ERR_PARAMETER);
 		return false;
+	}
+
+	if (args->bin_names_r != NULL) {
+		char bin_name[AS_BIN_NAME_MAX_SZ];
+
+		snprintf(bin_name, op->name_sz + 1, "%s", op->name);
+		cf_vector_append(args->bin_names_r, bin_name);
 	}
 
 	return true;
@@ -2819,7 +2842,7 @@ check_filter_exp(as_exp* exp)
 		return NULL;
 	}
 
-	return exp;;
+	return exp;
 }
 
 

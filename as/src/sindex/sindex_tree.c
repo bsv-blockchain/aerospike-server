@@ -446,7 +446,7 @@ as_sindex_tree_query(as_sindex* si, const as_query_range* range,
 		return;
 	}
 
-	if (range->bin_type == AS_PARTICLE_TYPE_GEOJSON && range->isrange) {
+	if (si->ktype == AS_PARTICLE_TYPE_GEOJSON && range->isrange) {
 		for (uint32_t r_ix = 0; r_ix < range->u.geo.num_r; r_ix++) {
 			as_query_range_start_end* r = &range->u.geo.r[r_ix];
 

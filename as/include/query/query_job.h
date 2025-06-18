@@ -76,14 +76,19 @@ typedef struct as_query_range_s {
 	uint32_t blob_sz;
 	char stub[16];
 
-	as_particle_type bin_type;
-	as_sindex_type itype;
 	bool isrange;
 	bool de_dup;
+} as_query_range;
+
+typedef struct as_query_sindex_def_s {
+	as_particle_type ktype;
+	as_sindex_type itype;
 	char bin_name[AS_BIN_NAME_MAX_SZ];
+	uint8_t* exp_buf;
+	uint32_t exp_buf_sz;
 	uint8_t* ctx_buf;
 	uint32_t ctx_buf_sz;
-} as_query_range;
+} as_query_sindex_def;
 
 typedef void (*as_query_slice_fn)(struct as_query_job_s* _job, struct as_partition_reservation_s* rsv, cf_buf_builder** bb_r);
 typedef void (*as_query_finish_fn)(struct as_query_job_s* _job);
@@ -113,8 +118,9 @@ typedef struct as_query_job_s {
 
 	// Job scope:
 	struct as_namespace_s* ns;
-	struct as_sindex_s* si;
-	struct as_query_range_s* range;
+	as_sindex* si;
+	as_query_range* range;
+	as_query_sindex_def* si_def;
 	char si_name[INAME_MAX_SZ];
 	char set_name[AS_SET_NAME_MAX_SIZE];
 	uint16_t set_id;

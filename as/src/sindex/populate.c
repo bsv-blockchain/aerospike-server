@@ -24,7 +24,7 @@
 // Includes.
 //
 
-#include "../../include/sindex/populate.h"
+#include "sindex/populate.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -40,6 +40,7 @@
 
 #include "base/cfg.h"
 #include "base/datamodel.h"
+#include "base/exp.h"
 #include "base/index.h"
 #include "base/set_index.h"
 #include "fabric/partition.h"
@@ -522,6 +523,22 @@ run_destroy_sindex(void* udata)
 
 		if (si->ctx_buf != NULL) {
 			cf_free(si->ctx_buf);
+		}
+
+		if (si->exp != NULL) {
+			as_exp_destroy(si->exp);
+		}
+
+		if (si->exp_buf != NULL) {
+			cf_free(si->exp_buf);
+		}
+
+		if (si->exp_b64 != NULL) {
+			cf_free(si->exp_b64);
+		}
+
+		if (si->exp_bin_names != NULL) {
+			cf_vector_destroy(si->exp_bin_names);
 		}
 
 		cf_rc_free(si);

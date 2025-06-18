@@ -2573,31 +2573,31 @@ cmd_query_abort(const as_info_cmd_args* args)
 
 	(void)name;
 
-	char trid_str[1 + 24 + 1]; // allow octal, decimal, hex
-	int trid_str_len = (int)sizeof(trid_str);
-	// Allow 'id' for backward compatibility of scan-abort. Remove in 6 months.
-	const char* aliases[] = { "trid", "id", NULL };
-	info_param_result rv = as_info_param_get_aliases(params, aliases, trid_str,
-			&trid_str_len);
+	char id_str[1 + 24 + 1]; // allow octal, decimal, hex
+	int id_str_len = (int)sizeof(id_str);
+	// Allow 'trid' for backward compatibility of scan-abort. Remove in 6 months.
+	const char* aliases[] = { "id", "trid", NULL };
+	info_param_result rv = as_info_param_get_aliases(params, aliases, id_str,
+			&id_str_len);
 
-	if (! as_info_required_param_is_ok(db, "trid", trid_str, rv)) {
+	if (! as_info_required_param_is_ok(db, "id", id_str, rv)) {
 		return;
 	}
 
-	uint64_t trid = 0;
+	uint64_t id = 0;
 
-	if (cf_strtoul_u64_raw(trid_str, &trid) != 0 || trid == 0) {
-		cf_warning(AS_INFO, "bad trid %s", trid_str);
-		as_info_respond_error(db, AS_ERR_PARAMETER, "bad trid");
+	if (cf_strtoul_u64_raw(id_str, &id) != 0 || id == 0) {
+		cf_warning(AS_INFO, "bad id %s", id_str);
+		as_info_respond_error(db, AS_ERR_PARAMETER, "bad id");
 		return;
 	}
 
-	if (as_query_manager_abort_job(trid)) {
+	if (as_query_manager_abort_job(id)) {
 		as_info_respond_ok(db);
 		return;
 	}
 
-	as_info_respond_error(db, AS_ERR_NOT_FOUND, "trid not active");
+	as_info_respond_error(db, AS_ERR_NOT_FOUND, "id not active");
 }
 
 static void
@@ -2609,32 +2609,33 @@ cmd_query_show(const as_info_cmd_args* args)
 
 	(void)name;
 
-	char trid_str[1 + 24 + 1]; // allow octal, decimal, hex
-	int trid_str_len = (int)sizeof(trid_str);
+	char id_str[1 + 24 + 1]; // allow octal, decimal, hex
+	int id_str_len = (int)sizeof(id_str);
+	// Allow 'trid' for backward compatibility of scan-abort. Remove in 6 months.
+	const char* aliases[] = { "id", "trid", NULL };
+	info_param_result rv = as_info_param_get_aliases(params, aliases, id_str,
+			&id_str_len);
 
-	info_param_result rv = as_info_parameter_get(params, "trid", trid_str,
-			&trid_str_len);
-
-	rv = as_info_optional_param_is_ok(db, "trid", trid_str, rv);
+	rv = as_info_optional_param_is_ok(db, "id", id_str, rv);
 
 	if (rv == INFO_PARAM_FAIL_REPLIED) {
 		return;
 	}
 
-	if (rv == INFO_PARAM_OK_NOT_FOUND) { // no trid specified - show all
+	if (rv == INFO_PARAM_OK_NOT_FOUND) { // no id specified - show all
 		as_query_manager_get_all_jobs_info(db);
 		return;
 	}
 
-	uint64_t trid = 0;
+	uint64_t id = 0;
 
-	if (cf_strtoul_u64_raw(trid_str, &trid) != 0 || trid == 0) {
-		cf_warning(AS_INFO, "bad trid %s", trid_str);
-		as_info_respond_error(db, AS_ERR_PARAMETER, "bad trid");
+	if (cf_strtoul_u64_raw(id_str, &id) != 0 || id == 0) {
+		cf_warning(AS_INFO, "bad id %s", id_str);
+		as_info_respond_error(db, AS_ERR_PARAMETER, "bad id");
 		return;
 	}
 
-	as_query_manager_get_job_info(trid, db);
+	as_query_manager_get_job_info(id, db);
 }
 
 static void
@@ -3014,7 +3015,7 @@ cmd_sindex(const as_info_cmd_args* args)
 	//    ns=ns1:set=set1:indexname=index1:prop1=val1:...:propn=valn;ns=ns1:set=set2:indexname=indexname2:...;
 	// format w namespace & index name is:
 	//    prop1=val1;prop2=val2;...;propn=valn
-	
+
 	as_info_warn_deprecated("'sindex' command is deprecated, use 'sindex-list' instead");
 
 	char* index_name = NULL;
@@ -3065,14 +3066,17 @@ cmd_sindex(const as_info_cmd_args* args)
 static void
 cmd_sindex_create(const as_info_cmd_args* args)
 {
-	const char* params = args->params;
-	cf_dyn_buf* db = args->db;
-
-	// Command format:
+	// Old command format:
 	// sindex-create:ns=usermap;set=demo;indexname=um_age;indextype=list;indexdata=age,numeric
 	// sindex-create:ns=usermap;set=demo;indexname=um_state;indexdata=state,string
 	// sindex-create:ns=usermap;set=demo;indexname=um_highscore;context=<base64-cdt-ctx>;indexdata=scores,numeric
 
+	// New command format:
+	// sindex-create:ns=usermap;set=demo;indexname=um_highscore;*context=<base64-cdt-ctx>;exp=<base64-exp>;indextype=list;type=numeric;*bin=scores
+	// * - mutually exclusive with expression
+
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
 	char index_name_str[INAME_MAX_SZ];
 	int index_name_len = sizeof(index_name_str);
 	info_param_result rv = as_info_parameter_get(params, "indexname",
@@ -3181,54 +3185,142 @@ cmd_sindex_create(const as_info_cmd_args* args)
 		}
 	}
 
-	// indexdata=bin-name,keytype
-	char indexdata_str[INDEXDATA_MAX_SZ];
-	int indexdata_len = sizeof(indexdata_str);
+	char bin_name[AS_BIN_NAME_MAX_SZ] = { 0 };
+	int bin_name_len = sizeof(bin_name);
+	const char* p_bin_name = NULL;
+	char exp_b64[EXP_B64_MAX_SZ] = { 0 };
+	int exp_b64_len = sizeof(exp_b64);
+	const char* p_exp = NULL;
+	char indexdata_str[INDEXDATA_MAX_SZ] = { 0 };
+	char ktype_str[KTYPE_MAX_SZ] = { 0 };
+	int ktype_len = sizeof(ktype_str);
+	char* p_ktype_str = NULL;
+	as_particle_type ktype;
 
-	rv = as_info_parameter_get(params, "indexdata", indexdata_str,
-			&indexdata_len);
+	rv = as_info_parameter_get(params, "type", ktype_str, &ktype_len);
+	rv = as_info_optional_param_is_ok(db, "type", ktype_str, rv);
 
-	if (! as_info_required_param_is_ok(db, "indexdata", indexdata_str, rv)) {
+	if (rv == INFO_PARAM_FAIL_REPLIED) {
 		return;
 	}
 
-	char* bin_name = indexdata_str;
-	char* type_str = strchr(indexdata_str, ',');
+	if (rv != INFO_PARAM_OK_NOT_FOUND) {
+		// New protocol - type=<type>[;bin=<name>][;exp=<base64-exp>]
+		ktype = as_sindex_ktype_from_string(ktype_str);
 
-	if (type_str == NULL) {
-		cf_warning(AS_INFO, "sindex-create %s: 'indexdata' missing bin type",
-				index_name_str);
-		as_info_respond_error(db, AS_ERR_PARAMETER,
-				"'indexdata' missing bin type");
-		return;
+		if (ktype == AS_PARTICLE_TYPE_BAD) {
+			cf_warning(AS_INFO, "sindex-create %s: bad 'type' '%s'",
+					index_name_str, ktype_str);
+			as_info_respond_error(db, AS_ERR_PARAMETER,
+					"bad 'type' - must be one of 'numeric', 'string', 'blob', 'geo2dsphere'");
+			return;
+		}
+
+		p_ktype_str = ktype_str;
+
+		rv = as_info_parameter_get(params, "bin", bin_name, &bin_name_len);
+
+		uint32_t bin_rv = as_info_optional_param_is_ok(db, "bin", bin_name, rv);
+
+		if (bin_rv == INFO_PARAM_FAIL_REPLIED) {
+			return;
+		}
+
+		if (bin_rv == INFO_PARAM_OK) {
+			p_bin_name = bin_name;
+		}
+
+		rv = as_info_parameter_get(params, "exp", exp_b64, &exp_b64_len);
+
+		uint32_t exp_rv = as_info_optional_param_is_ok(db, "exp", exp_b64, rv);
+
+		if (exp_rv == INFO_PARAM_FAIL_REPLIED) {
+			return;
+		}
+
+		if (bin_rv == INFO_PARAM_OK && exp_rv == INFO_PARAM_OK) {
+			cf_warning(AS_INFO, "sindex-create %s: both 'bin' and 'exp' are specified",
+					index_name_str);
+			as_info_respond_error(db, AS_ERR_PARAMETER, "both 'bin' and 'exp' are specified");
+			return;
+		}
+
+		if (bin_rv == INFO_PARAM_FAIL_NOT_FOUND &&
+				exp_rv == INFO_PARAM_FAIL_NOT_FOUND) {
+			cf_warning(AS_INFO, "sindex-create %s: both 'bin' and 'exp' are missing",
+					index_name_str);
+			as_info_respond_error(db, AS_ERR_PARAMETER, "both 'bin' and 'exp' are missing");
+			return;
+		}
+
+		if (exp_rv == INFO_PARAM_OK) {
+			if (p_cdt_ctx != NULL) {
+				cf_warning(AS_INFO, "sindex-create %s: both 'context' and 'exp' are specified",
+						index_name_str);
+				as_info_respond_error(db, AS_ERR_PARAMETER, "both 'context' and 'exp' are specified");
+				return;
+			}
+
+			if (! as_sindex_validate_exp(exp_b64)) {
+				as_info_respond_error(db, AS_ERR_PARAMETER, "bad 'exp'");
+				return;
+			}
+
+			p_exp = exp_b64;
+		}
 	}
+	else {
+		// Old protocol - indexdata=bin-name,keytype
+		int indexdata_len = sizeof(indexdata_str);
 
-	*type_str++ = '\0';
+		rv = as_info_parameter_get(params, "indexdata", indexdata_str,
+				&indexdata_len);
 
-	if (bin_name[0] == '\0') {
-		cf_warning(AS_INFO, "sindex-create %s: 'indexdata' missing bin name",
-				index_name_str);
-		as_info_respond_error(db, AS_ERR_PARAMETER,
-				"'indexdata' missing bin name");
-		return;
-	}
+		if (! as_info_required_param_is_ok(db, "indexdata", indexdata_str, rv)) {
+			return;
+		}
 
-	if (strlen(bin_name) >= AS_BIN_NAME_MAX_SZ) {
-		cf_warning(AS_INFO, "sindex-create %s: 'indexdata' bin name too long",
-				index_name_str);
-		as_info_respond_error(db, AS_ERR_PARAMETER,
-				"'indexdata' bin name too long");
-		return;
-	}
+		as_info_warn_deprecated("'indexdata' is deprecated - use 'bin' and 'type' instead");
 
-	as_particle_type ktype = as_sindex_ktype_from_string(type_str);
+		p_bin_name = indexdata_str;
 
-	if (ktype == AS_PARTICLE_TYPE_BAD) {
-		cf_warning(AS_INFO, "sindex-create %s: bad 'indexdata' bin type '%s'",
-				index_name_str, type_str);
-		as_info_respond_error(db, AS_ERR_PARAMETER,
-				"bad 'indexdata' bin type - must be one of 'numeric', 'string', 'blob', 'geo2dsphere'");
-		return;
+		p_ktype_str = strchr(indexdata_str, ',');
+
+		if (p_ktype_str == NULL) {
+			cf_warning(AS_INFO, "sindex-create %s: 'indexdata' missing bin type",
+					index_name_str);
+			as_info_respond_error(db, AS_ERR_PARAMETER,
+					"'indexdata' missing bin type");
+			return;
+		}
+
+		*p_ktype_str++ = '\0';
+
+		if (p_bin_name[0] == '\0') {
+			cf_warning(AS_INFO, "sindex-create %s: 'indexdata' missing bin name",
+					index_name_str);
+			as_info_respond_error(db, AS_ERR_PARAMETER,
+					"'indexdata' missing bin name");
+			return;
+		}
+
+		if (strlen(p_bin_name) >= AS_BIN_NAME_MAX_SZ) {
+			cf_warning(AS_INFO, "sindex-create %s: 'indexdata' bin name too long",
+					index_name_str);
+			as_info_respond_error(db, AS_ERR_PARAMETER,
+					"'indexdata' bin name too long");
+			return;
+		}
+
+		ktype = as_sindex_ktype_from_string(p_ktype_str);
+
+		if (ktype == AS_PARTICLE_TYPE_BAD) {
+			cf_warning(AS_INFO, "sindex-create %s: bad 'indexdata' bin type '%s'",
+					index_name_str, p_ktype_str);
+			as_info_respond_error(db, AS_ERR_PARAMETER,
+					"bad 'indexdata' bin type - must be one of 'numeric', 'string', 'blob', 'geo2dsphere'");
+			return;
+		}
 	}
 
 	if (itype == AS_SINDEX_ITYPE_MAPKEYS &&
@@ -3236,7 +3328,7 @@ cmd_sindex_create(const as_info_cmd_args* args)
 			ktype != AS_PARTICLE_TYPE_STRING &&
 			ktype != AS_PARTICLE_TYPE_BLOB) {
 		cf_warning(AS_INFO, "sindex-create %s: bad 'indexdata' bin type '%s' for 'indextype' 'mapkeys'",
-				index_name_str, type_str);
+				index_name_str, p_ktype_str);
 		as_info_respond_error(db, AS_ERR_PARAMETER,
 				"bad 'indexdata' bin type for 'indextype' 'mapkeys' - must be one of 'numeric', 'string', 'blob'");
 		return;
@@ -3247,8 +3339,8 @@ cmd_sindex_create(const as_info_cmd_args* args)
 
 	char smd_key[SINDEX_SMD_KEY_MAX_SZ];
 
-	as_sindex_build_smd_key(ns_str, p_set_str, bin_name, p_cdt_ctx, itype,
-			ktype, smd_key);
+	as_sindex_build_smd_key(ns_str, p_set_str, p_bin_name, p_cdt_ctx, p_exp,
+			itype, ktype, smd_key);
 
 	find_sindex_key_udata fsk = {
 			.ns_name = ns_str,

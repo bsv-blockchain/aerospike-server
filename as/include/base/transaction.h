@@ -327,10 +327,22 @@ as_transaction_has_digests(const as_transaction *tr)
 }
 
 static inline bool
+as_transaction_has_index_name(const as_transaction *tr)
+{
+	return (tr->msg_fields & AS_MSG_FIELD_BIT_INDEX_NAME) != 0;
+}
+
+static inline bool
 as_transaction_has_where_clause(const as_transaction *tr)
 {
 	// Assumes we're already multi-record.
 	return (tr->msg_fields & AS_MSG_FIELD_BIT_INDEX_RANGE) != 0;
+}
+
+static inline bool
+as_transaction_has_index_expression(const as_transaction *tr)
+{
+	return (tr->msg_fields & AS_MSG_FIELD_BIT_INDEX_EXPRESSION) != 0;
 }
 
 static inline bool

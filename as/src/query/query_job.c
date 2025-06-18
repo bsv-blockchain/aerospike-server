@@ -75,7 +75,8 @@ static uint32_t g_query_job_trid = 0;
 static void reserve_rsvs(as_query_job* _job);
 static void release_rsvs(as_partition_reservation* query_rsvs);
 static void finish(as_query_job* _job);
-static void range_free(as_query_range* range);
+static void range_free(as_query_range* range, bool geo);
+static void si_def_free(as_query_sindex_def* si_def);
 static uint32_t throttle_sleep(as_query_job* _job, uint64_t count, uint64_t now);
 
 
@@ -133,6 +134,11 @@ as_query_job_init(as_query_job* _job, const as_query_vtable* vtable,
 	_job->trid = query_job_trid(as_transaction_trid(tr));
 	_job->ns = ns;
 	_job->start_ns = tr->start_time;
+
+	if (as_transaction_has_where_clause(tr)) {
+		_job->range = cf_calloc(1, sizeof(as_query_range));
+		_job->si_def = cf_calloc(1, sizeof(as_query_sindex_def));
+	}
 
 	strcpy(_job->client, tr->from.proto_fd_h->client);
 }
@@ -310,7 +316,10 @@ as_query_job_destroy(as_query_job* _job)
 	}
 
 	if (_job->range != NULL) {
-		range_free(_job->range);
+		bool geo = _job->si_def->ktype == AS_PARTICLE_TYPE_GEOJSON;
+
+		range_free(_job->range, geo);
+		si_def_free(_job->si_def); // range and si_def are allocated together
 	}
 
 	cf_free(_job);
@@ -490,13 +499,10 @@ finish(as_query_job* _job)
 	}
 }
 
-// So that calloc'ed but not fully initialized range is freed correctly.
-COMPILER_ASSERT(AS_PARTICLE_TYPE_GEOJSON != 0);
-
 static void
-range_free(as_query_range* range)
+range_free(as_query_range* range, bool geo)
 {
-	if (range->bin_type == AS_PARTICLE_TYPE_GEOJSON) {
+	if (geo) {
 		cf_free(range->u.geo.r);
 
 		if (range->u.geo.region) {
@@ -504,11 +510,21 @@ range_free(as_query_range* range)
 		}
 	}
 
-	if (range->ctx_buf != NULL) {
-		cf_free(range->ctx_buf);
+	cf_free(range);
+}
+
+static void
+si_def_free(as_query_sindex_def* si_def)
+{
+	if (si_def->exp_buf != NULL) {
+		cf_free(si_def->exp_buf);
 	}
 
-	cf_free(range);
+	if (si_def->ctx_buf != NULL) {
+		cf_free(si_def->ctx_buf);
+	}
+
+	cf_free(si_def);
 }
 
 static uint32_t
