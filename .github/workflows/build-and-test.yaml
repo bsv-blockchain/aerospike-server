@@ -8,6 +8,7 @@ on:
       - master
 jobs:
   build:
+    if: ${{ github.repository_owner == 'citrusleaf' }}
     runs-on: ubuntu-24.04
     steps:
       - name: Fetch app token
@@ -31,12 +32,26 @@ jobs:
           ./bin/install-dependencies.sh
       - name: Checkout aerospike-server-enterprise
         uses: actions/checkout@v4
+        continue-on-error: true
+        id: checkout-branch
         with:
           repository: citrusleaf/aerospike-server-enterprise
           submodules: true
           path: ./aerospike-server-enterprise
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
+          # For pull requests, github.head_ref contains the branch name
+          ref: ${{ github.head_ref }}
+      - name: Checkout master if branch doesn't exist
+        if: steps.checkout-branch.outcome == 'failure'
+        uses: actions/checkout@v4
+        with:
+          repository: citrusleaf/aerospike-server-enterprise
+          submodules: true
+          path: ./aerospike-server-enterprise
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+          ref: master
       - name: Build and package Aerospike Server Enterprise
         run: |
           cd "$GITHUB_WORKSPACE/aerospike-server"
