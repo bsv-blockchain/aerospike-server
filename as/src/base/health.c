@@ -125,9 +125,9 @@ static const stat_spec local_stat_spec[] = {
 
 // Maintain order as per as_health_node_stat_type enum.
 static const stat_spec node_stat_spec[] = {
-	{ true, false, 30, 5, "fabric_connections_opened" }, // AS_HEALTH_NODE_FABRIC_FDS
-	{ true, true, 30, 2, "proxies" }, // AS_HEALTH_NODE_PROXIES
-	{ true, false, 30, 1, "node_arrivals" } // AS_HEALTH_NODE_ARRIVALS
+	{ true, false, 30, 60, "fabric_connections_opened" }, // AS_HEALTH_NODE_FABRIC_FDS
+	{ true, true, 30, 20, "proxies" }, // AS_HEALTH_NODE_PROXIES
+	{ true, false, 30, 10, "node_arrivals" } // AS_HEALTH_NODE_ARRIVALS
 };
 
 // Maintain order as per as_health_ns_stat_type enum.
@@ -856,11 +856,11 @@ run_health()
 			cf_vector_get(g_outliers, i, &cur);
 
 			if (cur.ns_ix == NO_NS_IX) {
-				cf_warning(AS_HEALTH, "outlier %s: confidence-pct %u reason %s",
+				cf_info(AS_HEALTH, "outlier %s: confidence-pct %u reason %s",
 						cur.id, cur.confidence_pct, cur.reason);
 			}
 			else {
-				cf_warning(AS_HEALTH, "outlier %s: namespace %s confidence-pct %u reason %s",
+				cf_info(AS_HEALTH, "outlier %s: namespace %s confidence-pct %u reason %s",
 						cur.id, g_config.namespaces[cur.ns_ix]->name,
 						cur.confidence_pct, cur.reason);
 			}
