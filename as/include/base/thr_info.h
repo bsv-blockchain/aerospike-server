@@ -55,6 +55,7 @@ typedef struct as_info_cmd_args_s {
 	const char* name;
 	const char* params;
 	cf_dyn_buf* db;
+	struct as_file_handle_s* fd_h;
 } as_info_cmd_args;
 
 typedef struct as_info_transaction_s {

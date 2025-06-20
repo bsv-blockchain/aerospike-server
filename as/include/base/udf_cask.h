@@ -37,8 +37,8 @@
 void udf_cask_init(void);
 
 // Info commands.
-void udf_cask_info_clear_cache(const struct as_info_cmd_args_s* args);
-void udf_cask_info_get(const struct as_info_cmd_args_s* args);
-void udf_cask_info_list(const struct as_info_cmd_args_s* args);
-void udf_cask_info_put(const struct as_info_cmd_args_s* args);
-void udf_cask_info_remove(const struct as_info_cmd_args_s* args);
+void udf_cask_info_clear_cache(struct as_info_cmd_args_s* args);
+void udf_cask_info_get(struct as_info_cmd_args_s* args);
+void udf_cask_info_list(struct as_info_cmd_args_s* args);
+void udf_cask_info_put(struct as_info_cmd_args_s* args);
+void udf_cask_info_remove(struct as_info_cmd_args_s* args);

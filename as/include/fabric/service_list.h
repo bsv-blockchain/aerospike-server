@@ -38,5 +38,5 @@ struct as_info_cmd_args_s;
 
 void as_service_list_init(void);
 
-void as_service_list_dynamic(const struct as_info_cmd_args_s* args);
-void as_service_list_command(const struct as_info_cmd_args_s* args);
+void as_service_list_dynamic(struct as_info_cmd_args_s* args);
+void as_service_list_command(struct as_info_cmd_args_s* args);

@@ -108,7 +108,7 @@ static bool any_benchmarks_enabled(void);
 //
 
 void
-as_cfg_info_cmd_get_config_with_params(const as_info_cmd_args* args)
+as_cfg_info_cmd_get_config_with_params(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -151,7 +151,7 @@ as_cfg_info_cmd_get_config_with_params(const as_info_cmd_args* args)
 }
 
 void
-as_cfg_info_cmd_get_config(const as_info_cmd_args* args)
+as_cfg_info_cmd_get_config(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -189,7 +189,7 @@ as_cfg_info_namespace_get_config(const as_namespace* ns, cf_dyn_buf* db)
 // set-config:context=network;variable=heartbeat.value;
 // set-config:context=namespace;id=test;variable=value;
 void
-as_cfg_info_cmd_set_config(const as_info_cmd_args* args)
+as_cfg_info_cmd_set_config(as_info_cmd_args* args)
 {
 	const char* name = args->name;
 	const char* params = args->params;

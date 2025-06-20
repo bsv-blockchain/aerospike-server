@@ -141,7 +141,7 @@ udf_cask_init(void)
 //
 
 void
-udf_cask_info_clear_cache(const as_info_cmd_args* args)
+udf_cask_info_clear_cache(as_info_cmd_args* args)
 {
 	cf_dyn_buf* out = args->db;
 
@@ -162,7 +162,7 @@ udf_cask_info_clear_cache(const as_info_cmd_args* args)
 }
 
 void
-udf_cask_info_get(const as_info_cmd_args* args)
+udf_cask_info_get(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* out = args->db;
@@ -228,7 +228,7 @@ udf_cask_info_get(const as_info_cmd_args* args)
 }
 
 void
-udf_cask_info_list(const as_info_cmd_args* args)
+udf_cask_info_list(as_info_cmd_args* args)
 {
 	cf_dyn_buf* out = args->db;
 	cf_debug(AS_UDF, "udf cask info list");
@@ -250,7 +250,7 @@ udf_cask_info_list(const as_info_cmd_args* args)
 }
 
 void
-udf_cask_info_put(const as_info_cmd_args* args)
+udf_cask_info_put(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* out = args->db;
@@ -413,7 +413,7 @@ udf_cask_info_put(const as_info_cmd_args* args)
 }
 
 void
-udf_cask_info_remove(const as_info_cmd_args* args)
+udf_cask_info_remove(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* out = args->db;

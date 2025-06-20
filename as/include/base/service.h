@@ -84,6 +84,7 @@ bool as_service_set_proto_fd_max(uint32_t val);
 void as_service_rearm(struct as_file_handle_s* fd_h);
 void as_service_enqueue_internal(struct as_transaction_s* tr);
 void as_service_enqueue_internal_keyd(struct as_transaction_s* tr);
+void as_service_get_user_agents(cf_dyn_buf* db);
 
 void as_admin_init(void);
 void as_admin_start(void);

@@ -119,6 +119,11 @@
 // Client socket information - as_file_handle.
 //
 
+typedef struct user_agent_key_s {
+	uint8_t size;
+	uint8_t b64data[88]; // 64 bytes encoded as base64 requires 88 bytes.
+} user_agent_key;
+
 typedef struct as_file_handle_s {
 	uint8_t		poll_data_type;	// one of CF_POLL_DATA_* - must be first
 
@@ -134,6 +139,8 @@ typedef struct as_file_handle_s {
 	as_proto	*proto;			// complete request message
 	uint64_t	proto_unread;	// bytes not yet read from socket
 	void		*security_filter;
+	bool 		called_features;	// set if the client called the 'features' info command
+	user_agent_key	user_agent;
 } as_file_handle;
 
 // Helpers to release transaction file handles.

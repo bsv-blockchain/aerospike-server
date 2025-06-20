@@ -39,15 +39,19 @@
 
 #include "aerospike/as_atomic.h"
 #include "citrusleaf/alloc.h"
+#include "citrusleaf/cf_b64.h"
 #include "citrusleaf/cf_clock.h"
 #include "citrusleaf/cf_digest.h"
+#include "citrusleaf/cf_hash_math.h"
 #include "citrusleaf/cf_queue.h"
 
 #include "cf_mutex.h"
 #include "cf_thread.h"
+#include "dynbuf.h"
 #include "epoll_queue.h"
 #include "hardware.h"
 #include "log.h"
+#include "shash.h"
 #include "socket.h"
 #include "tls.h"
 
@@ -113,6 +117,9 @@ static uint32_t g_n_slots;
 static as_file_handle** g_file_handles;
 static cf_queue g_free_slots;
 
+static cf_mutex g_user_agents_db_lock = CF_MUTEX_INIT;
+static cf_dyn_buf g_user_agents_db;
+
 
 //==========================================================
 // Forward declarations.
@@ -158,6 +165,11 @@ static void* run_reaper(void* udata);
 // Transaction queue.
 static bool start_internal_transaction(thread_ctx* ctx);
 
+// User agent handling.
+static uint32_t ua_hash_fn(const void* key);
+static int ua_reduce_fn(const void* key, void* value, void* udata);
+static void ua_increment_count(cf_shash* uah, const user_agent_key* key);
+
 
 //==========================================================
 // Inlines & macros.
@@ -196,6 +208,8 @@ rearm(as_file_handle* fd_h, uint32_t events)
 void
 as_service_init(void)
 {
+	cf_dyn_buf_init_heap(&g_user_agents_db, 256 * 1024);
+
 	// Create epoll instances and service threads.
 
 	cf_info(AS_SERVICE, "starting %u service threads",
@@ -364,6 +378,14 @@ as_service_enqueue_internal_keyd(as_transaction* tr)
 
 		cf_mutex_unlock(&g_thread_locks[sid]);
 	}
+}
+
+void
+as_service_get_user_agents(cf_dyn_buf* db)
+{
+	cf_mutex_lock(&g_user_agents_db_lock);
+	cf_dyn_buf_append_buf(db, g_user_agents_db.buf, g_user_agents_db.used_sz);
+	cf_mutex_unlock(&g_user_agents_db_lock);
 }
 
 void
@@ -1144,6 +1166,9 @@ static void*
 run_reaper(void* udata)
 {
 	(void)udata;
+	user_agent_key unknownkey = { .size = 12, .b64data = "dW5rbm93bg==" };
+	cf_shash* ua_hash = cf_shash_create(ua_hash_fn, sizeof(user_agent_key),
+		sizeof(uint32_t), 512, false);
 
 	while (true) {
 		sleep(1);
@@ -1178,11 +1203,8 @@ run_reaper(void* udata)
 				continue;
 			}
 
-			if (fd_h->in_transaction != 0) {
-				continue;
-			}
-
-			if (kill_ns != 0 && fd_h->last_used + kill_ns < now_ns) {
+			if (! fd_h->in_transaction && kill_ns != 0 &&
+					fd_h->last_used + kill_ns < now_ns) {
 				cf_socket_shutdown(&fd_h->sock); // will trigger epoll errors
 
 				g_file_handles[i] = NULL;
@@ -1190,10 +1212,23 @@ run_reaper(void* udata)
 				release_file_handle(fd_h);
 
 				g_stats.reaper_count++;
+				continue;
+			}
+
+			if (fd_h->user_agent.size > 0) {
+				ua_increment_count(ua_hash, &fd_h->user_agent);
+			}
+			else if (fd_h->called_features) {
+				ua_increment_count(ua_hash, &unknownkey);
 			}
 		}
 
 		cf_mutex_unlock(&g_reaper_lock);
+
+		cf_mutex_lock(&g_user_agents_db_lock);
+		g_user_agents_db.used_sz = 0;
+		cf_shash_reduce(ua_hash, ua_reduce_fn, &g_user_agents_db);
+		cf_mutex_unlock(&g_user_agents_db_lock);
 	}
 
 	return NULL;
@@ -1224,4 +1259,38 @@ start_internal_transaction(thread_ctx* ctx)
 	as_tsvc_process_transaction(&tr);
 
 	return true;
+}
+
+static void
+ua_increment_count(cf_shash* uah, const user_agent_key* key)
+{
+	uint32_t count = 1;
+	if (cf_shash_get(uah, key, &count) == CF_SHASH_OK) {
+		count++;
+	}
+	cf_shash_put(uah, key, &count);
+}
+
+static uint32_t
+ua_hash_fn(const void* key)
+{
+	const user_agent_key* ua_key = (const user_agent_key*)key;
+	return cf_wyhash32(ua_key->b64data, ua_key->size);
+}
+
+static int
+ua_reduce_fn(const void* key, void* value, void* udata)
+{
+	const user_agent_key* ua_key = (const user_agent_key*)key;
+	const uint32_t* ua_count = (const uint32_t*)value;
+	cf_dyn_buf* db = (cf_dyn_buf*)udata;
+
+	cf_dyn_buf_append_string(db, "user-agent=");
+	cf_dyn_buf_append_buf(db, ua_key->b64data, ua_key->size);
+	cf_dyn_buf_append_char(db, ':');
+	cf_dyn_buf_append_string(db, "count=");
+	cf_dyn_buf_append_uint32(db, *ua_count);
+	cf_dyn_buf_append_char(db, ';');
+
+	return CF_SHASH_REDUCE_DELETE;
 }

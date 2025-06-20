@@ -44,6 +44,7 @@
 
 #include "aerospike/as_atomic.h"
 #include "citrusleaf/alloc.h"
+#include "citrusleaf/cf_b64.h"
 #include "citrusleaf/cf_queue.h"
 
 #include "cf_mutex.h"
@@ -113,7 +114,7 @@
 
 #define CMD_NAME_MAX_LEN 32
 
-typedef void (*as_info_cmd_fn)(const as_info_cmd_args* args);
+typedef void (*as_info_cmd_fn)(as_info_cmd_args* args);
 
 typedef struct as_info_cmd_s {
 	const char* name;
@@ -177,95 +178,97 @@ static void* run_info(void* arg);
 static bool authenticate(const as_file_handle* fd_h, cf_dyn_buf* db);
 static void append_security_error(cf_dyn_buf* db, uint32_t result, as_sec_perm perm);
 static void info_summary(cf_dyn_buf* db);
-static void handle_cmds(char* buf, size_t buf_sz, const as_file_handle* fd_h, cf_dyn_buf* db);
+static void handle_cmds(char* buf, size_t buf_sz, as_file_handle* fd_h, cf_dyn_buf* db);
 static const as_info_cmd* parse_cmd(char** cmd_str_p, cf_dyn_buf* db);
 static const as_info_cmd* find_cmd(const char* name, size_t name_len);
-static void handle_cmd(const as_info_cmd* cmd, const char* params, const as_file_handle* fd_h, cf_dyn_buf* db);
+static void handle_cmd(const as_info_cmd* cmd, const char* params, as_file_handle* fd_h, cf_dyn_buf* db);
 
 // Info commands.
-static void cmd_best_practices(const as_info_cmd_args* args);
-static void cmd_build(const as_info_cmd_args* args);
-static void cmd_build_arch(const as_info_cmd_args* args);
-static void cmd_build_ee_sha(const as_info_cmd_args* args);
-static void cmd_build_os(const as_info_cmd_args* args);
-static void cmd_build_sha(const as_info_cmd_args* args);
-static void cmd_build_time(const as_info_cmd_args* args);
-static void cmd_cluster_name(const as_info_cmd_args* args);
-static void cmd_cluster_stable(const as_info_cmd_args* args);
-static void cmd_compatibility_id(const as_info_cmd_args* args);
-static void cmd_debug_record(const as_info_cmd_args* args);
-static void cmd_debug_record_meta(const as_info_cmd_args* args);
-static void cmd_digests(const as_info_cmd_args* args);
-static void cmd_dump_cluster(const as_info_cmd_args* args);
-static void cmd_dump_fabric(const as_info_cmd_args* args);
-static void cmd_dump_hb(const as_info_cmd_args* args);
-static void cmd_dump_hlc(const as_info_cmd_args* args);
-static void cmd_dump_migrates(const as_info_cmd_args* args);
-static void cmd_dump_rw_request_hash(const as_info_cmd_args* args);
-static void cmd_dump_skew(const as_info_cmd_args* args);
-static void cmd_dump_wb_summary(const as_info_cmd_args* args);
-static void cmd_edition(const as_info_cmd_args* args);
-static void cmd_endpoints(const as_info_cmd_args* args);
-static void cmd_eviction_reset(const as_info_cmd_args* args);
-static void cmd_features(const as_info_cmd_args* args);
-static void cmd_features_key(const as_info_cmd_args* args);
-static void cmd_get_sl(const as_info_cmd_args* args);
-static void cmd_get_stats(const as_info_cmd_args* args);
-static void cmd_hb_addr(const as_info_cmd_args* args);
-static void cmd_health_outliers(const as_info_cmd_args* args);
-static void cmd_health_stats(const as_info_cmd_args* args);
-static void cmd_help(const as_info_cmd_args* args);
-static void cmd_histogram(const as_info_cmd_args* args);
-static void cmd_index_pressure(const as_info_cmd_args* args);
-static void cmd_jem_stats(const as_info_cmd_args* args);
-static void cmd_latencies(const as_info_cmd_args* args);
-static void cmd_log(const as_info_cmd_args* args);
-static void cmd_log_message(const as_info_cmd_args* args);
-static void cmd_log_set(const as_info_cmd_args* args);
-static void cmd_logs(const as_info_cmd_args* args);
-static void cmd_namespace(const as_info_cmd_args* args);
-static void cmd_namespaces(const as_info_cmd_args* args);
-static void cmd_node(const as_info_cmd_args* args);
-static void cmd_name(const as_info_cmd_args* args);
-static void cmd_objects(const as_info_cmd_args* args);
-static void cmd_partition_generation(const as_info_cmd_args* args);
-static void cmd_partition_info(const as_info_cmd_args* args);
-static void cmd_partitions(const as_info_cmd_args* args);
-static void cmd_physical_devices(const as_info_cmd_args* args);
-static void cmd_query_abort(const as_info_cmd_args* args);
-static void cmd_query_abort_all(const as_info_cmd_args* args);
-static void cmd_query_show(const as_info_cmd_args* args);
-static void cmd_quiesce(const as_info_cmd_args* args);
-static void cmd_quiesce_undo(const as_info_cmd_args* args);
-static void cmd_rack_ids(const as_info_cmd_args* args);
-static void cmd_racks(const as_info_cmd_args* args);
-static void cmd_rebalance_generation(const as_info_cmd_args* args);
-static void cmd_recluster(const as_info_cmd_args* args);
-static void cmd_replicas(const as_info_cmd_args* args);
-static void cmd_replicas_all(const as_info_cmd_args* args);
-static void cmd_replicas_master(const as_info_cmd_args* args);
-static void cmd_revive(const as_info_cmd_args* args);
-static void cmd_roster(const as_info_cmd_args* args);
-static void cmd_roster_set(const as_info_cmd_args* args);
-static void cmd_sets(const as_info_cmd_args* args);
-static void cmd_sindex(const as_info_cmd_args* args);
-static void cmd_sindex_create(const as_info_cmd_args* args);
-static void cmd_sindex_delete(const as_info_cmd_args* args);
-static void cmd_sindex_exists(const as_info_cmd_args* args);
-static void cmd_sindex_list(const as_info_cmd_args* args);
-static void cmd_sindex_stat(const as_info_cmd_args* args);
-static void cmd_smd_info(const as_info_cmd_args* args);
-static void cmd_smd_show(const as_info_cmd_args* args);
-static void cmd_statistics(const as_info_cmd_args* args);
-static void cmd_status(const as_info_cmd_args* args);
-static void cmd_thread_traces(const as_info_cmd_args* args);
-static void cmd_tip(const as_info_cmd_args* args);
-static void cmd_tip_clear(const as_info_cmd_args* args);
-static void cmd_truncate(const as_info_cmd_args* args);
-static void cmd_truncate_namespace(const as_info_cmd_args* args);
-static void cmd_truncate_namespace_undo(const as_info_cmd_args* args);
-static void cmd_truncate_undo(const as_info_cmd_args* args);
-static void cmd_version(const as_info_cmd_args* args);
+static void cmd_best_practices(as_info_cmd_args* args);
+static void cmd_build(as_info_cmd_args* args);
+static void cmd_build_arch(as_info_cmd_args* args);
+static void cmd_build_ee_sha(as_info_cmd_args* args);
+static void cmd_build_os(as_info_cmd_args* args);
+static void cmd_build_sha(as_info_cmd_args* args);
+static void cmd_build_time(as_info_cmd_args* args);
+static void cmd_cluster_name(as_info_cmd_args* args);
+static void cmd_cluster_stable(as_info_cmd_args* args);
+static void cmd_compatibility_id(as_info_cmd_args* args);
+static void cmd_debug_record(as_info_cmd_args* args);
+static void cmd_debug_record_meta(as_info_cmd_args* args);
+static void cmd_digests(as_info_cmd_args* args);
+static void cmd_dump_cluster(as_info_cmd_args* args);
+static void cmd_dump_fabric(as_info_cmd_args* args);
+static void cmd_dump_hb(as_info_cmd_args* args);
+static void cmd_dump_hlc(as_info_cmd_args* args);
+static void cmd_dump_migrates(as_info_cmd_args* args);
+static void cmd_dump_rw_request_hash(as_info_cmd_args* args);
+static void cmd_dump_skew(as_info_cmd_args* args);
+static void cmd_dump_wb_summary(as_info_cmd_args* args);
+static void cmd_edition(as_info_cmd_args* args);
+static void cmd_endpoints(as_info_cmd_args* args);
+static void cmd_eviction_reset(as_info_cmd_args* args);
+static void cmd_features(as_info_cmd_args* args);
+static void cmd_features_key(as_info_cmd_args* args);
+static void cmd_get_sl(as_info_cmd_args* args);
+static void cmd_get_stats(as_info_cmd_args* args);
+static void cmd_hb_addr(as_info_cmd_args* args);
+static void cmd_health_outliers(as_info_cmd_args* args);
+static void cmd_health_stats(as_info_cmd_args* args);
+static void cmd_help(as_info_cmd_args* args);
+static void cmd_histogram(as_info_cmd_args* args);
+static void cmd_index_pressure(as_info_cmd_args* args);
+static void cmd_jem_stats(as_info_cmd_args* args);
+static void cmd_latencies(as_info_cmd_args* args);
+static void cmd_log(as_info_cmd_args* args);
+static void cmd_log_message(as_info_cmd_args* args);
+static void cmd_log_set(as_info_cmd_args* args);
+static void cmd_logs(as_info_cmd_args* args);
+static void cmd_namespace(as_info_cmd_args* args);
+static void cmd_namespaces(as_info_cmd_args* args);
+static void cmd_node(as_info_cmd_args* args);
+static void cmd_name(as_info_cmd_args* args);
+static void cmd_objects(as_info_cmd_args* args);
+static void cmd_partition_generation(as_info_cmd_args* args);
+static void cmd_partition_info(as_info_cmd_args* args);
+static void cmd_partitions(as_info_cmd_args* args);
+static void cmd_physical_devices(as_info_cmd_args* args);
+static void cmd_query_abort(as_info_cmd_args* args);
+static void cmd_query_abort_all(as_info_cmd_args* args);
+static void cmd_query_show(as_info_cmd_args* args);
+static void cmd_quiesce(as_info_cmd_args* args);
+static void cmd_quiesce_undo(as_info_cmd_args* args);
+static void cmd_rack_ids(as_info_cmd_args* args);
+static void cmd_racks(as_info_cmd_args* args);
+static void cmd_rebalance_generation(as_info_cmd_args* args);
+static void cmd_recluster(as_info_cmd_args* args);
+static void cmd_replicas(as_info_cmd_args* args);
+static void cmd_replicas_all(as_info_cmd_args* args);
+static void cmd_replicas_master(as_info_cmd_args* args);
+static void cmd_revive(as_info_cmd_args* args);
+static void cmd_roster(as_info_cmd_args* args);
+static void cmd_roster_set(as_info_cmd_args* args);
+static void cmd_sets(as_info_cmd_args* args);
+static void cmd_sindex(as_info_cmd_args* args);
+static void cmd_sindex_create(as_info_cmd_args* args);
+static void cmd_sindex_delete(as_info_cmd_args* args);
+static void cmd_sindex_exists(as_info_cmd_args* args);
+static void cmd_sindex_list(as_info_cmd_args* args);
+static void cmd_sindex_stat(as_info_cmd_args* args);
+static void cmd_smd_info(as_info_cmd_args* args);
+static void cmd_smd_show(as_info_cmd_args* args);
+static void cmd_statistics(as_info_cmd_args* args);
+static void cmd_status(as_info_cmd_args* args);
+static void cmd_thread_traces(as_info_cmd_args* args);
+static void cmd_tip(as_info_cmd_args* args);
+static void cmd_tip_clear(as_info_cmd_args* args);
+static void cmd_truncate(as_info_cmd_args* args);
+static void cmd_truncate_namespace(as_info_cmd_args* args);
+static void cmd_truncate_namespace_undo(as_info_cmd_args* args);
+static void cmd_truncate_undo(as_info_cmd_args* args);
+static void cmd_user_agent_set(as_info_cmd_args* args);
+static void cmd_user_agents(as_info_cmd_args* args);
+static void cmd_version(as_info_cmd_args* args);
 
 // Info command helpers.
 static const char* perm_to_string(as_sec_perm perm);
@@ -467,6 +470,8 @@ static const as_info_cmd SPECS[] = {
 	{ .name="udf-list",                .fn=udf_cask_info_list,          .client_only=false, .ee_only=false, .perm=PERM_NONE           },
 	{ .name="udf-put",                 .fn=udf_cask_info_put,           .client_only=false, .ee_only=false, .perm=PERM_UDF_ADMIN      },
 	{ .name="udf-remove",              .fn=udf_cask_info_remove,        .client_only=false, .ee_only=false, .perm=PERM_UDF_ADMIN      },
+	{ .name="user-agent-set",	   .fn=cmd_user_agent_set,	    .client_only=false, .ee_only=false, .perm=PERM_NONE		  },
+	{ .name="user-agents",		   .fn=cmd_user_agents,		    .client_only=false, .ee_only=false, .perm=PERM_NONE		  },
 	{ .name="xdr-dc-state",            .fn=as_xdr_dc_state,             .client_only=false, .ee_only=true,  .perm=PERM_NONE           },
 	{ .name="xdr-get-filter",          .fn=as_xdr_get_filter,           .client_only=false, .ee_only=true,  .perm=PERM_NONE           },
 	{ .name="xdr-set-filter",          .fn=as_xdr_set_filter,           .client_only=false, .ee_only=true,  .perm=PERM_XDR_SET_FILTER }
@@ -1078,8 +1083,7 @@ info_summary(cf_dyn_buf* db)
 }
 
 static void
-handle_cmds(char* buf, size_t buf_sz, const as_file_handle* fd_h,
-		cf_dyn_buf* db)
+handle_cmds(char* buf, size_t buf_sz, as_file_handle* fd_h, cf_dyn_buf* db)
 {
 	char* end = buf + buf_sz;
 	char* at = buf;
@@ -1164,8 +1168,8 @@ find_cmd(const char* name, size_t name_len)
 }
 
 static void
-handle_cmd(const as_info_cmd* cmd, const char* params,
-		const as_file_handle* fd_h, cf_dyn_buf* db)
+handle_cmd(const as_info_cmd* cmd, const char* params, as_file_handle* fd_h,
+		cf_dyn_buf* db)
 {
 	if (cmd->ee_only && as_info_respond_enterprise_only(db)) {
 		return;
@@ -1186,7 +1190,10 @@ handle_cmd(const as_info_cmd* cmd, const char* params,
 		}
 	}
 
-	as_info_cmd_args args = { .name = cmd->name, .params = params, .db = db };
+	as_info_cmd_args args = {
+		.name = cmd->name, .params = params, .db = db, .fd_h = fd_h
+	};
+
 	cmd->fn(&args);
 }
 
@@ -1215,7 +1222,7 @@ append_security_error(cf_dyn_buf* db, uint32_t result, as_sec_perm perm)
 //
 
 static void
-cmd_best_practices(const as_info_cmd_args* args)
+cmd_best_practices(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1230,7 +1237,7 @@ cmd_best_practices(const as_info_cmd_args* args)
 }
 
 static void
-cmd_build(const as_info_cmd_args* args)
+cmd_build(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1238,7 +1245,7 @@ cmd_build(const as_info_cmd_args* args)
 }
 
 static void
-cmd_build_arch(const as_info_cmd_args* args)
+cmd_build_arch(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1246,7 +1253,7 @@ cmd_build_arch(const as_info_cmd_args* args)
 }
 
 static void
-cmd_build_ee_sha(const as_info_cmd_args* args)
+cmd_build_ee_sha(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1254,7 +1261,7 @@ cmd_build_ee_sha(const as_info_cmd_args* args)
 }
 
 static void
-cmd_build_os(const as_info_cmd_args* args)
+cmd_build_os(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1262,7 +1269,7 @@ cmd_build_os(const as_info_cmd_args* args)
 }
 
 static void
-cmd_build_sha(const as_info_cmd_args* args)
+cmd_build_sha(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1270,7 +1277,7 @@ cmd_build_sha(const as_info_cmd_args* args)
 }
 
 static void
-cmd_build_time(const as_info_cmd_args* args)
+cmd_build_time(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1278,7 +1285,7 @@ cmd_build_time(const as_info_cmd_args* args)
 }
 
 static void
-cmd_cluster_name(const as_info_cmd_args* args)
+cmd_cluster_name(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1289,7 +1296,7 @@ cmd_cluster_name(const as_info_cmd_args* args)
 }
 
 static void
-cmd_cluster_stable(const as_info_cmd_args* args)
+cmd_cluster_stable(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -1406,7 +1413,7 @@ cmd_cluster_stable(const as_info_cmd_args* args)
 }
 
 static void
-cmd_compatibility_id(const as_info_cmd_args* args)
+cmd_compatibility_id(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1414,7 +1421,7 @@ cmd_compatibility_id(const as_info_cmd_args* args)
 }
 
 static void
-cmd_debug_record(const as_info_cmd_args* args)
+cmd_debug_record(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -1427,7 +1434,7 @@ cmd_debug_record(const as_info_cmd_args* args)
 }
 
 static void
-cmd_debug_record_meta(const as_info_cmd_args* args)
+cmd_debug_record_meta(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -1438,7 +1445,7 @@ cmd_debug_record_meta(const as_info_cmd_args* args)
 }
 
 static void
-cmd_digests(const as_info_cmd_args* args)
+cmd_digests(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1447,7 +1454,7 @@ cmd_digests(const as_info_cmd_args* args)
 }
 
 static void
-cmd_dump_cluster(const as_info_cmd_args* args)
+cmd_dump_cluster(as_info_cmd_args* args)
 {
 	const char* name = args->name;
 	const char* params = args->params;
@@ -1492,7 +1499,7 @@ cmd_dump_cluster(const as_info_cmd_args* args)
 }
 
 static void
-cmd_dump_fabric(const as_info_cmd_args* args)
+cmd_dump_fabric(as_info_cmd_args* args)
 {
 	const char* name = args->name;
 	const char* params = args->params;
@@ -1536,7 +1543,7 @@ cmd_dump_fabric(const as_info_cmd_args* args)
 }
 
 static void
-cmd_dump_hb(const as_info_cmd_args* args)
+cmd_dump_hb(as_info_cmd_args* args)
 {
 	const char* name = args->name;
 	const char* params = args->params;
@@ -1579,7 +1586,7 @@ cmd_dump_hb(const as_info_cmd_args* args)
 }
 
 static void
-cmd_dump_hlc(const as_info_cmd_args* args)
+cmd_dump_hlc(as_info_cmd_args* args)
 {
 	const char* name = args->name;
 	const char* params = args->params;
@@ -1623,7 +1630,7 @@ cmd_dump_hlc(const as_info_cmd_args* args)
 }
 
 static void
-cmd_dump_migrates(const as_info_cmd_args* args)
+cmd_dump_migrates(as_info_cmd_args* args)
 {
 	const char* name = args->name;
 	const char* params = args->params;
@@ -1666,7 +1673,7 @@ cmd_dump_migrates(const as_info_cmd_args* args)
 }
 
 static void
-cmd_dump_rw_request_hash(const as_info_cmd_args* args)
+cmd_dump_rw_request_hash(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1675,7 +1682,7 @@ cmd_dump_rw_request_hash(const as_info_cmd_args* args)
 }
 
 static void
-cmd_dump_skew(const as_info_cmd_args* args)
+cmd_dump_skew(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -1689,7 +1696,7 @@ cmd_dump_skew(const as_info_cmd_args* args)
 }
 
 static void
-cmd_dump_wb_summary(const as_info_cmd_args* args)
+cmd_dump_wb_summary(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -1712,7 +1719,7 @@ cmd_dump_wb_summary(const as_info_cmd_args* args)
 }
 
 static void
-cmd_edition(const as_info_cmd_args* args)
+cmd_edition(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1720,7 +1727,7 @@ cmd_edition(const as_info_cmd_args* args)
 }
 
 static void
-cmd_endpoints(const as_info_cmd_args* args)
+cmd_endpoints(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1801,7 +1808,7 @@ cmd_endpoints(const as_info_cmd_args* args)
 }
 
 static void
-cmd_eviction_reset(const as_info_cmd_args* args)
+cmd_eviction_reset(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -1841,10 +1848,11 @@ cmd_eviction_reset(const as_info_cmd_args* args)
 }
 
 static void
-cmd_features(const as_info_cmd_args* args)
+cmd_features(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
+	args->fd_h->called_features = true;
 	as_info_warn_deprecated("'features' command is deprecated");
 
 	cf_dyn_buf_append_string(db,
@@ -1863,7 +1871,7 @@ cmd_features(const as_info_cmd_args* args)
 }
 
 static void
-cmd_features_key(const as_info_cmd_args* args)
+cmd_features_key(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1871,7 +1879,7 @@ cmd_features_key(const as_info_cmd_args* args)
 }
 
 static void
-cmd_get_sl(const as_info_cmd_args* args)
+cmd_get_sl(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1880,7 +1888,7 @@ cmd_get_sl(const as_info_cmd_args* args)
 }
 
 static void
-cmd_get_stats(const as_info_cmd_args* args)
+cmd_get_stats(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -1903,7 +1911,7 @@ cmd_get_stats(const as_info_cmd_args* args)
 }
 
 static void
-cmd_hb_addr(const as_info_cmd_args* args)
+cmd_hb_addr(as_info_cmd_args* args)
 {
 	const char* name = args->name;
 	cf_dyn_buf* db = args->db;
@@ -1932,7 +1940,7 @@ cmd_hb_addr(const as_info_cmd_args* args)
 }
 
 static void
-cmd_health_outliers(const as_info_cmd_args* args)
+cmd_health_outliers(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1940,7 +1948,7 @@ cmd_health_outliers(const as_info_cmd_args* args)
 }
 
 static void
-cmd_health_stats(const as_info_cmd_args* args)
+cmd_health_stats(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1948,7 +1956,7 @@ cmd_health_stats(const as_info_cmd_args* args)
 }
 
 static void
-cmd_help(const as_info_cmd_args* args)
+cmd_help(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -1970,7 +1978,7 @@ cmd_help(const as_info_cmd_args* args)
 }
 
 static void
-cmd_histogram(const as_info_cmd_args* args)
+cmd_histogram(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -2007,7 +2015,7 @@ cmd_histogram(const as_info_cmd_args* args)
 }
 
 static void
-cmd_index_pressure(const as_info_cmd_args* args)
+cmd_index_pressure(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2031,7 +2039,7 @@ cmd_index_pressure(const as_info_cmd_args* args)
 }
 
 static void
-cmd_jem_stats(const as_info_cmd_args* args)
+cmd_jem_stats(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -2089,7 +2097,7 @@ cmd_jem_stats(const as_info_cmd_args* args)
 }
 
 static void
-cmd_latencies(const as_info_cmd_args* args)
+cmd_latencies(as_info_cmd_args* args)
 {
 	const char* name = args->name;
 	const char* params = args->params;
@@ -2285,7 +2293,7 @@ cmd_latencies(const as_info_cmd_args* args)
 }
 
 static void
-cmd_log(const as_info_cmd_args* args)
+cmd_log(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -2315,7 +2323,7 @@ cmd_log(const as_info_cmd_args* args)
 }
 
 static void
-cmd_log_message(const as_info_cmd_args* args)
+cmd_log_message(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -2351,7 +2359,7 @@ cmd_log_message(const as_info_cmd_args* args)
 }
 
 static void
-cmd_log_set(const as_info_cmd_args* args)
+cmd_log_set(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -2413,7 +2421,7 @@ cmd_log_set(const as_info_cmd_args* args)
 }
 
 static void
-cmd_logs(const as_info_cmd_args* args)
+cmd_logs(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2421,7 +2429,7 @@ cmd_logs(const as_info_cmd_args* args)
 }
 
 static void
-cmd_namespace(const as_info_cmd_args* args)
+cmd_namespace(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -2441,7 +2449,7 @@ cmd_namespace(const as_info_cmd_args* args)
 }
 
 static void
-cmd_namespaces(const as_info_cmd_args* args)
+cmd_namespaces(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2456,7 +2464,7 @@ cmd_namespaces(const as_info_cmd_args* args)
 }
 
 static void
-cmd_node(const as_info_cmd_args* args)
+cmd_node(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2464,14 +2472,14 @@ cmd_node(const as_info_cmd_args* args)
 }
 
 static void
-cmd_name(const as_info_cmd_args* args)
+cmd_name(as_info_cmd_args* args)
 {
 	as_info_warn_deprecated("'name' command is deprecated, use 'node' instead");
 	cmd_node(args);
 }
 
 static void
-cmd_objects(const as_info_cmd_args* args)
+cmd_objects(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2487,7 +2495,7 @@ cmd_objects(const as_info_cmd_args* args)
 }
 
 static void
-cmd_partition_generation(const as_info_cmd_args* args)
+cmd_partition_generation(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2496,7 +2504,7 @@ cmd_partition_generation(const as_info_cmd_args* args)
 }
 
 static void
-cmd_partition_info(const as_info_cmd_args* args)
+cmd_partition_info(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2504,7 +2512,7 @@ cmd_partition_info(const as_info_cmd_args* args)
 }
 
 static void
-cmd_partitions(const as_info_cmd_args* args)
+cmd_partitions(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2513,7 +2521,7 @@ cmd_partitions(const as_info_cmd_args* args)
 }
 
 static void
-cmd_physical_devices(const as_info_cmd_args* args)
+cmd_physical_devices(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -2554,7 +2562,7 @@ cmd_physical_devices(const as_info_cmd_args* args)
 }
 
 static void
-cmd_query_abort_all(const as_info_cmd_args* args)
+cmd_query_abort_all(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2565,7 +2573,7 @@ cmd_query_abort_all(const as_info_cmd_args* args)
 }
 
 static void
-cmd_query_abort(const as_info_cmd_args* args)
+cmd_query_abort(as_info_cmd_args* args)
 {
 	const char* name = args->name;
 	const char* params = args->params;
@@ -2601,7 +2609,7 @@ cmd_query_abort(const as_info_cmd_args* args)
 }
 
 static void
-cmd_query_show(const as_info_cmd_args* args)
+cmd_query_show(as_info_cmd_args* args)
 {
 	const char* name = args->name;
 	const char* params = args->params;
@@ -2639,7 +2647,7 @@ cmd_query_show(const as_info_cmd_args* args)
 }
 
 static void
-cmd_quiesce(const as_info_cmd_args* args)
+cmd_quiesce(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2661,7 +2669,7 @@ cmd_quiesce(const as_info_cmd_args* args)
 }
 
 static void
-cmd_quiesce_undo(const as_info_cmd_args* args)
+cmd_quiesce_undo(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2682,7 +2690,7 @@ cmd_quiesce_undo(const as_info_cmd_args* args)
 }
 
 static void
-cmd_rack_ids(const as_info_cmd_args* args)
+cmd_rack_ids(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2690,7 +2698,7 @@ cmd_rack_ids(const as_info_cmd_args* args)
 }
 
 static void
-cmd_racks(const as_info_cmd_args* args)
+cmd_racks(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -2753,7 +2761,7 @@ cmd_racks(const as_info_cmd_args* args)
 }
 
 static void
-cmd_rebalance_generation(const as_info_cmd_args* args)
+cmd_rebalance_generation(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2761,7 +2769,7 @@ cmd_rebalance_generation(const as_info_cmd_args* args)
 }
 
 static void
-cmd_recluster(const as_info_cmd_args* args)
+cmd_recluster(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2784,7 +2792,7 @@ cmd_recluster(const as_info_cmd_args* args)
 }
 
 static void
-cmd_replicas(const as_info_cmd_args* args)
+cmd_replicas(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -2811,7 +2819,7 @@ cmd_replicas(const as_info_cmd_args* args)
 }
 
 static void
-cmd_replicas_all(const as_info_cmd_args* args)
+cmd_replicas_all(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2820,7 +2828,7 @@ cmd_replicas_all(const as_info_cmd_args* args)
 }
 
 static void
-cmd_replicas_master(const as_info_cmd_args* args)
+cmd_replicas_master(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -2829,7 +2837,7 @@ cmd_replicas_master(const as_info_cmd_args* args)
 }
 
 static void
-cmd_revive(const as_info_cmd_args* args)
+cmd_revive(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -2877,7 +2885,7 @@ cmd_revive(const as_info_cmd_args* args)
 }
 
 static void
-cmd_roster(const as_info_cmd_args* args)
+cmd_roster(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -2917,7 +2925,7 @@ cmd_roster(const as_info_cmd_args* args)
 }
 
 static void
-cmd_roster_set(const as_info_cmd_args* args)
+cmd_roster_set(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -2953,7 +2961,7 @@ cmd_roster_set(const as_info_cmd_args* args)
 }
 
 static void
-cmd_sets(const as_info_cmd_args* args)
+cmd_sets(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -3003,7 +3011,7 @@ cmd_sets(const as_info_cmd_args* args)
 }
 
 static void
-cmd_sindex(const as_info_cmd_args* args)
+cmd_sindex(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -3064,7 +3072,7 @@ cmd_sindex(const as_info_cmd_args* args)
 }
 
 static void
-cmd_sindex_create(const as_info_cmd_args* args)
+cmd_sindex_create(as_info_cmd_args* args)
 {
 	// Old command format:
 	// sindex-create:ns=usermap;set=demo;indexname=um_age;indextype=list;indexdata=age,numeric
@@ -3395,7 +3403,7 @@ cmd_sindex_create(const as_info_cmd_args* args)
 }
 
 static void
-cmd_sindex_delete(const as_info_cmd_args* args)
+cmd_sindex_delete(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -3462,7 +3470,7 @@ cmd_sindex_delete(const as_info_cmd_args* args)
 }
 
 static void
-cmd_sindex_exists(const as_info_cmd_args* args)
+cmd_sindex_exists(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -3496,7 +3504,7 @@ cmd_sindex_exists(const as_info_cmd_args* args)
 }
 
 static void
-cmd_sindex_list(const as_info_cmd_args* args)
+cmd_sindex_list(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -3551,7 +3559,7 @@ cmd_sindex_list(const as_info_cmd_args* args)
 }
 
 static void
-cmd_sindex_stat(const as_info_cmd_args* args)
+cmd_sindex_stat(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -3588,7 +3596,7 @@ cmd_sindex_stat(const as_info_cmd_args* args)
 }
 
 static void
-cmd_smd_info(const as_info_cmd_args* args)
+cmd_smd_info(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -3596,7 +3604,7 @@ cmd_smd_info(const as_info_cmd_args* args)
 }
 
 static void
-cmd_smd_show(const as_info_cmd_args* args)
+cmd_smd_show(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -3656,7 +3664,7 @@ cmd_smd_show(const as_info_cmd_args* args)
 }
 
 static void
-cmd_statistics(const as_info_cmd_args* args)
+cmd_statistics(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -3815,7 +3823,7 @@ cmd_statistics(const as_info_cmd_args* args)
 }
 
 static void
-cmd_status(const as_info_cmd_args* args)
+cmd_status(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
@@ -3823,7 +3831,7 @@ cmd_status(const as_info_cmd_args* args)
 }
 
 static void
-cmd_thread_traces(const as_info_cmd_args* args)
+cmd_thread_traces(as_info_cmd_args* args)
 {
 	const char* name = args->name;
 	cf_dyn_buf* db = args->db;
@@ -3832,7 +3840,7 @@ cmd_thread_traces(const as_info_cmd_args* args)
 }
 
 static void
-cmd_tip(const as_info_cmd_args* args)
+cmd_tip(as_info_cmd_args* args)
 {
 	const char* name = args->name;
 	const char* params = args->params;
@@ -3910,7 +3918,7 @@ cmd_tip(const as_info_cmd_args* args)
 }
 
 static void
-cmd_tip_clear(const as_info_cmd_args* args)
+cmd_tip_clear(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -3998,7 +4006,7 @@ cmd_tip_clear(const as_info_cmd_args* args)
 }
 
 static void
-cmd_truncate(const as_info_cmd_args* args)
+cmd_truncate(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -4048,7 +4056,7 @@ cmd_truncate(const as_info_cmd_args* args)
 }
 
 static void
-cmd_truncate_namespace(const as_info_cmd_args* args)
+cmd_truncate_namespace(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -4100,7 +4108,7 @@ cmd_truncate_namespace(const as_info_cmd_args* args)
 }
 
 static void
-cmd_truncate_namespace_undo(const as_info_cmd_args* args)
+cmd_truncate_namespace_undo(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -4137,7 +4145,7 @@ cmd_truncate_namespace_undo(const as_info_cmd_args* args)
 }
 
 static void
-cmd_truncate_undo(const as_info_cmd_args* args)
+cmd_truncate_undo(as_info_cmd_args* args)
 {
 	const char* params = args->params;
 	cf_dyn_buf* db = args->db;
@@ -4172,7 +4180,54 @@ cmd_truncate_undo(const as_info_cmd_args* args)
 }
 
 static void
-cmd_version(const as_info_cmd_args* args)
+cmd_user_agent_set(as_info_cmd_args* args)
+{
+	const char* params = args->params;
+	cf_dyn_buf* db = args->db;
+	user_agent_key* ua = &args->fd_h->user_agent;
+
+	// Command format:  user-agent-set:value=<base64>
+
+	cf_assert(args->fd_h != NULL, AS_INFO, "user-agent-set: fd_h == NULL");
+
+	if (ua->size != 0) {
+		cf_warning(AS_INFO, "user-agent-set: already set");
+		as_info_respond_error(db, AS_ERR_PARAMETER, "already set");
+		return;
+	}
+
+	char buf64[sizeof(ua->b64data)] = { 0 };
+	int buf64_sz = sizeof(buf64);
+
+	info_param_result rv = as_info_parameter_get(params, "value", buf64, &buf64_sz);
+
+	if (! as_info_required_param_is_ok(db, "value", buf64, rv)) {
+		return;
+	}
+
+	uint32_t buf_sz_out;
+	uint8_t tmp0[64];
+
+	if (! cf_b64_validate_and_decode(buf64, buf64_sz, tmp0, &buf_sz_out)) {
+		cf_warning(AS_INFO, "user-agent-set: 'value' invalid base64");
+		as_info_respond_error(db, AS_ERR_PARAMETER, "'value' invalid base64");
+		return;
+	}
+
+	memcpy(ua->b64data, buf64, sizeof(buf64));
+	ua->size = buf64_sz;
+	as_info_respond_ok(db);
+}
+
+static void
+cmd_user_agents(as_info_cmd_args* args)
+{
+	cf_dyn_buf* db = args->db;
+	as_service_get_user_agents(db);
+}
+
+static void
+cmd_version(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 

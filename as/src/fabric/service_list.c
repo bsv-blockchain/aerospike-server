@@ -371,7 +371,7 @@ as_service_list_init(void)
 }
 
 void
-as_service_list_dynamic(const as_info_cmd_args* args)
+as_service_list_dynamic(as_info_cmd_args* args)
 {
 	const char* key = args->name;
 	cf_dyn_buf* db = args->db;
@@ -398,7 +398,7 @@ as_service_list_dynamic(const as_info_cmd_args* args)
 }
 
 void
-as_service_list_command(const as_info_cmd_args* args)
+as_service_list_command(as_info_cmd_args* args)
 {
 	const char* key = args->name;
 	const char* params = args->params;

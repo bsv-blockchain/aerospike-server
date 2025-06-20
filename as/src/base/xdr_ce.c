@@ -149,16 +149,16 @@ as_xdr_get_stats(const char* cmd, cf_dyn_buf* db)
 }
 
 void
-as_xdr_dc_state(const as_info_cmd_args* args)
+as_xdr_dc_state(as_info_cmd_args* args)
 {
 }
 
 void
-as_xdr_get_filter(const as_info_cmd_args* args)
+as_xdr_get_filter(as_info_cmd_args* args)
 {
 }
 
 void
-as_xdr_set_filter(const as_info_cmd_args* args)
+as_xdr_set_filter(as_info_cmd_args* args)
 {
 }
