@@ -1852,7 +1852,11 @@ cmd_features(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
-	args->fd_h->called_features = true;
+	// Verify not called from info_summary without a fd_h.
+	if (args->fd_h != NULL) {
+		args->fd_h->called_features = true;
+	}
+
 	as_info_warn_deprecated("'features' command is deprecated");
 
 	cf_dyn_buf_append_string(db,
