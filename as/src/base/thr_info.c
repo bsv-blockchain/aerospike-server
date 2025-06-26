@@ -375,7 +375,9 @@ static const as_info_cmd SPECS[] = {
 	{ .name="services",                .fn=as_service_list_dynamic,     .in_summary=true },
 	{ .name="partition-generation",    .fn=cmd_partition_generation,    .in_summary=true },
 
+	{ .name="alumni-clear-alt",        .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="alumni-clear-std",        .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
+	{ .name="alumni-tls-alt",          .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=true,  .perm=PERM_NONE           },
 	{ .name="alumni-tls-std",          .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=true,  .perm=PERM_NONE           },
 	{ .name="best-practices",          .fn=cmd_best_practices,          .client_only=false, .ee_only=false, .perm=PERM_NONE           },
 	{ .name="cluster-name",            .fn=cmd_cluster_name,            .client_only=false, .ee_only=false, .perm=PERM_NONE           },
