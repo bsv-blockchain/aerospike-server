@@ -3206,19 +3206,45 @@ cmd_sindex_create(as_info_cmd_args* args)
 	int exp_b64_len = sizeof(exp_b64);
 	const char* p_exp = NULL;
 	char indexdata_str[INDEXDATA_MAX_SZ] = { 0 };
+	int indexdata_len = sizeof(indexdata_str);
 	char ktype_str[KTYPE_MAX_SZ] = { 0 };
 	int ktype_len = sizeof(ktype_str);
 	char* p_ktype_str = NULL;
 	as_particle_type ktype;
 
-	rv = as_info_parameter_get(params, "type", ktype_str, &ktype_len);
-	rv = as_info_optional_param_is_ok(db, "type", ktype_str, rv);
+	info_param_result indexdata_rv = as_info_parameter_get(params, "indexdata",
+			indexdata_str, &indexdata_len);
+	indexdata_rv = as_info_optional_param_is_ok(db, "indexdata", indexdata_str,
+			indexdata_rv);
 
-	if (rv == INFO_PARAM_FAIL_REPLIED) {
+	if (indexdata_rv == INFO_PARAM_FAIL_REPLIED) {
 		return;
 	}
 
-	if (rv != INFO_PARAM_OK_NOT_FOUND) {
+	info_param_result type_rv = as_info_parameter_get(params, "type", ktype_str,
+			&ktype_len);
+	type_rv = as_info_optional_param_is_ok(db, "type", ktype_str, type_rv);
+
+	if (type_rv == INFO_PARAM_FAIL_REPLIED) {
+		return;
+	}
+
+	if (indexdata_rv == INFO_PARAM_OK_NOT_FOUND &&
+			type_rv == INFO_PARAM_OK_NOT_FOUND) {
+		cf_warning(AS_INFO, "sindex-create %s: both 'indexdata' and 'type' are missing",
+				index_name_str);
+		as_info_respond_error(db, AS_ERR_PARAMETER, "both 'indexdata' and 'type' are missing");
+		return;
+	}
+
+	if (indexdata_rv == INFO_PARAM_OK && type_rv == INFO_PARAM_OK) {
+		cf_warning(AS_INFO, "sindex-create %s: both 'indexdata' and 'type' are specified",
+				index_name_str);
+		as_info_respond_error(db, AS_ERR_PARAMETER, "both 'indexdata' and 'type' are specified");
+		return;
+	}
+
+	if (type_rv == INFO_PARAM_OK) {
 		// New protocol - type=<type>[;bin=<name>][;exp=<base64-exp>]
 		ktype = as_sindex_ktype_from_string(ktype_str);
 
@@ -3259,8 +3285,8 @@ cmd_sindex_create(as_info_cmd_args* args)
 			return;
 		}
 
-		if (bin_rv == INFO_PARAM_FAIL_NOT_FOUND &&
-				exp_rv == INFO_PARAM_FAIL_NOT_FOUND) {
+		if (bin_rv == INFO_PARAM_OK_NOT_FOUND &&
+				exp_rv == INFO_PARAM_OK_NOT_FOUND) {
 			cf_warning(AS_INFO, "sindex-create %s: both 'bin' and 'exp' are missing",
 					index_name_str);
 			as_info_respond_error(db, AS_ERR_PARAMETER, "both 'bin' and 'exp' are missing");
@@ -3285,14 +3311,6 @@ cmd_sindex_create(as_info_cmd_args* args)
 	}
 	else {
 		// Old protocol - indexdata=bin-name,keytype
-		int indexdata_len = sizeof(indexdata_str);
-
-		rv = as_info_parameter_get(params, "indexdata", indexdata_str,
-				&indexdata_len);
-
-		if (! as_info_required_param_is_ok(db, "indexdata", indexdata_str, rv)) {
-			return;
-		}
 
 		as_info_warn_deprecated("'indexdata' is deprecated - use 'bin' and 'type' instead");
 
