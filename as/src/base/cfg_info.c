@@ -749,7 +749,7 @@ cfg_set(const char* name, const char* cmd, cf_dyn_buf* db)
 
 		if (! as_xdr_set_config(cmd)) {
 			as_info_respond_error(db, AS_ERR_PARAMETER,
-					"invalid set-config parameter");
+					"invalid state or set-config parameter");
 			return;
 		}
 	}
