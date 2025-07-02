@@ -386,7 +386,10 @@ as_service_list_dynamic(as_info_cmd_args* args)
 		return;
 	}
 
-	if (strcmp(key, "services") == 0) {
+	if (strcmp(key, "service") == 0) {
+		as_info_warn_deprecated("'service' command is deprecated, use 'service-clear-std' instead");
+	}
+	else if (strcmp(key, "services") == 0) {
 		as_info_warn_deprecated("'services' command is deprecated, use 'peers-clear-std' instead");
 	}
 	else if (strcmp(key, "services-alternate") == 0) {
