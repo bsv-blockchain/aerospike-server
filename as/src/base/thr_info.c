@@ -1431,6 +1431,7 @@ cmd_connection(as_info_cmd_args* args)
 	cf_dyn_buf* db = args->db;
 	info_append_bool(db, "admin",
 			args->fd_h->poll_data_type == CF_POLL_DATA_ADMIN_IO);
+	cf_dyn_buf_chomp_char(db, ';');
 }
 
 static void
