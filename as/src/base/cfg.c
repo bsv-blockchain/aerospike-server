@@ -101,8 +101,6 @@ static void cfg_add_feature_key_file(const char* path);
 static void init_addr_list(cf_addr_list* addrs);
 static void add_addr(const char* name, cf_addr_list* addrs);
 static void add_tls_peer_name(const char* name, cf_serv_spec* spec);
-static void copy_addrs(const cf_addr_list* from, cf_addr_list* to);
-static void default_addrs(cf_addr_list* one, cf_addr_list* two);
 static void bind_to_access(const cf_serv_spec* from, cf_addr_list* to);
 static void cfg_add_addr_bind(const char* name, cf_serv_spec* spec);
 static void cfg_add_addr_std(const char* name, cf_serv_spec* spec);
@@ -4539,11 +4537,6 @@ as_config_post_process(as_config* c, const char* config_file)
 		bind_to_access(&g_config.tls_service, &g_access.tls_service.addrs);
 	}
 
-	// By default, use non-TLS access addresses also for TLS - and vice versa.
-
-	default_addrs(&g_access.service.addrs, &g_access.tls_service.addrs);
-	default_addrs(&g_access.alt_service.addrs, &g_access.alt_tls_service.addrs);
-
 	cf_serv_cfg_init(&g_service_bind);
 
 	// Client service bind addresses.
@@ -4977,28 +4970,6 @@ add_tls_peer_name(const char* name, cf_serv_spec* spec)
 
 	spec->tls_peer_names[n] = cf_strdup(name);
 	++spec->n_tls_peer_names;
-}
-
-static void
-copy_addrs(const cf_addr_list* from, cf_addr_list* to)
-{
-	for (uint32_t i = 0; i < from->n_addrs; ++i) {
-		to->addrs[i] = from->addrs[i];
-	}
-
-	to->n_addrs = from->n_addrs;
-}
-
-static void
-default_addrs(cf_addr_list* one, cf_addr_list* two)
-{
-	if (one->n_addrs == 0) {
-		copy_addrs(two, one);
-	}
-
-	if (two->n_addrs == 0) {
-		copy_addrs(one, two);
-	}
 }
 
 static void
