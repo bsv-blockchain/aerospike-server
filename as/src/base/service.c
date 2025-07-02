@@ -96,7 +96,9 @@ as_service_access g_access = {
 	.service = { .addrs = { .n_addrs = 0 }, .port = 0 },
 	.alt_service = { .addrs = { .n_addrs = 0 }, .port = 0 },
 	.tls_service = { .addrs = { .n_addrs = 0 }, .port = 0 },
-	.alt_tls_service = { .addrs = { .n_addrs = 0 }, .port = 0 }
+	.alt_tls_service = { .addrs = { .n_addrs = 0 }, .port = 0 },
+	.admin = { .addrs = { .n_addrs = 0 }, .port = 0 },
+	.tls_admin = { .addrs = { .n_addrs = 0 }, .port = 0 }
 };
 
 cf_serv_cfg g_service_bind = { .n_cfgs = 0 };
@@ -175,11 +177,11 @@ static void ua_increment_count(cf_shash* uah, const user_agent_key* key);
 // Inlines & macros.
 //
 
-static inline as_file_handle* 
+static inline as_file_handle*
 init_file_handle(cf_socket* sock, cf_sock_addr* caddr, cf_poll_data_type type)
 {
 	as_file_handle* fd_h = cf_rc_alloc(sizeof(as_file_handle));
-	
+
 	*fd_h = (as_file_handle) {
 		.poll_data_type = type,
 		.last_used = cf_getns(),
@@ -575,7 +577,7 @@ accept_service_connection(cf_sock_cfg* cfg, cf_socket* csock,
 	}
 
 	// Ref for epoll instance.
-	as_file_handle* fd_h = init_file_handle(csock, caddr, 
+	as_file_handle* fd_h = init_file_handle(csock, caddr,
 			CF_POLL_DATA_CLIENT_IO);
 
 	cf_rc_reserve(fd_h); // ref for reaper
@@ -625,7 +627,7 @@ accept_admin_connection(cf_sock_cfg* cfg, cf_socket* csock, cf_sock_addr* caddr)
 	}
 
 	// Ref for epoll instance.
-	as_file_handle* fd_h = init_file_handle(csock, caddr, 
+	as_file_handle* fd_h = init_file_handle(csock, caddr,
 			CF_POLL_DATA_ADMIN_IO);
 
 	assign_admin_socket(fd_h); // arms (EPOLLIN)
@@ -796,7 +798,7 @@ run_service(void* udata)
 			if (! handle_client_io_event(fd_h, mask, events_ns, "service")) {
 				continue;
 			}
-			
+
 			// Note that epoll cannot trigger again for this file handle during
 			// the transaction. We'll rearm at the end of the transaction.
 			start_transaction(fd_h);
@@ -843,7 +845,7 @@ run_admin(void* udata)
 }
 
 static bool
-handle_client_io_event(as_file_handle* fd_h, uint32_t mask, uint64_t events_ns, 
+handle_client_io_event(as_file_handle* fd_h, uint32_t mask, uint64_t events_ns,
 		const char* which)
 {
 	if ((mask & (EPOLLRDHUP | EPOLLERR | EPOLLHUP)) != 0) {

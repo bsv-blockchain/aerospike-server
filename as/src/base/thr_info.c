@@ -194,6 +194,7 @@ static void cmd_build_time(as_info_cmd_args* args);
 static void cmd_cluster_name(as_info_cmd_args* args);
 static void cmd_cluster_stable(as_info_cmd_args* args);
 static void cmd_compatibility_id(as_info_cmd_args* args);
+static void cmd_connection(as_info_cmd_args* args);
 static void cmd_debug_record(as_info_cmd_args* args);
 static void cmd_debug_record_meta(as_info_cmd_args* args);
 static void cmd_digests(as_info_cmd_args* args);
@@ -375,7 +376,8 @@ static const as_info_cmd SPECS[] = {
 	{ .name="services",                .fn=as_service_list_dynamic,     .in_summary=true },
 	{ .name="partition-generation",    .fn=cmd_partition_generation,    .in_summary=true },
 
-	{ .name="alumni-clear-alt",        .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
+	{ .name="admin-clear-std",         .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
+	{ .name="admin-tls-std",           .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="alumni-clear-std",        .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="alumni-tls-alt",          .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=true,  .perm=PERM_NONE           },
 	{ .name="alumni-tls-std",          .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=true,  .perm=PERM_NONE           },
@@ -384,6 +386,7 @@ static const as_info_cmd SPECS[] = {
 	{ .name="cluster-stable",          .fn=cmd_cluster_stable,          .client_only=false, .ee_only=false, .perm=PERM_NONE           },
 	{ .name="config-get",              .fn=as_cfg_info_cmd_get_config,  .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="config-set",              .fn=as_cfg_info_cmd_set_config,  .client_only=true,  .ee_only=false, .perm=PERM_SET_CONFIG     },
+	{ .name="connection",              .fn=cmd_connection,              .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="debug-record",            .fn=cmd_debug_record,            .client_only=false, .ee_only=false, .perm=PERM_RECORD_INFO    },
 	{ .name="debug-record-meta",       .fn=cmd_debug_record_meta,       .client_only=false, .ee_only=false, .perm=PERM_RECORD_INFO    },
 	{ .name="digests",                 .fn=cmd_digests,                 .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
@@ -1420,6 +1423,14 @@ cmd_compatibility_id(as_info_cmd_args* args)
 	cf_dyn_buf* db = args->db;
 
 	cf_dyn_buf_append_uint32(db, AS_EXCHANGE_COMPATIBILITY_ID);
+}
+
+static void
+cmd_connection(as_info_cmd_args* args)
+{
+	cf_dyn_buf* db = args->db;
+	info_append_bool(db, "admin",
+			args->fd_h->poll_data_type == CF_POLL_DATA_ADMIN_IO);
 }
 
 static void

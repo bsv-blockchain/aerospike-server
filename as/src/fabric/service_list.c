@@ -124,6 +124,10 @@ typedef struct peer_s {
 	char*		clear_alt;		// goes into "peers-clear-alt"
 	char*		tls_alt;		// goes into "peers-tls-alt"
 	char*		tls_name;		// peer's TLS name
+
+	char*		admin_clear_std;// goes into "admin-clear-std"
+	char*		admin_tls_std;	// goes into "admin-tls-std"
+	char*		admin_tls_name;	// admin TLS name, only for dump purpose
 } peer_t;
 
 // Maps the given peer_t to a field in the peer_t.
@@ -227,6 +231,8 @@ static char** proj_tls_std(peer_t* p);
 static char** proj_clear_alt(peer_t* p);
 static char** proj_tls_alt(peer_t* p);
 static char** proj_tls_name(peer_t* p);
+static char** proj_admin_clear_std(peer_t* p);
+static char** proj_admin_tls_std(peer_t* p);
 
 static peer_t* create_peer(cf_node node);
 static peer_t* find_peer(cf_node node);
@@ -301,13 +307,16 @@ static const peer_val_t PEER_VALS[] = {
 };
 
 static const local_val_t LOCAL_VALS[] = {
-	{ "service-clear-std",	proj_clear_std	},
-	{ "service-clear-alt",	proj_clear_alt	},
-	{ "service-tls-std",	proj_tls_std	},
-	{ "service-tls-alt",	proj_tls_alt	},
-	{ "service",			proj_serv		}
+	{ "service-clear-std",	proj_clear_std		},
+	{ "service-clear-alt",	proj_clear_alt		},
+	{ "service-tls-std",	proj_tls_std		},
+	{ "service-tls-alt",	proj_tls_alt		},
+	{ "service",			proj_serv			},
+	{ "admin-clear-std",	proj_admin_clear_std},
+	{ "admin-tls-std",		proj_admin_tls_std	},
 };
 
+// Admin port fields are not exchanged with other peers.
 static const field_proj_t FIELD_PROJS[] = {
 	{ FIELD_CLEAR_STD,	proj_clear_std	},
 	{ FIELD_CLEAR_ALT,	proj_clear_alt	},
@@ -500,6 +509,18 @@ proj_tls_name(peer_t* p)
 	return &p->tls_name;
 }
 
+static char**
+proj_admin_clear_std(peer_t* p)
+{
+	return &p->admin_clear_std;
+}
+
+static char**
+proj_admin_tls_std(peer_t* p)
+{
+	return &p->admin_tls_std;
+}
+
 static peer_t*
 create_peer(cf_node node)
 {
@@ -522,6 +543,10 @@ create_peer(cf_node node)
 	p->clear_alt = cf_strdup("");
 	p->tls_alt = cf_strdup("");
 	p->tls_name = cf_strdup("");
+
+	p->admin_clear_std = cf_strdup("");
+	p->admin_tls_std = cf_strdup("");
+	p->admin_tls_name = cf_strdup("");
 
 	int32_t res = cf_shash_put_unique(g_peers, &node, &p);
 
@@ -558,19 +583,23 @@ dump_peer(cf_node node, const peer_t* p)
 	cf_detail(AS_SERVICE_LIST, "--------------------- peer change %016lx",
 			node);
 
-	cf_detail(AS_SERVICE_LIST, "present       %d", (int32_t)p->present);
-	cf_detail(AS_SERVICE_LIST, "got_update    %d", (int32_t)p->got_update);
-	cf_detail(AS_SERVICE_LIST, "got_ack       %d", (int32_t)p->got_ack);
-	cf_detail(AS_SERVICE_LIST, "retrans_at_ms %d",
+	cf_detail(AS_SERVICE_LIST, "present         %d", (int32_t)p->present);
+	cf_detail(AS_SERVICE_LIST, "got_update      %d", (int32_t)p->got_update);
+	cf_detail(AS_SERVICE_LIST, "got_ack         %d", (int32_t)p->got_ack);
+	cf_detail(AS_SERVICE_LIST, "retrans_at_ms   %d",
 			(int32_t)(p->retrans_at_ms % 1000000));
-	cf_detail(AS_SERVICE_LIST, "in_gen        %lu", p->in_gen);
-	cf_detail(AS_SERVICE_LIST, "serv          %s", p->serv);
-	cf_detail(AS_SERVICE_LIST, "serv_alt      %s", p->serv_alt);
-	cf_detail(AS_SERVICE_LIST, "clear_std     %s", p->clear_std);
-	cf_detail(AS_SERVICE_LIST, "tls_std       %s", p->tls_std);
-	cf_detail(AS_SERVICE_LIST, "clear_alt     %s", p->clear_alt);
-	cf_detail(AS_SERVICE_LIST, "tls_alt       %s", p->tls_alt);
-	cf_detail(AS_SERVICE_LIST, "tls_name      %s", p->tls_name);
+	cf_detail(AS_SERVICE_LIST, "in_gen          %lu", p->in_gen);
+	cf_detail(AS_SERVICE_LIST, "serv            %s", p->serv);
+	cf_detail(AS_SERVICE_LIST, "serv_alt        %s", p->serv_alt);
+	cf_detail(AS_SERVICE_LIST, "clear_std       %s", p->clear_std);
+	cf_detail(AS_SERVICE_LIST, "tls_std         %s", p->tls_std);
+	cf_detail(AS_SERVICE_LIST, "clear_alt       %s", p->clear_alt);
+	cf_detail(AS_SERVICE_LIST, "tls_alt         %s", p->tls_alt);
+	cf_detail(AS_SERVICE_LIST, "tls_name        %s", p->tls_name);
+
+	cf_detail(AS_SERVICE_LIST, "admin_clear_std %s", p->admin_clear_std);
+	cf_detail(AS_SERVICE_LIST, "admin_tls_std   %s", p->admin_tls_std);
+	cf_detail(AS_SERVICE_LIST, "admin_tls_name  %s", p->admin_tls_name);
 }
 
 static void
@@ -1145,6 +1174,9 @@ populate_local(void)
 	g_local.tls_std = print_list(&g_access.tls_service, 0, ',', false);
 	g_local.clear_alt = print_list(&g_access.alt_service, 0, ',', false);
 	g_local.tls_alt = print_list(&g_access.alt_tls_service, 0, ',', false);
+	g_local.admin_clear_std = print_list(&g_access.admin, 0, ',', false);
+	g_local.admin_tls_std = print_list(&g_access.tls_admin, 0, ',', false);
+
 
 	// Alternate lists default to no addresses.
 
@@ -1181,6 +1213,16 @@ populate_local(void)
 		g_local.tls_std = print_list(&endp, 0, ',', false);
 	}
 
+	if (g_local.admin_clear_std == NULL) {
+		endp.port = g_config.admin.bind_port;
+		g_local.admin_clear_std = print_list(&endp, 0, ',', false);
+	}
+
+	if (g_local.admin_tls_std == NULL) {
+		endp.port = g_config.tls_admin.bind_port;
+		g_local.admin_tls_std = print_list(&endp, 0, ',', false);
+	}
+
 	free_addrs(&endp.addrs);
 
 	// Take care of unused (port == 0) standard lists, which are
@@ -1198,13 +1240,21 @@ populate_local(void)
 		g_local.tls_std = "";
 	}
 
+	if (g_local.admin_clear_std == NULL) {
+		g_local.admin_clear_std = "";
+	}
+
+	if (g_local.admin_tls_std == NULL) {
+		g_local.admin_tls_std = "";
+	}
+
 	// Finally, the TLS name.
 
-	g_local.tls_name = g_config.tls_service.tls_our_name;
+	g_local.tls_name = g_config.tls_service.tls_our_name != NULL ?
+			g_config.tls_service.tls_our_name : "";
 
-	if (g_local.tls_name == NULL) {
-		g_local.tls_name = "";
-	}
+	g_local.admin_tls_name = g_config.tls_admin.tls_our_name ?
+			g_config.tls_admin.tls_our_name : "";
 
 	// Populate info values from g_local.
 

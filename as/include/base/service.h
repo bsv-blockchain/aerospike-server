@@ -55,6 +55,8 @@ typedef struct as_service_access_s {
 	as_service_endpoint alt_service;
 	as_service_endpoint tls_service;
 	as_service_endpoint alt_tls_service;
+	as_service_endpoint admin;
+	as_service_endpoint tls_admin;
 } as_service_access;
 
 #define MAX_SERVICE_THREADS 4096

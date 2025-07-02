@@ -2681,7 +2681,7 @@ as_config_init(const char* config_file)
 		case NETWORK_ADMIN:
 			switch (cfg_find_tok(line.name_tok, NETWORK_ADMIN_OPTS, NUM_NETWORK_ADMIN_OPTS)) {
 			case CASE_NETWORK_ADMIN_ADDRESS:
-				cfg_add_addr_std(line.val_tok_1, &c->admin);
+				cfg_add_addr_bind(line.val_tok_1, &c->admin);
 				break;
 			case CASE_NETWORK_ADMIN_DISABLE_LOCALHOST:
 				c->admin_localhost_disabled = cfg_bool(&line);
@@ -4557,6 +4557,18 @@ as_config_post_process(as_config* c, const char* config_file)
 
 	if (g_service_bind.n_cfgs == 0) {
 		cf_crash_nostack(AS_CFG, "no service ports configured");
+	}
+
+	// Use bind addresses as access addresses for admin port.
+
+	if (g_config.admin.bind_port != 0) {
+		g_access.admin.port = g_config.admin.bind_port;
+		bind_to_access(&g_config.admin, &g_access.admin.addrs);
+	}
+
+	if (g_config.tls_admin.bind_port != 0) {
+		g_access.tls_admin.port = g_config.tls_admin.bind_port;
+		bind_to_access(&g_config.tls_admin, &g_access.tls_admin.addrs);
 	}
 
 	cf_serv_cfg_init(&g_admin_bind);
