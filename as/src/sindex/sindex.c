@@ -1247,8 +1247,9 @@ parse_exp(const char* exp_b64, exp_def* e_def_r)
 		return false;
 	}
 
-	if ((exp->flags & AS_EXP_HAS_NON_DIGEST_META) != 0) {
-		cf_warning(AS_SINDEX, "SINDEX CREATE: invalid expression %s - has non-digest meta",
+	if ((exp->flags & AS_EXP_HAS_NON_DIGEST_META) != 0 ||
+			(exp->flags & AS_EXP_HAS_REC_KEY) != 0) {
+		cf_warning(AS_SINDEX, "SINDEX CREATE: invalid expression %s - has non-digest metadata or key",
 				exp_b64);
 		as_exp_destroy(exp);
 		cf_free(buf);

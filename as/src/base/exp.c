@@ -2062,6 +2062,8 @@ build_rec_key(build_args* args)
 
 	args->entry = build_get_entry((result_type)type64);
 
+	args->exp->flags |= AS_EXP_HAS_REC_KEY;
+
 	return true;
 }
 

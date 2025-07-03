@@ -41,6 +41,7 @@
 
 #define AS_EXP_HAS_DIGEST_MOD      (1 << 0)
 #define AS_EXP_HAS_NON_DIGEST_META (1 << 1)
+#define AS_EXP_HAS_REC_KEY         (1 << 2)
 
 typedef struct as_exp_s {
 	uint8_t expected_type;
