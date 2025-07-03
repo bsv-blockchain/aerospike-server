@@ -115,3 +115,9 @@ as_mrt_monitor_n_active(const as_namespace* ns)
 {
 	return 0;
 }
+
+uint32_t
+as_mrt_monitor_n_present(const as_namespace* ns)
+{
+	return 0;
+}
