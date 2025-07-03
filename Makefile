@@ -130,7 +130,7 @@ rpm deb src: server
 	$(MAKE) -C pkg/$@ EDITION=$(EDITION)
 
 $(VERSION_SRC):	targetdirs
-	build/gen_version $(EDITION) $(OS) $(ARCH) $(EE_SHA) > $(VERSION_SRC)
+	build/gen_version $(EDITION) $(OS) $(ARCH) $(EE_SHA) $(FIPS_SHA) > $(VERSION_SRC)
 
 $(VERSION_OBJ):	$(VERSION_SRC)
 	$(CC) -o $@ -c $<

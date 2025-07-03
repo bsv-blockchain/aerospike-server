@@ -4,6 +4,7 @@ EDITION=${1:-community}
 BUILD_OS=${2:-unknown}
 ARCH=${3:-unknown}
 EE_SHA=$4
+FIPS_SHA=$5
 
 FEATURES=""
 VERSION="$(git describe --abbrev=7)"
@@ -22,7 +23,7 @@ telemetry() {
 
     # Construct the POST request
     local TELEMETRY_VERSION="1"
-    local DATA="arch=${ARCH}&build_os=${BUILD_OS}&version=${VERSION}&edition=${EDITION}&ce_sha=${CE_SHA}&ee_sha=${EE_SHA}"
+    local DATA="arch=${ARCH}&build_os=${BUILD_OS}&version=${VERSION}&edition=${EDITION}&ce_sha=${CE_SHA}&ee_sha=${EE_SHA}&fips_sha=${FIPS_SHA}"
     local AEROSPIKE_BASE_URL="https://build.aerospike.com/v${TELEMETRY_VERSION}/build/asdb"
 
     curl --connect-timeout 3 -X POST "${AEROSPIKE_BASE_URL}?${DATA}"
@@ -44,5 +45,6 @@ const char aerospike_build_os[] = \"${BUILD_OS}\";
 const char aerospike_build_arch[] = \"${ARCH}\";
 const char aerospike_build_sha[] = \"${CE_SHA}\";
 const char aerospike_build_ee_sha[] = \"${EE_SHA}\";
+const char aerospike_build_fips_sha[] = \"${FIPS_SHA}\";
 const char aerospike_build_features[] = \"${FEATURES}\";
 "
