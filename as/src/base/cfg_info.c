@@ -159,7 +159,7 @@ as_cfg_info_cmd_get_config(as_info_cmd_args* args)
 	if (strcmp(args->name, "config-get") == 0) {
 		as_info_warn_deprecated("'config-get' command is deprecated, use 'get-config' instead");
 	}
-	
+
 	if (params && *params != 0) {
 		cf_debug(AS_INFO, "get-config command received: params %s", params);
 
@@ -401,6 +401,7 @@ cfg_get_namespace(const as_namespace* ns, cf_dyn_buf* db)
 {
 	info_append_uint32(db, "active-rack", ns->cfg_active_rack);
 	info_append_bool(db, "allow-ttl-without-nsup", ns->allow_ttl_without_nsup);
+	info_append_bool(db, "apply-ttl-reductions", ns->apply_ttl_reductions);
 	info_append_bool(db, "auto-revive", ns->auto_revive);
 	info_append_uint32(db, "background-query-max-rps", ns->background_query_max_rps);
 
@@ -1285,6 +1286,22 @@ cfg_set_namespace(const char* cmd, as_namespace* ns)
 			cf_info(AS_INFO, "Changing value of allow-ttl-without-nsup of ns %s from %s to %s",
 					ns->name, bool_val[ns->allow_ttl_without_nsup], v);
 			ns->allow_ttl_without_nsup = false;
+		}
+		else {
+			return false;
+		}
+	}
+	else if (as_info_parameter_get(cmd, "apply-ttl-reductions", v,
+			&v_len) == 0) {
+		if (strcmp(v, "true") == 0) {
+			cf_info(AS_INFO, "Changing value of apply-ttl-reductions of ns %s from %s to %s",
+					ns->name, bool_val[ns->apply_ttl_reductions], v);
+			ns->apply_ttl_reductions = true;
+		}
+		else if (strcmp(v, "false") == 0) {
+			cf_info(AS_INFO, "Changing value of apply-ttl-reductions of ns %s from %s to %s",
+					ns->name, bool_val[ns->apply_ttl_reductions], v);
+			ns->apply_ttl_reductions = false;
 		}
 		else {
 			return false;
