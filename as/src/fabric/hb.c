@@ -6066,6 +6066,7 @@ mesh_seeds_inactive_add_to_connect(cf_vector* seeds_p,
 			WARNING(
 				"skipping connecting to %s:%d - not enough memory allocated",
 				seed->seed_host_name, seed->seed_port);
+			MESH_UNLOCK();
 			return;
 		}
 
