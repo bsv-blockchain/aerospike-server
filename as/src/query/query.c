@@ -1965,7 +1965,7 @@ basic_query_get_bin_names(const as_transaction* tr, as_namespace* ns,
 		const uint8_t* data = f->data;
 		uint32_t n_bins = *data++; // only <= 255 bins (ops do more)
 
-		as_info_warn_deprecated("queries with a list of bin names is deprecated, use a list of read bin ops instead.");
+		as_info_warn_deprecated("queries using the deprecated list option for bin names - upgrade your client");
 
 		*bin_names = cf_vector_create(AS_BIN_NAME_MAX_SZ, n_bins, 0);
 
@@ -2006,7 +2006,7 @@ basic_query_get_bin_names(const as_transaction* tr, as_namespace* ns,
 
 		if (op->op != AS_MSG_OP_READ) {
 			char msg[100];
-			snprintf(msg, sizeof(msg), "queries should only provide read bin ops, not %u",
+			snprintf(msg, sizeof(msg), "queries should only provide read bin ops - not %u",
 				op->op);
 			as_info_warn_deprecated(msg);
 		}

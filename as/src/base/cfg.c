@@ -2239,7 +2239,7 @@ as_config_init(const char* config_file)
 					c->auto_pin = CF_TOPO_AUTO_PIN_NUMA;
 					break;
 				case CASE_SERVICE_AUTO_PIN_ADQ:
-					as_info_warn_deprecated("'auto-pin-adq' is deprecated");
+					as_info_warn_deprecated("'auto-pin-adq' configuration parameter is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 					c->auto_pin = CF_TOPO_AUTO_PIN_ADQ;
 					break;
 				case CASE_NOT_FOUND:
@@ -2287,7 +2287,7 @@ as_config_init(const char* config_file)
 				break;
 			case CASE_SERVICE_GROUP:
 				{
-					as_info_warn_deprecated("'group' is deprecated");
+					as_info_warn_deprecated("'group' configuration parameter is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 
 					struct group* grp;
 					if (NULL == (grp = getgrnam(line.val_tok_1))) {
@@ -2341,14 +2341,14 @@ as_config_init(const char* config_file)
 				cf_os_use_group_perms(cfg_bool(&line));
 				break;
 			case CASE_SERVICE_PIDFILE:
-				as_info_warn_deprecated("'pidfile' is deprecated");
+				as_info_warn_deprecated("'pidfile' configuration parameter is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 				c->pidfile = cfg_strdup_no_checks(&line);
 				break;
 			case CASE_SERVICE_POISON_ALLOCATIONS:
 				c->poison_allocations = cfg_bool(&line);
 				break;
 			case CASE_SERVICE_PROTO_FD_IDLE_MS:
-				as_info_warn_deprecated("'proto-fd-idle-ms' is deprecated");
+				as_info_warn_deprecated("'proto-fd-idle-ms' configuration parameter is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 				c->proto_fd_idle_ms = cfg_u32_no_checks(&line);
 				break;
 			case CASE_SERVICE_PROTO_FD_MAX:
@@ -2406,7 +2406,7 @@ as_config_init(const char* config_file)
 				break;
 			case CASE_SERVICE_USER:
 				{
-					as_info_warn_deprecated("'user' is deprecated");
+					as_info_warn_deprecated("'user' configuration parameter is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 
 					struct passwd* pwd;
 					if (NULL == (pwd = getpwnam(line.val_tok_1))) {
@@ -2417,27 +2417,27 @@ as_config_init(const char* config_file)
 				}
 				break;
 			case CASE_SERVICE_VAULT_CA:
-				as_info_warn_deprecated("'vault-ca' is deprecated, please use the Aerospike Secret Agent instead");
+				as_info_warn_deprecated("'vault-ca' configuration parameter is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 				cfg_enterprise_only(&line);
 				g_vault_cfg.ca = cfg_strdup_no_checks(&line);
 				break;
 			case CASE_SERVICE_VAULT_NAMESPACE:
-				as_info_warn_deprecated("'vault-namespace' is deprecated, please use the Aerospike Secret Agent instead");
+				as_info_warn_deprecated("'vault-namespace' configuration parameter is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 				cfg_enterprise_only(&line);
 				g_vault_cfg.namespace = cfg_strdup_no_checks(&line);
 				break;
 			case CASE_SERVICE_VAULT_PATH:
-				as_info_warn_deprecated("'vault-path' is deprecated, please use the Aerospike Secret Agent instead");
+				as_info_warn_deprecated("'vault-path' configuration parameter is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 				cfg_enterprise_only(&line);
 				g_vault_cfg.path = cfg_strdup_no_checks(&line);
 				break;
 			case CASE_SERVICE_VAULT_TOKEN_FILE:
-				as_info_warn_deprecated("'vault-token-file' is deprecated, please use the Aerospike Secret Agent instead");
+				as_info_warn_deprecated("'vault-token-file' configuration parameter is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 				cfg_enterprise_only(&line);
 				g_vault_cfg.token_file = cfg_strdup_no_checks(&line);
 				break;
 			case CASE_SERVICE_VAULT_URL:
-				as_info_warn_deprecated("'vault-url' is deprecated, please use the Aerospike Secret Agent instead");
+				as_info_warn_deprecated("'vault-url' configuration parameter is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 				cfg_enterprise_only(&line);
 				g_vault_cfg.url = cfg_strdup_no_checks(&line);
 				break;
@@ -2721,7 +2721,7 @@ as_config_init(const char* config_file)
 		case NETWORK_HEARTBEAT:
 			switch (cfg_find_tok(line.name_tok, NETWORK_HEARTBEAT_OPTS, NUM_NETWORK_HEARTBEAT_OPTS)) {
 			case CASE_NETWORK_HEARTBEAT_ADDRESS:
-				as_info_warn_deprecated("'heartbeat-address' is deprecated");
+				as_info_warn_deprecated("'heartbeat.address' configuration parameter is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 				cfg_add_addr_bind(line.val_tok_1, &c->hb_serv_spec);
 				break;
 			case CASE_NETWORK_HEARTBEAT_CONNECT_TIMEOUT_MS:
@@ -2736,7 +2736,7 @@ as_config_init(const char* config_file)
 			case CASE_NETWORK_HEARTBEAT_MODE:
 				switch (cfg_find_tok(line.val_tok_1, NETWORK_HEARTBEAT_MODE_OPTS, NUM_NETWORK_HEARTBEAT_MODE_OPTS)) {
 				case CASE_NETWORK_HEARTBEAT_MODE_MULTICAST:
-					as_info_warn_deprecated("'multicast' is deprecated");
+					as_info_warn_deprecated("'multicast' for heartbeat 'mode' configuration is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 					c->hb_config.mode = AS_HB_MODE_MULTICAST;
 					break;
 				case CASE_NETWORK_HEARTBEAT_MODE_MESH:
@@ -5052,7 +5052,7 @@ cfg_mserv_config_from_addrs(cf_addr_list* addrs, cf_addr_list* bind_addrs,
 	};
 
 	if (bind_addrs->n_addrs == 0) {
-		as_info_warn_deprecated("'address' parameter defaulting to 'any' is deprecated, will require explicit configuration in future");
+		as_info_warn_deprecated("'address' configuration parameter defaulting to 'any' is deprecated - will require explicit configuration in future");
 		bind_addrs = &def_addrs;
 	}
 

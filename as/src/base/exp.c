@@ -1669,14 +1669,14 @@ build_math_vargs(build_args* args)
 static bool
 build_device_size(build_args* args)
 {
-	as_info_warn_deprecated("expression 'device_size' is deprecated, use 'record_size' instead");
+	as_info_warn_deprecated("'device_size' expression is deprecated - use 'record_size' instead");
 	return build_meta_default(args);
 }
 
 static bool
 build_memory_size(build_args* args)
 {
-	as_info_warn_deprecated("expression 'memory_size' is deprecated, use 'record_size' instead");
+	as_info_warn_deprecated("'memory_size' expression is deprecated - use 'record_size' instead");
 	return build_meta_default(args);
 }
 

@@ -237,22 +237,22 @@ blob_bytes_type_to_particle_type(as_bytes_type type)
 	case AS_BYTES_BLOB:
 		return AS_PARTICLE_TYPE_BLOB;
 	case AS_BYTES_JAVA:
-		as_info_warn_deprecated("AS_BYTES_JAVA is deprecated, use AS_BYTES_BLOB instead");
+		as_info_warn_deprecated("AS_BYTES_JAVA is deprecated - upgrade your client");
 		return AS_PARTICLE_TYPE_JAVA_BLOB;
 	case AS_BYTES_CSHARP:
-		as_info_warn_deprecated("AS_BYTES_CSHARP is deprecated, use AS_BYTES_BLOB instead");
+		as_info_warn_deprecated("AS_BYTES_CSHARP is deprecated - upgrade your client");
 		return AS_PARTICLE_TYPE_CSHARP_BLOB;
 	case AS_BYTES_PYTHON:
-		as_info_warn_deprecated("AS_BYTES_PYTHON is deprecated, use AS_BYTES_BLOB instead");
+		as_info_warn_deprecated("AS_BYTES_PYTHON is deprecated - upgrade your client");
 		return AS_PARTICLE_TYPE_PYTHON_BLOB;
 	case AS_BYTES_RUBY:
-		as_info_warn_deprecated("AS_BYTES_RUBY is deprecated, use AS_BYTES_BLOB instead");
+		as_info_warn_deprecated("AS_BYTES_RUBY is deprecated - upgrade your client");
 		return AS_PARTICLE_TYPE_RUBY_BLOB;
 	case AS_BYTES_PHP:
-		as_info_warn_deprecated("AS_BYTES_PHP is deprecated, use AS_BYTES_BLOB instead");
+		as_info_warn_deprecated("AS_BYTES_PHP is deprecated - upgrade your client");
 		return AS_PARTICLE_TYPE_PHP_BLOB;
 	case AS_BYTES_ERLANG:
-		as_info_warn_deprecated("AS_BYTES_ERLANG is deprecated, use AS_BYTES_BLOB instead");
+		as_info_warn_deprecated("AS_BYTES_ERLANG is deprecated - upgrade your client");
 		return AS_PARTICLE_TYPE_ERLANG_BLOB;
 	case AS_BYTES_VECTOR:
 		return AS_PARTICLE_TYPE_VECTOR;
@@ -276,22 +276,22 @@ blob_particle_type_to_bytes_type(as_particle_type type)
 	case AS_PARTICLE_TYPE_BLOB:
 		return AS_BYTES_BLOB;
 	case AS_PARTICLE_TYPE_JAVA_BLOB:
-		as_info_warn_deprecated("AS_PARTICLE_TYPE_JAVA_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_JAVA_BLOB is deprecated - upgrade your client");
 		return AS_BYTES_JAVA;
 	case AS_PARTICLE_TYPE_CSHARP_BLOB:
-		as_info_warn_deprecated("AS_PARTICLE_TYPE_CSHARP_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_CSHARP_BLOB is deprecated - upgrade your client");
 		return AS_BYTES_CSHARP;
 	case AS_PARTICLE_TYPE_PYTHON_BLOB:
-		as_info_warn_deprecated("AS_PARTICLE_TYPE_PYTHON_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_PYTHON_BLOB is deprecated - upgrade your client");
 		return AS_BYTES_PYTHON;
 	case AS_PARTICLE_TYPE_RUBY_BLOB:
-		as_info_warn_deprecated("AS_PARTICLE_TYPE_RUBY_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_RUBY_BLOB is deprecated - upgrade your client");
 		return AS_BYTES_RUBY;
 	case AS_PARTICLE_TYPE_PHP_BLOB:
-		as_info_warn_deprecated("AS_PARTICLE_TYPE_PHP_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_PHP_BLOB is deprecated - upgrade your client");
 		return AS_BYTES_PHP;
 	case AS_PARTICLE_TYPE_ERLANG_BLOB:
-		as_info_warn_deprecated("AS_PARTICLE_TYPE_ERLANG_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_ERLANG_BLOB is deprecated - upgrade your client");
 		return AS_BYTES_ERLANG;
 	case AS_PARTICLE_TYPE_VECTOR:
 		return AS_BYTES_VECTOR;

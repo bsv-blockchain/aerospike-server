@@ -1464,7 +1464,7 @@ cdt_process_state_init_from_vec(cdt_process_state *cdt_state,
 			return false;
 		}
 
-		as_info_warn_deprecated("the cdt parameter protocol using 16 bit param count is deprecated");
+		as_info_warn_deprecated("the cdt parameter protocol using 16 bit param count is deprecated - upgrade your client");
 
 		const uint16_t *type_ptr = (const uint16_t *)data;
 

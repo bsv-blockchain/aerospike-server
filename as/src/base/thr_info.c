@@ -321,7 +321,7 @@ as_info_param_get_aliases(const char* params, const char* aliases[],
 			if (select != aliases) {
 				char msg[256];
 
-				snprintf(msg, sizeof(msg), "info parameter '%s' is deprecated, use '%s' instead",
+				snprintf(msg, sizeof(msg), "info parameter '%s' is deprecated - use '%s' instead",
 					*select, *aliases);
 				as_info_warn_deprecated(msg);
 			}
@@ -1458,7 +1458,7 @@ cmd_digests(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
-	as_info_warn_deprecated("'digests' command is deprecated");
+	as_info_warn_deprecated("'digests' info command is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 	cf_dyn_buf_append_string(db, "RIPEMD160");
 }
 
@@ -1866,7 +1866,7 @@ cmd_features(as_info_cmd_args* args)
 		args->fd_h->called_features = true;
 	}
 
-	as_info_warn_deprecated("'features' command is deprecated");
+	as_info_warn_deprecated("'features' info command is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 
 	cf_dyn_buf_append_string(db,
 			"batch-any;batch-index;blob-bits;"
@@ -1932,7 +1932,7 @@ cmd_hb_addr(as_info_cmd_args* args)
 	as_hb_mode hb_mode;
 	char addr_port_str[1024];
 
-	as_info_warn_deprecated("'mesh' and 'mcast' commands are deprecated, use 'get-config' instead");
+	as_info_warn_deprecated("'mesh' and 'mcast' info commands are deprecated - use 'get-config' instead");
 
 	as_hb_info_listen_addr_get(&hb_mode, addr_port_str, sizeof(addr_port_str));
 
@@ -2487,7 +2487,7 @@ cmd_node(as_info_cmd_args* args)
 static void
 cmd_name(as_info_cmd_args* args)
 {
-	as_info_warn_deprecated("'name' command is deprecated, use 'node' instead");
+	as_info_warn_deprecated("'name' info command is deprecated - use 'node' instead");
 	cmd_node(args);
 }
 
@@ -2496,7 +2496,7 @@ cmd_objects(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
-	as_info_warn_deprecated("'objects' command is deprecated, use 'statistics' instead");
+	as_info_warn_deprecated("'objects' info command is deprecated - use 'statistics' instead");
 
 	uint64_t objects = 0;
 
@@ -2529,7 +2529,7 @@ cmd_partitions(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
-	as_info_warn_deprecated("'partitions' command is deprecated");
+	as_info_warn_deprecated("'partitions' info command is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 	cf_dyn_buf_append_uint32(db, AS_PARTITIONS);
 }
 
@@ -2836,7 +2836,7 @@ cmd_replicas_all(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
-	as_info_warn_deprecated("'replicas-all' command is deprecated, use 'replicas' instead");
+	as_info_warn_deprecated("'replicas-all' info command is deprecated - use 'replicas' instead or upgrade your client");
 	as_partition_get_replicas_all_str(db, false, 0);
 }
 
@@ -2845,7 +2845,7 @@ cmd_replicas_master(as_info_cmd_args* args)
 {
 	cf_dyn_buf* db = args->db;
 
-	as_info_warn_deprecated("'replicas-master' command is deprecated, use 'replicas' instead");
+	as_info_warn_deprecated("'replicas-master' info command is deprecated - use 'replicas' instead or upgrade your client");
 	as_partition_get_replicas_master_str(db);
 }
 
@@ -3037,7 +3037,7 @@ cmd_sindex(as_info_cmd_args* args)
 	// format w namespace & index name is:
 	//    prop1=val1;prop2=val2;...;propn=valn
 
-	as_info_warn_deprecated("'sindex' command is deprecated, use 'sindex-list' instead");
+	as_info_warn_deprecated("'sindex' info command is deprecated - use 'sindex-list' instead");
 
 	char* index_name = NULL;
 	as_namespace* ns = NULL;
@@ -3319,7 +3319,7 @@ cmd_sindex_create(as_info_cmd_args* args)
 	else {
 		// Old protocol - indexdata=bin-name,keytype
 
-		as_info_warn_deprecated("'indexdata' is deprecated - use 'bin' and 'type' instead");
+		as_info_warn_deprecated("'indexdata' parameter of 'sindex-create' info command is deprecated - use 'bin' and 'type' instead");
 
 		p_bin_name = indexdata_str;
 

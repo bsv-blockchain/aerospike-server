@@ -108,22 +108,22 @@ safe_particle_type(uint8_t type)
 	case AS_PARTICLE_TYPE_GEOJSON:
 		return (as_particle_type)type;
 	case AS_PARTICLE_TYPE_JAVA_BLOB:
-		as_info_warn_deprecated("AS_PARTICLE_TYPE_JAVA_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_JAVA_BLOB is deprecated - upgrade your client");
 		return (as_particle_type)type;
 	case AS_PARTICLE_TYPE_CSHARP_BLOB:
-		as_info_warn_deprecated("AS_PARTICLE_TYPE_CSHARP_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_CSHARP_BLOB is deprecated - upgrade your client");
 		return (as_particle_type)type;
 	case AS_PARTICLE_TYPE_PYTHON_BLOB:
-		as_info_warn_deprecated("AS_PARTICLE_TYPE_PYTHON_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_PYTHON_BLOB is deprecated - upgrade your client");
 		return (as_particle_type)type;
 	case AS_PARTICLE_TYPE_RUBY_BLOB:
-		as_info_warn_deprecated("AS_PARTICLE_TYPE_RUBY_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_RUBY_BLOB is deprecated - upgrade your client");
 		return (as_particle_type)type;
 	case AS_PARTICLE_TYPE_PHP_BLOB:
-		as_info_warn_deprecated("AS_PARTICLE_TYPE_PHP_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_PHP_BLOB is deprecated - upgrade your client");
 		return (as_particle_type)type;
 	case AS_PARTICLE_TYPE_ERLANG_BLOB:
-		as_info_warn_deprecated("AS_PARTICLE_TYPE_ERLANG_BLOB is deprecated, use AS_PARTICLE_TYPE_BLOB instead");
+		as_info_warn_deprecated("AS_PARTICLE_TYPE_ERLANG_BLOB is deprecated - upgrade your client");
 		return (as_particle_type)type;
 	// Note - AS_PARTICLE_TYPE_NULL is considered bad here.
 	default:

@@ -157,7 +157,7 @@ as_cfg_info_cmd_get_config(as_info_cmd_args* args)
 	cf_dyn_buf* db = args->db;
 
 	if (strcmp(args->name, "config-get") == 0) {
-		as_info_warn_deprecated("'config-get' command is deprecated, use 'get-config' instead");
+		as_info_warn_deprecated("'config-get' info command is deprecated - use 'get-config' instead");
 	}
 
 	if (params && *params != 0) {
@@ -196,7 +196,7 @@ as_cfg_info_cmd_set_config(as_info_cmd_args* args)
 	cf_dyn_buf* db = args->db;
 
 	if (strcmp(name, "config-set") == 0) {
-		as_info_warn_deprecated("'config-set' command is deprecated, use 'set-config' instead");
+		as_info_warn_deprecated("'config-set' info command is deprecated - use 'set-config' instead");
 	}
 
 	cf_mutex_lock(&g_set_cfg_lock);
