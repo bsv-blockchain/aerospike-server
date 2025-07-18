@@ -162,11 +162,10 @@ dup_res_setup_rw(rw_request* rw, as_transaction* tr, dup_res_done_cb dup_res_cb,
 void
 dup_res_handle_request(cf_node node, msg* m)
 {
-	cf_digest* keyd;
+	cf_digest* keyd = msg_get_digest(m, RW_FIELD_DIGEST);
 
-	if (msg_get_buf(m, RW_FIELD_DIGEST, (uint8_t**)&keyd, NULL,
-			MSG_GET_DIRECT) != 0) {
-		cf_warning(AS_RW, "dup-res handler: no digest");
+	if (keyd == NULL) {
+		cf_warning(AS_RW, "dup-res handler: no or bad digest");
 		send_dup_res_ack(node, m, AS_ERR_UNKNOWN, 0);
 		return;
 	}
@@ -256,17 +255,16 @@ dup_res_handle_ack(cf_node node, msg* m)
 		return;
 	}
 
-	cf_digest* keyd;
+	cf_digest* keyd = msg_get_digest(m, RW_FIELD_DIGEST);
 
-	if (msg_get_buf(m, RW_FIELD_DIGEST, (uint8_t**)&keyd, NULL,
-			MSG_GET_DIRECT) != 0) {
+	if (keyd == NULL) {
 		uint8_t* pickle;
 		size_t pickle_sz;
 
 		if (msg_get_buf(m, RW_FIELD_RECORD, &pickle, &pickle_sz,
 				MSG_GET_DIRECT) != 0 ||
 						pickle_sz < sizeof(as_flat_record)) {
-			cf_warning(AS_RW, "dup-res ack: no or bad digest");
+			cf_warning(AS_RW, "dup-res ack: no or bad digest or record");
 			as_fabric_msg_put(m);
 			return;
 		}

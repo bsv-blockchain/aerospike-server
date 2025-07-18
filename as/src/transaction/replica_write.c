@@ -324,11 +324,10 @@ repl_write_handle_ack(cf_node node, msg* m)
 		return;
 	}
 
-	cf_digest* keyd;
+	cf_digest* keyd = msg_get_digest(m, RW_FIELD_DIGEST);
 
-	if (msg_get_buf(m, RW_FIELD_DIGEST, (uint8_t**)&keyd, NULL,
-			MSG_GET_DIRECT) != 0) {
-		cf_warning(AS_RW, "repl-write ack: no digest");
+	if (keyd == NULL) {
+		cf_warning(AS_RW, "repl-write ack: no or bad digest");
 		as_fabric_msg_put(m);
 		return;
 	}

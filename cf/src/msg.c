@@ -909,6 +909,20 @@ msg_get_buf(const msg *m, int field_id, uint8_t **buf_r, size_t *sz_r,
 	return 0;
 }
 
+cf_digest *
+msg_get_digest(const msg *m, int field_id)
+{
+	size_t sz = 0;
+	cf_digest *keyd = NULL;
+
+	if (msg_get_buf(m, field_id, (uint8_t **)&keyd, &sz, MSG_GET_DIRECT) == 0 &&
+			sz == sizeof(cf_digest)) {
+		return keyd;
+	}
+
+	return NULL;
+}
+
 int
 msg_get_uint32_array(const msg *m, int field_id, uint32_t index,
 		uint32_t *val_r)

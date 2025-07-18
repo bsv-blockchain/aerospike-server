@@ -29,6 +29,7 @@
 #include <sys/socket.h>
 
 #include "citrusleaf/alloc.h"
+#include "citrusleaf/cf_digest.h"
 
 #include "dynbuf.h"
 #include "vector.h"
@@ -214,6 +215,7 @@ int msg_get_uint32(const msg *m, int field_id, uint32_t *val_r);
 int msg_get_uint64(const msg *m, int field_id, uint64_t *val_r);
 int msg_get_str(const msg *m, int field_id, char **str_r, msg_get_type type);
 int msg_get_buf(const msg *m, int field_id, uint8_t **buf_r, size_t *sz_r, msg_get_type type);
+cf_digest* msg_get_digest(const msg *m, int field_id);
 
 int msg_get_uint32_array(const msg *m, int field_id, uint32_t idx, uint32_t *val_r);
 int msg_get_uint64_array_count(const msg *m, int field_id, uint32_t *count_r);
