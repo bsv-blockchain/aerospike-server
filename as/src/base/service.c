@@ -152,7 +152,7 @@ static void schedule_redistribution(void);
 static void* run_service(void* udata);
 static void* run_admin(void* udata);
 
-static bool handle_client_io_event(as_file_handle* fd_h, uint32_t mask, uint64_t events_ns, const char* which);
+static bool handle_client_io_event(as_file_handle* fd_h, uint32_t mask, uint64_t events_ns);
 static void stop_service(thread_ctx* ctx);
 static void delete_file_handle(as_file_handle* fd_h);
 static void release_file_handle(as_file_handle* fd_h);
@@ -795,7 +795,7 @@ run_service(void* udata)
 
 			as_file_handle* fd_h = data;
 
-			if (! handle_client_io_event(fd_h, mask, events_ns, "service")) {
+			if (! handle_client_io_event(fd_h, mask, events_ns)) {
 				continue;
 			}
 
@@ -822,7 +822,7 @@ run_admin(void* udata)
 			uint32_t mask = events[i].events;
 			as_file_handle* fd_h = events[i].data;
 
-			if (! handle_client_io_event(fd_h, mask, events_ns, "admin")) {
+			if (! handle_client_io_event(fd_h, mask, events_ns)) {
 				continue;
 			}
 
@@ -845,8 +845,7 @@ run_admin(void* udata)
 }
 
 static bool
-handle_client_io_event(as_file_handle* fd_h, uint32_t mask, uint64_t events_ns,
-		const char* which)
+handle_client_io_event(as_file_handle* fd_h, uint32_t mask, uint64_t events_ns)
 {
 	if ((mask & (EPOLLRDHUP | EPOLLERR | EPOLLHUP)) != 0) {
 		delete_file_handle(fd_h);
@@ -862,9 +861,7 @@ handle_client_io_event(as_file_handle* fd_h, uint32_t mask, uint64_t events_ns,
 		}
 
 		if (tls_ev == 0) {
-			char ctx[32];
-			snprintf(ctx, sizeof(ctx), "%s handshake", which);
-			tls_socket_must_not_have_data(&fd_h->sock, ctx);
+			tls_socket_must_not_have_data(&fd_h->sock, "client handshake");
 			tls_ev = EPOLLIN;
 		}
 
@@ -883,10 +880,7 @@ handle_client_io_event(as_file_handle* fd_h, uint32_t mask, uint64_t events_ns,
 		return false;
 	}
 
-	char ctx[32];
-	snprintf(ctx, sizeof(ctx), "full %s read", which);
-
-	tls_socket_must_not_have_data(&fd_h->sock, ctx);
+	tls_socket_must_not_have_data(&fd_h->sock, "full client read");
 
 	if (fd_h->proto_unread != 0) {
 		rearm(fd_h, EPOLLIN);
