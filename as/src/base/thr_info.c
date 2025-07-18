@@ -372,7 +372,7 @@ static const as_info_cmd SPECS[] = {
 
 	{ .name="admin-clear-std",         .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="admin-tls-std",           .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
-  { .name="alumni-clear-alt",        .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
+	{ .name="alumni-clear-alt",        .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="alumni-clear-std",        .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="alumni-tls-alt",          .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=true,  .perm=PERM_NONE           },
 	{ .name="alumni-tls-std",          .fn=as_service_list_dynamic,     .client_only=true,  .ee_only=true,  .perm=PERM_NONE           },
@@ -470,8 +470,8 @@ static const as_info_cmd SPECS[] = {
 	{ .name="udf-list",                .fn=udf_cask_info_list,          .client_only=false, .ee_only=false, .perm=PERM_NONE           },
 	{ .name="udf-put",                 .fn=udf_cask_info_put,           .client_only=false, .ee_only=false, .perm=PERM_UDF_ADMIN      },
 	{ .name="udf-remove",              .fn=udf_cask_info_remove,        .client_only=false, .ee_only=false, .perm=PERM_UDF_ADMIN      },
-	{ .name="user-agent-set",	   .fn=cmd_user_agent_set,	    .client_only=false, .ee_only=false, .perm=PERM_NONE		  },
-	{ .name="user-agents",		   .fn=cmd_user_agents,		    .client_only=false, .ee_only=false, .perm=PERM_NONE		  },
+	{ .name="user-agent-set",          .fn=cmd_user_agent_set,          .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
+	{ .name="user-agents",             .fn=cmd_user_agents,             .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="xdr-dc-state",            .fn=as_xdr_dc_state,             .client_only=false, .ee_only=true,  .perm=PERM_NONE           },
 	{ .name="xdr-get-filter",          .fn=as_xdr_get_filter,           .client_only=false, .ee_only=true,  .perm=PERM_NONE           },
 	{ .name="xdr-set-filter",          .fn=as_xdr_set_filter,           .client_only=false, .ee_only=true,  .perm=PERM_XDR_SET_FILTER }
