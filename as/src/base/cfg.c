@@ -5581,6 +5581,10 @@ cfg_best_practices_check(void)
 				"'service-threads' should be at least %u", min_service_threads);
 	}
 
+	if (c->admin.bind_port == 0 && c->tls_admin.bind_port == 0) {
+		check_failed(&g_bad_practices, "network", "admin section is not configured");
+	}
+
 	uint64_t ns_mem = 0;
 	uint32_t margin = WBLOCK_SZ;
 
