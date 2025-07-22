@@ -2239,7 +2239,7 @@ as_config_init(const char* config_file)
 					c->auto_pin = CF_TOPO_AUTO_PIN_NUMA;
 					break;
 				case CASE_SERVICE_AUTO_PIN_ADQ:
-					as_info_warn_deprecated("'auto-pin-adq' configuration parameter is deprecated - see https://aerospike.com/docs/database/release/8-1/");
+					as_info_warn_deprecated("setting 'auto-pin' configuration parameter to 'adq' is deprecated - see https://aerospike.com/docs/database/release/8-1/");
 					c->auto_pin = CF_TOPO_AUTO_PIN_ADQ;
 					break;
 				case CASE_NOT_FOUND:
