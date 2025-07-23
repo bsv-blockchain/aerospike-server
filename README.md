@@ -146,8 +146,8 @@ deployment or software development.
 
 The preferred method for running Aerospike in a production environment
 is to build and install the Aerospike package appropriate for the target
-Linux distribution (i.e., an `".rpm"`, `".deb"`, or `".tgz"` file), and
-then to control the state of the Aerospike daemon via `systemctl` on
+Linux distribution (i.e., an `".rpm"` or `".deb"` file), and then to
+control the state of the Aerospike daemon via `systemctl` on
 e.g., `systemctl start aerospike`.
 
 Please refer to the full documentation on the Aerospike web site,
