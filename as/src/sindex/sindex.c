@@ -454,7 +454,7 @@ as_sindex_lookup_by_iname(const as_namespace* ns, const char* iname)
 
 	as_sindex* si = si_by_iname(ns, iname);
 
-	if (si == NULL) {
+	if (si == NULL || si->dropped) {
 		SINDEX_GRUNLOCK();
 		return NULL;
 	}
