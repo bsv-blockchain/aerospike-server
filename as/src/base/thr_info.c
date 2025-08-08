@@ -237,6 +237,7 @@ static void cmd_rack_ids(as_info_cmd_args* args);
 static void cmd_racks(as_info_cmd_args* args);
 static void cmd_rebalance_generation(as_info_cmd_args* args);
 static void cmd_recluster(as_info_cmd_args* args);
+static void cmd_release(as_info_cmd_args* args);
 static void cmd_replicas(as_info_cmd_args* args);
 static void cmd_replicas_all(as_info_cmd_args* args);
 static void cmd_replicas_master(as_info_cmd_args* args);
@@ -433,6 +434,7 @@ static const as_info_cmd SPECS[] = {
 	{ .name="racks",                   .fn=cmd_racks,                   .client_only=false, .ee_only=true,  .perm=PERM_NONE           },
 	{ .name="rebalance-generation",    .fn=cmd_rebalance_generation,    .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="recluster",               .fn=cmd_recluster,               .client_only=false, .ee_only=false, .perm=PERM_SERVICE_CTRL   },
+	{ .name="release",                 .fn=cmd_release,                 .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="replicas",                .fn=cmd_replicas,                .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="replicas-all",            .fn=cmd_replicas_all,            .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="replicas-master",         .fn=cmd_replicas_master,         .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
@@ -1239,6 +1241,8 @@ cmd_best_practices(as_info_cmd_args* args)
 static void
 cmd_build(as_info_cmd_args* args)
 {
+	as_info_warn_deprecated("'build' info command is deprecated - use 'release' instead");
+
 	cf_dyn_buf* db = args->db;
 
 	cf_dyn_buf_append_string(db, aerospike_build_id);
@@ -1247,6 +1251,8 @@ cmd_build(as_info_cmd_args* args)
 static void
 cmd_build_arch(as_info_cmd_args* args)
 {
+	as_info_warn_deprecated("'build_arch' info command is deprecated - use 'release' instead");
+
 	cf_dyn_buf* db = args->db;
 
 	cf_dyn_buf_append_string(db, aerospike_build_arch);
@@ -1255,6 +1261,8 @@ cmd_build_arch(as_info_cmd_args* args)
 static void
 cmd_build_ee_sha(as_info_cmd_args* args)
 {
+	as_info_warn_deprecated("'build_ee_sha' info command is deprecated - use 'release' instead");
+
 	cf_dyn_buf* db = args->db;
 
 	cf_dyn_buf_append_string(db, aerospike_build_ee_sha);
@@ -1263,6 +1271,8 @@ cmd_build_ee_sha(as_info_cmd_args* args)
 static void
 cmd_build_os(as_info_cmd_args* args)
 {
+	as_info_warn_deprecated("'build_os' info command is deprecated - use 'release' instead");
+
 	cf_dyn_buf* db = args->db;
 
 	cf_dyn_buf_append_string(db, aerospike_build_os);
@@ -1271,6 +1281,8 @@ cmd_build_os(as_info_cmd_args* args)
 static void
 cmd_build_sha(as_info_cmd_args* args)
 {
+	as_info_warn_deprecated("'build_sha' info command is deprecated - use 'release' instead");
+
 	cf_dyn_buf* db = args->db;
 
 	cf_dyn_buf_append_string(db, aerospike_build_sha);
@@ -1730,6 +1742,8 @@ cmd_dump_wb_summary(as_info_cmd_args* args)
 static void
 cmd_edition(as_info_cmd_args* args)
 {
+	as_info_warn_deprecated("'edition' info command is deprecated - use 'release' instead");
+
 	cf_dyn_buf* db = args->db;
 
 	cf_dyn_buf_append_string(db, aerospike_build_type);
@@ -4260,10 +4274,34 @@ cmd_user_agents(as_info_cmd_args* args)
 static void
 cmd_version(as_info_cmd_args* args)
 {
+	as_info_warn_deprecated("'version' info command is deprecated - use 'release' instead");
+
 	cf_dyn_buf* db = args->db;
 
 	cf_dyn_buf_append_format(db, "%s build %s",
 			aerospike_build_type, aerospike_build_id);
+}
+
+static void
+cmd_release(as_info_cmd_args* args)
+{
+	cf_dyn_buf* db = args->db;
+
+	info_append_format(db, "edition", aerospike_build_type);
+	info_append_format(db, "version", aerospike_build_id);
+	info_append_format(db, "os", aerospike_build_os);
+	info_append_format(db, "arch", aerospike_build_arch);
+	info_append_format(db, "sha", aerospike_build_sha);
+
+	if (*aerospike_build_ee_sha != '\0') {
+		info_append_format(db, "ee-sha", aerospike_build_ee_sha);
+	}
+
+	if (*aerospike_build_fips_sha != '\0') {
+		info_append_format(db, "fips-sha", aerospike_build_fips_sha);
+	}
+
+	cf_dyn_buf_chomp_char(db, ';');
 }
 
 
