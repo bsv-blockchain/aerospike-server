@@ -1291,6 +1291,8 @@ cmd_build_sha(as_info_cmd_args* args)
 static void
 cmd_build_time(as_info_cmd_args* args)
 {
+	as_info_warn_deprecated("'build_time' info command is deprecated - see https://aerospike.com/docs/database/release/8-1-1/");
+
 	cf_dyn_buf* db = args->db;
 
 	cf_dyn_buf_append_string(db, aerospike_build_time);
