@@ -1241,8 +1241,6 @@ cmd_best_practices(as_info_cmd_args* args)
 static void
 cmd_build(as_info_cmd_args* args)
 {
-	as_info_warn_deprecated("'build' info command is deprecated - use 'release' instead");
-
 	cf_dyn_buf* db = args->db;
 
 	cf_dyn_buf_append_string(db, aerospike_build_id);
