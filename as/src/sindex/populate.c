@@ -428,7 +428,7 @@ populate_reduce_cb(as_index_ref* r_ref, void* udata)
 		return false;
 	}
 
-	if (ns->memory_breached) {
+	if (! as_namespace_sindex_persisted(ns) && ns->memory_breached) {
 		cf_warning(AS_SINDEX, "{%s} populating sindex %s - aborted due to memory limit breach",
 				ns->name, si->iname);
 		si->error = true; // an error, once set, can't be cleared until restart
