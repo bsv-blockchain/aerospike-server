@@ -4,10 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version of the artifact to deploy'
+        description: Version of the artifact to deploy
         required: true
-        default: '8.0.0.7'
-
+        default: 8.0.0.7
 permissions:
   id-token: write
   contents: read
@@ -109,17 +108,15 @@ jobs:
           source .github/bin/package_utils.sh
           cd structured_release
 
-          for deb in $(find . -name "*.deb"); do
+          find . -name "*.deb" -print0 | while IFS= read -r -d '' deb; do
             echo "Signing $deb"
             # Sign the package
             dpkg-sig --sign builder --gpg-options "--batch --pinentry-mode loopback --passphrase-file $GNUPGHOME/passphrase" "$deb"
             # Verify the signature
             dpkg-sig --verify "$deb"
-            # External gpg sign and checksum
+            # External gpg sign
             gpg --batch --yes --detach-sign --armor --passphrase "${{ secrets.GPG_PASS }}" --local-user aerospike-inc --output "$deb.asc" "$deb"
-            shasum -a 256 "$deb" > "$deb.sha256"
             cat "$deb.asc" 
-            cat "$deb.sha256"
           done
 
       - name: Upload DEB packages to JFrog
@@ -127,7 +124,7 @@ jobs:
           source .github/bin/package_utils.sh
           cd ./structured_release/
 
-          for deb in $(find . -name "*.deb"); do
+          find . -name "*.deb" -print0 | while IFS= read -r -d '' deb; do
             # Get package metadata
             pkgname=$(dpkg-deb -f "$deb" Package)
             arch=$(dpkg-deb -f "$deb" Architecture)
@@ -141,13 +138,8 @@ jobs:
               --target-props "deb.distribution=$codename;deb.component=main;deb.architecture=$arch" \
               --deb "$codename/main/$arch"
             
-            # Upload signature and checksum
+            # Upload signature
             jf rt upload "$deb.asc" "${{ env.JFROG_PROJECT }}-deb-dev-local" --flat=false \
-              --build-name="${{ env.ARTIFACT_NAME }}-deb" \
-              --build-number="${{ github.event.inputs.version }}" \
-              --project="${{ env.JFROG_PROJECT }}"
-            
-            jf rt upload "$deb.sha256" "${{ env.JFROG_PROJECT }}-deb-dev-local" --flat=false \
               --build-name="${{ env.ARTIFACT_NAME }}-deb" \
               --build-number="${{ github.event.inputs.version }}" \
               --project="${{ env.JFROG_PROJECT }}"
@@ -168,7 +160,7 @@ jobs:
           GPG_TTY: no-tty
         run: |
           cd structured_release
-          for rpm in $(find . -name "*.rpm"); do
+          find . -name "*.rpm" -print0 | while IFS= read -r -d '' rpm; do
             echo "Signing $rpm"
             rpm --addsign "$rpm"
             rpm --checksig "$rpm"
@@ -176,8 +168,6 @@ jobs:
               --passphrase "${{ secrets.GPG_PASS }}" \
               --local-user aerospike-inc \
               --output "$rpm.asc" "$rpm"
-            shasum -a 256 "$rpm" > "$rpm.sha256"
-            shasum -a 256 "$rpm.asc" > "$rpm.asc.sha256"
           done
 
       - name: Upload RPM packages to JFrog
@@ -185,9 +175,9 @@ jobs:
           source .github/bin/package_utils.sh
           cd ./structured_release
 
-          for rpm in $(find . -name "*.rpm"); do
+          find . -name "*.rpm" -print0 | while IFS= read -r -d '' rpm; do
             # Get metadata using the shared function
-            metadata=($(get_rpm_metadata "$rpm"))
+            read -r -a metadata < <(get_rpm_metadata "$rpm")
             pkgname="${metadata[0]}"
             version="${metadata[1]}"
             arch="${metadata[2]}"
@@ -200,18 +190,8 @@ jobs:
               --project="${{ env.JFROG_PROJECT }}" \
               --target-props "rpm.distribution=$dist;rpm.component=main;rpm.architecture=$arch"
             
-            # Upload signature and checksums
+            # Upload signature
             jf rt upload "$rpm.asc" "${{ env.JFROG_PROJECT }}-rpm-dev-local" --flat=false \
-              --build-name="${{ env.ARTIFACT_NAME }}-rpm" \
-              --build-number="${{ github.event.inputs.version }}" \
-              --project="${{ env.JFROG_PROJECT }}"
-            
-            jf rt upload "$rpm.sha256" "${{ env.JFROG_PROJECT }}-rpm-dev-local" --flat=false \
-              --build-name="${{ env.ARTIFACT_NAME }}-rpm" \
-              --build-number="${{ github.event.inputs.version }}" \
-              --project="${{ env.JFROG_PROJECT }}"
-            
-            jf rt upload "$rpm.asc.sha256" "${{ env.JFROG_PROJECT }}-rpm-dev-local" --flat=false \
               --build-name="${{ env.ARTIFACT_NAME }}-rpm" \
               --build-number="${{ github.event.inputs.version }}" \
               --project="${{ env.JFROG_PROJECT }}"
