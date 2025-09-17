@@ -37,7 +37,7 @@ build:
     environment:
       EEREPO:
     script:
-      - make -j
+      - make -j$(nproc)
       - make $PKG
       - make source
     artifact:
@@ -46,7 +46,7 @@ build:
     environment:
       EEREPO: /work/source/$EEREPO
     script:
-      - make -j +ee
+      - make -j$(nproc) +ee
       - make $PKG+ee
       - make source+ee
     artifact:
@@ -56,7 +56,7 @@ build:
       EEREPO: /work/source/$EEREPO
       FIPSREPO: /work/source/$FIPSREPO
     script:
-      - make -j +fips
+      - make -j$(nproc) +fips
       - make $PKG+fips
     artifact:
       - pkg/packages/*

@@ -53,15 +53,15 @@ S2_FLAGS = -DCMAKE_CXX_STANDARD=17 -DCMAKE_BUILD_TYPE=RelWithDebInfo
 
 .PHONY: absllib
 absllib:
-	$(CMAKE) -S $(ABSL) -B $(ABSL)/build $(S2_FLAGS) -DCMAKE_INSTALL_PREFIX=$(ABSL)/installation -DABSL_ENABLE_INSTALL=ON -DCMAKE_INSTALL_MESSAGE=LAZY -DCMAKE_TARGET_MESSAGES=OFF
-	$(CMAKE) --build $(ABSL)/build -- --no-print-directory
-	$(CMAKE) --build $(ABSL)/build --target install -- --no-print-directory
+	$(CMAKE) -S $(ABSL) -B $(ABSL)/build -G 'Unix Makefiles' $(S2_FLAGS) -DCMAKE_INSTALL_PREFIX=$(ABSL)/installation -DABSL_ENABLE_INSTALL=ON -DCMAKE_INSTALL_MESSAGE=LAZY -DCMAKE_TARGET_MESSAGES=OFF
+	$(MAKE) -C $(ABSL)/build
+	$(MAKE) -C $(ABSL)/build install
 	ar rcsT $(ABSL_LIB_DIR)/libabsl.a $(ABSL_LIB_DIR)/libabsl_*.a
 
 .PHONY: s2lib
 s2lib: absllib
-	$(CMAKE) -S $(S2) -B $(S2)/build $(S2_FLAGS) $(if $(OPENSSL_INCLUDE_DIR),-DOPENSSL_INCLUDE_DIR=$(OPENSSL_INCLUDE_DIR),) -DCMAKE_PREFIX_PATH=$(ABSL)/installation -DBUILD_SHARED_LIBS=OFF
-	$(CMAKE) --build $(S2)/build -- -j 8  # Limit threads as the default spawns too many
+	$(CMAKE) -S $(S2) -B $(S2)/build -G 'Unix Makefiles' $(S2_FLAGS) $(if $(OPENSSL_INCLUDE_DIR),-DOPENSSL_INCLUDE_DIR=$(OPENSSL_INCLUDE_DIR),) -DCMAKE_PREFIX_PATH=$(ABSL)/installation -DBUILD_SHARED_LIBS=OFF
+	$(MAKE) -C $(S2)/build
 
 .PHONY: targetdirs
 targetdirs:
