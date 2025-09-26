@@ -1915,10 +1915,11 @@ cold_start_sweep(drv_mems* mems, drv_mem* mem)
 		shadow_fd_put(mem, fd);
 	}
 
-	cf_info(AS_DRV_MEM, "device %s: read complete: UNIQUE %lu (REPLACED %lu) (OLDER %lu) (EXPIRED %lu) (EVICTED %lu) (UNPARSABLE %lu) records",
+	cf_info(AS_DRV_MEM, "device %s: read complete: UNIQUE %lu (REPLACED %lu) (OLDER %lu) (EXPIRED %lu) (EVICTED %lu) (UNOWNED %lu) (DROPPED %lu) (UNPARSABLE %lu) records",
 			mem->name, mem->record_add_unique_counter,
 			mem->record_add_replace_counter, mem->record_add_older_counter,
 			mem->record_add_expired_counter, mem->record_add_evicted_counter,
+			mem->record_add_unowned_counter, mem->record_add_dropped_counter,
 			mem->record_add_unparsable_counter);
 }
 
@@ -1930,6 +1931,7 @@ cold_start_add_record(drv_mems* mems, drv_mem* mem,
 
 	// If this isn't a partition we're interested in, skip this record.
 	if (! mems->get_state_from_storage[pid]) {
+		mem->record_add_unowned_counter++;
 		return;
 	}
 
@@ -1981,6 +1983,7 @@ cold_start_add_record(drv_mems* mems, drv_mem* mem,
 
 	// Ignore record if it was in a dropped tree.
 	if (flat->tree_id != p_partition->tree_id) {
+		mem->record_add_dropped_counter++;
 		return;
 	}
 
