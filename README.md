@@ -44,20 +44,19 @@ The C++ compiler is required for the Aerospike geospatial indexing
 feature and its dependency, Google's S2 Geometry Library (both written in C++.)
 
 - The Red Hat Enterprise Linux 8/9 requires `gcc-c++`.
-- The Debian 11/12 and Ubuntu 20/22/24 requires `g++`.
+- The Debian 11/12/13 and Ubuntu 20/22/24 requires `g++`.
 
 #### OpenSSL
 
-OpenSSL 0.9.8b or later is required for cryptographic hash functions
-(RIPEMD-160 & SHA-1) and pseudo-random number generation.
+OpenSSL 0.9.8b or later.
 
 - The Red Hat Enterprise Linux 8/9 requires `openssl-devel`
-- The Debian 11/12 and Ubuntu 20/22/24 requires `libssl-dev`.
+- The Debian 11/12/13 and Ubuntu 20/22/24 requires `libssl-dev`.
 
 #### Zlib
 
 - The Red Hat Enterprise Linux 8/9 requires `zlib-devel`
-- The Debian 11/12 and Ubuntu 20/22/24 requires `zlib1g-dev`.
+- The Debian 11/12/13 and Ubuntu 20/22/24 requires `zlib1g-dev`.
 
 ### Submodules
 

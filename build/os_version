@@ -99,10 +99,13 @@ main() {
 		elif [[ "$debian_version" = "bookworm"* ]]
 		then
 			debian_version=12
+		elif [[ "$debian_version" = "trixie"* ]]
+		then
+			debian_version=13
 		fi
 		distro_version=${debian_version%%.*}
 		;;
-	    esac
+		esac
 	fi
 
 	case "$distro_id" in
