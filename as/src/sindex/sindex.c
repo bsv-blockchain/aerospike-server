@@ -83,7 +83,7 @@ typedef struct exp_def_s {
 	as_exp* exp; // built exp points to buf
 	uint8_t* buf;
 	int32_t buf_sz;
-	cf_vector* bin_names;
+	cf_vector* bins_info;
 } exp_def;
 
 typedef struct defn_hash_key_s {
@@ -1082,7 +1082,7 @@ smd_create(as_sindex_def* def, bool startup)
 			.exp_b64 = def->exp_b64,
 			.exp_buf = e_def.buf,
 			.exp_buf_sz = (uint32_t)e_def.buf_sz,
-			.exp_bin_names = e_def.bin_names,
+			.exp_bins_info = e_def.bins_info,
 			.n_btrees = AS_PARTITIONS
 	};
 
@@ -1281,13 +1281,13 @@ parse_exp(const char* exp_b64, exp_def* e_def_r)
 		return false;
 	}
 
-	cf_vector* bin_names = cf_vector_create(AS_BIN_NAME_MAX_SZ, 10, 0);
-	as_exp* exp = as_exp_build_buf(buf, (uint32_t)buf_sz, false, bin_names);
+	cf_vector* bins_info = cf_vector_create(sizeof(as_bin_info), 10, 0);
+	as_exp* exp = as_exp_build_buf(buf, (uint32_t)buf_sz, false, bins_info);
 
 	if (exp == NULL) {
 		cf_warning(AS_SINDEX, "SINDEX CREATE: invalid expression %s", exp_b64);
 		cf_free(buf);
-		cf_vector_destroy(bin_names);
+		cf_vector_destroy(bins_info);
 		return false;
 	}
 
@@ -1306,7 +1306,7 @@ parse_exp(const char* exp_b64, exp_def* e_def_r)
 	}
 
 	if ((exp->flags & AS_EXP_HAS_DIGEST_MOD) == 0 &&
-			cf_vector_size(bin_names) == 0) {
+			cf_vector_size(bins_info) == 0) {
 		unsupported_exp = true;
 		cf_warning(AS_SINDEX, "SINDEX CREATE: invalid expression %s - needs digest modifier or bins",
 				exp_b64);
@@ -1315,7 +1315,7 @@ parse_exp(const char* exp_b64, exp_def* e_def_r)
 	if (unsupported_exp) {
 		as_exp_destroy(exp);
 		cf_free(buf);
-		cf_vector_destroy(bin_names);
+		cf_vector_destroy(bins_info);
 		return false;
 	}
 
@@ -1324,7 +1324,7 @@ parse_exp(const char* exp_b64, exp_def* e_def_r)
 		.exp = exp,
 		.buf = buf,
 		.buf_sz = buf_sz,
-		.bin_names = bin_names
+		.bins_info = bins_info
 	};
 
 	return true;
@@ -1341,8 +1341,8 @@ free_exp_def(exp_def* e_def)
 		cf_free(e_def->buf);
 	}
 
-	if (e_def->bin_names != NULL) {
-		cf_vector_destroy(e_def->bin_names);
+	if (e_def->bins_info != NULL) {
+		cf_vector_destroy(e_def->bins_info);
 	}
 }
 

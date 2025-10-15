@@ -546,8 +546,8 @@ run_destroy_sindex(void* udata)
 			cf_free(si->exp_b64);
 		}
 
-		if (si->exp_bin_names != NULL) {
-			cf_vector_destroy(si->exp_bin_names);
+		if (si->exp_bins_info != NULL) {
+			cf_vector_destroy(si->exp_bins_info);
 		}
 
 		cf_rc_free(si);

@@ -171,6 +171,11 @@ typedef struct as_bin_s {
 	uint8_t src_id;
 } __attribute__ ((__packed__)) as_bin;
 
+typedef struct as_bin_info_s {
+	as_particle_type type;
+	char name[AS_BIN_NAME_MAX_SZ];
+} as_bin_info;
+
 /* Particle function declarations */
 
 static inline bool

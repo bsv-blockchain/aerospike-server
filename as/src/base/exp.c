@@ -418,7 +418,7 @@ typedef struct build_args_s {
 	uint32_t max_var_idx;
 	var_scope* current;
 
-	cf_vector* bin_names_r; // only valid for secondary index expressions
+	cf_vector* bins_info_r; // only valid for secondary index expressions
 } build_args;
 
 typedef bool (*op_table_build_cb)(build_args* args);
@@ -466,7 +466,7 @@ static const uint8_t call_eval_token[1] = "";
 //
 
 // Build.
-static as_exp* build_internal(const uint8_t* buf, uint32_t buf_sz, bool cpy_wire, cf_vector* bin_names_r);
+static as_exp* build_internal(const uint8_t* buf, uint32_t buf_sz, bool cpy_wire, cf_vector* bins_info_r);
 static bool build_next(build_args* args);
 static const op_table_entry* build_get_entry(result_type type);
 static bool build_count_sz(msgpack_in* mp, uint32_t* total_sz, uint32_t* cleanup_count, uint32_t* counter_r);
@@ -571,6 +571,7 @@ static void eval_value(runtime* rt, const op_base_mem* ob, rt_value* ret_val);
 static void rt_value_bin_ptr_to_bin(runtime* rt, as_bin* rb, const rt_value* from, cf_ll_buf* ll_buf);
 static void json_to_rt_geo(const uint8_t* json, size_t jsonsz, rt_value* val);
 static void particle_to_rt_geo(const as_particle* p, rt_value* val);
+static as_particle_type result_type_to_particle_type(result_type type);
 static bool bin_is_type(const as_bin* b, result_type type);
 static void rt_skip(runtime* rt, uint32_t instr_count);
 static void rt_value_translate(rt_value* to, const rt_value* from);
@@ -796,12 +797,12 @@ as_exp_filter_build(const as_msg_field* m, bool cpy_wire)
 
 as_exp*
 as_exp_build_buf(const uint8_t* buf, uint32_t buf_sz, bool cpy_wire,
-		 cf_vector* bin_names_r)
+		 cf_vector* bins_info_r)
 {
 	cf_debug(AS_EXP, "as_exp_build_buf - buf_sz %u buf-dump:\n%*pH",
 			buf_sz, buf_sz, buf);
 
-	return build_internal(buf, buf_sz, cpy_wire, bin_names_r);
+	return build_internal(buf, buf_sz, cpy_wire, bins_info_r);
 }
 
 bool
@@ -996,7 +997,7 @@ as_exp_destroy(as_exp* exp)
 
 static as_exp*
 build_internal(const uint8_t* buf, uint32_t buf_sz, bool cpy_wire,
-		cf_vector* bin_names_r)
+		cf_vector* bins_info_r)
 {
 	msgpack_in mp = {
 			.buf = buf,
@@ -1045,7 +1046,7 @@ build_internal(const uint8_t* buf, uint32_t buf_sz, bool cpy_wire,
 
 	build_args args = {
 			.exp = cf_calloc(1, sizeof(as_exp) + total_sz),
-			.bin_names_r = bin_names_r
+			.bins_info_r = bins_info_r
 	};
 
 	args.mem = args.exp->mem;
@@ -2099,11 +2100,12 @@ build_bin(build_args* args)
 		return false;
 	}
 
-	if (args->bin_names_r != NULL) {
-		char bin_name[AS_BIN_NAME_MAX_SZ];
+	if (args->bins_info_r != NULL) {
+		as_bin_info bin_info;
 
-		snprintf(bin_name, op->name_sz + 1, "%s", op->name);
-		cf_vector_append(args->bin_names_r, bin_name);
+		snprintf(bin_info.name, op->name_sz + 1, "%s", op->name);
+		bin_info.type = result_type_to_particle_type(op->type);
+		cf_vector_append(args->bins_info_r, &bin_info);
 	}
 
 	if ((args->entry = build_get_entry(op->type)) == NULL) {
@@ -2138,11 +2140,12 @@ build_bin_type(build_args* args)
 		return false;
 	}
 
-	if (args->bin_names_r != NULL) {
-		char bin_name[AS_BIN_NAME_MAX_SZ];
+	if (args->bins_info_r != NULL) {
+		as_bin_info bin_info;
 
-		snprintf(bin_name, op->name_sz + 1, "%s", op->name);
-		cf_vector_append(args->bin_names_r, bin_name);
+		snprintf(bin_info.name, op->name_sz + 1, "%s", op->name);
+		bin_info.type = AS_PARTICLE_TYPE_NULL; // wildcard, we depend on bins with this name with *all* types.
+		cf_vector_append(args->bins_info_r, &bin_info);
 	}
 
 	return true;
@@ -4397,47 +4400,41 @@ particle_to_rt_geo(const as_particle* p, rt_value* val)
 	json_to_rt_geo(ptr, sz, val);
 }
 
-static bool
-bin_is_type(const as_bin* b, result_type type)
+static as_particle_type
+result_type_to_particle_type(result_type type)
 {
-	as_particle_type expected;
-
 	switch (type) {
 	case TYPE_NIL:
-		expected = AS_PARTICLE_TYPE_NULL;
-		break;
+		return AS_PARTICLE_TYPE_NULL;
 	case TYPE_TRILEAN:
-		expected = AS_PARTICLE_TYPE_BOOL;
-		break;
+		return AS_PARTICLE_TYPE_BOOL;
 	case TYPE_INT:
-		expected = AS_PARTICLE_TYPE_INTEGER;
-		break;
+		return AS_PARTICLE_TYPE_INTEGER;
 	case TYPE_FLOAT:
-		expected = AS_PARTICLE_TYPE_FLOAT;
-		break;
+		return AS_PARTICLE_TYPE_FLOAT;
 	case TYPE_STR:
-		expected = AS_PARTICLE_TYPE_STRING;
-		break;
+		return AS_PARTICLE_TYPE_STRING;
 	case TYPE_BLOB:
-		expected = AS_PARTICLE_TYPE_BLOB;
-		break;
+		return AS_PARTICLE_TYPE_BLOB;
 	case TYPE_GEOJSON:
-		expected = AS_PARTICLE_TYPE_GEOJSON;
-		break;
+		return AS_PARTICLE_TYPE_GEOJSON;
 	case TYPE_HLL:
-		expected = AS_PARTICLE_TYPE_HLL;
-		break;
+		return AS_PARTICLE_TYPE_HLL;
 	case TYPE_LIST:
-		expected = AS_PARTICLE_TYPE_LIST;
-		break;
+		return AS_PARTICLE_TYPE_LIST;
 	case TYPE_MAP:
-		expected = AS_PARTICLE_TYPE_MAP;
-		break;
+		return AS_PARTICLE_TYPE_MAP;
 	default:
 		cf_crash(AS_EXP, "unexpected type %u", type);
 	}
+	return AS_PARTICLE_TYPE_NULL; // never reached
 
-	return as_bin_get_particle_type(b) == expected;
+}
+
+static bool
+bin_is_type(const as_bin* b, result_type type)
+{
+	return as_bin_get_particle_type(b) == result_type_to_particle_type(type);
 }
 
 static void

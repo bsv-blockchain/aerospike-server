@@ -109,7 +109,7 @@ typedef struct as_sindex_s {
 	uint8_t* exp_buf;
 	uint32_t exp_buf_sz;
 	char* exp_b64;
-	cf_vector* exp_bin_names;
+	cf_vector* exp_bins_info;
 
 	uint32_t id;
 

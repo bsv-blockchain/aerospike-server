@@ -726,8 +726,8 @@ update_sindex_exp(bins_old_new* old_new, as_bin** match_bins,
 		}
 
 		bool matched = false;
-		cf_vector* exp_bnames = si->exp_bin_names;
-		uint32_t exp_bcount = cf_vector_size(exp_bnames);
+		cf_vector* exp_binfos = si->exp_bins_info;
+		uint32_t exp_bcount = cf_vector_size(exp_binfos);
 		bool has_digest_mod = (si->exp->flags & AS_EXP_HAS_DIGEST_MOD) != 0;
 
 		if (has_digest_mod) {
@@ -735,12 +735,10 @@ update_sindex_exp(bins_old_new* old_new, as_bin** match_bins,
 		}
 
 		for (uint32_t b_ix = 0; b_ix < exp_bcount && ! matched; b_ix++) {
-			char exp_bname[AS_BIN_NAME_MAX_SZ];
-
-			cf_vector_get(exp_bnames, b_ix, exp_bname);
+			as_bin_info* exp_bin_info = (as_bin_info*)cf_vector_getp(exp_binfos, b_ix);
 
 			for (uint32_t c_ix = 0; c_ix < n_match_bins; c_ix++) {
-				if (strcmp(match_bins[c_ix]->name, exp_bname) == 0) {
+				if (strcmp(match_bins[c_ix]->name, exp_bin_info->name) == 0) {
 					matched = true; // done with this si
 					break;
 				}
@@ -752,7 +750,7 @@ update_sindex_exp(bins_old_new* old_new, as_bin** match_bins,
 		}
 
 		// Optimise if the sindex exp has a digest mod and no bin names.
-		if (has_digest_mod && cf_vector_size(si->exp_bin_names) == 0 &&
+		if (has_digest_mod && cf_vector_size(si->exp_bins_info) == 0 &&
 				old_new->n_old_bins != 0 && old_new->n_new_bins != 0) {
 			// Optimisation - as digest will never change, exp result will
 			// be the same and we can skip sindex update. But, we need to know
