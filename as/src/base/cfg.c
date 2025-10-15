@@ -766,6 +766,7 @@ typedef enum {
 	CASE_XDR_DC_MAX_RECOVERIES_INTERLEAVED,
 	CASE_XDR_DC_NODE_ADDRESS_PORT,
 	CASE_XDR_DC_PERIOD_MS,
+	CASE_XDR_DC_RECOVERY_THREADS,
 	CASE_XDR_DC_TLS_NAME,
 	CASE_XDR_DC_USE_ALTERNATE_ACCESS_ADDRESS,
 	// Sub-contexts:
@@ -1416,6 +1417,7 @@ const cfg_opt XDR_DC_OPTS[] = {
 		{ "max-recoveries-interleaved",		CASE_XDR_DC_MAX_RECOVERIES_INTERLEAVED },
 		{ "node-address-port",				CASE_XDR_DC_NODE_ADDRESS_PORT },
 		{ "period-ms",						CASE_XDR_DC_PERIOD_MS },
+		{ "recovery-threads",				CASE_XDR_DC_RECOVERY_THREADS },
 		{ "tls-name",						CASE_XDR_DC_TLS_NAME },
 		{ "use-alternate-access-address",	CASE_XDR_DC_USE_ALTERNATE_ACCESS_ADDRESS },
 		// Sub-contexts:
@@ -4235,6 +4237,9 @@ as_config_init(const char* config_file)
 				break;
 			case CASE_XDR_DC_PERIOD_MS:
 				dc_cfg->period_us = 1000 * cfg_u32(&line, AS_XDR_MIN_PERIOD_MS, AS_XDR_MAX_PERIOD_MS);
+				break;
+			case CASE_XDR_DC_RECOVERY_THREADS:
+				dc_cfg->n_recovery_threads = cfg_u32(&line, AS_XDR_MIN_RECOVERY_THREADS, AS_XDR_MAX_RECOVERY_THREADS);
 				break;
 			case CASE_XDR_DC_TLS_NAME:
 				dc_cfg->tls_our_name = cfg_strdup_no_checks(&line);

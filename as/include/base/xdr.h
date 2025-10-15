@@ -70,6 +70,9 @@ struct as_transaction_s;
 #define AS_XDR_MIN_TRANSACTION_QUEUE_LIMIT 1024
 #define AS_XDR_MAX_TRANSACTION_QUEUE_LIMIT (1024 * 1024)
 
+#define AS_XDR_MIN_RECOVERY_THREADS 1
+#define AS_XDR_MAX_RECOVERY_THREADS 32
+
 // For set and bin "projection" filters.
 #define SHIPPING_UNSPECIFIED 0
 #define SHIPPING_ENABLED 1
@@ -150,7 +153,9 @@ typedef struct as_xdr_dc_cfg_s {
 	char* auth_user; // Aerospike destinations only
 
 	bool connector;
+
 	uint32_t max_recoveries_interleaved;
+	uint32_t n_recovery_threads;
 
 	cf_mutex seed_lock;
 	cf_vector seed_nodes; // from 'node-address-port'
