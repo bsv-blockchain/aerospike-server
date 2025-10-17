@@ -641,13 +641,13 @@ send_udf_response(as_transaction* tr, cf_dyn_buf* db)
 		break;
 	case FROM_PROXY:
 		if (db != NULL && db->used_sz != 0) {
-			as_proxy_send_ops_response(tr->from.proxy_node,
+			as_proxy_send_ops_response(tr->from.proxy_orig->node,
 					tr->from_data.proxy_tid, db,
 					as_transaction_compress_response(tr),
 					&tr->rsv.ns->record_comp_stat);
 		}
 		else {
-			as_proxy_send_response(tr->from.proxy_node, tr->from_data.proxy_tid,
+			as_proxy_send_response(tr->from.proxy_orig->node, tr->from_data.proxy_tid,
 					tr->result_code, tr->generation, tr->void_time, NULL, NULL,
 					0, tr->rsv.ns, mrt_read_fill_version(&v, tr));
 		}
@@ -657,6 +657,7 @@ send_udf_response(as_transaction* tr, cf_dyn_buf* db)
 		else {
 			from_proxy_udf_update_stats(tr->rsv.ns, tr->result_code);
 		}
+		proxy_origin_destroy(tr->from.proxy_orig);
 		break;
 	case FROM_BATCH:
 		if (db != NULL && db->used_sz != 0) {

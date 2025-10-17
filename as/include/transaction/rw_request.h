@@ -57,6 +57,7 @@ struct cl_msg_s;
 struct iops_origin_s;
 struct iudf_origin_s;
 struct monitor_roll_origin_s;
+struct proxy_origin_s;
 struct rw_request_s;
 struct rw_wait_ele_s;
 
@@ -85,7 +86,7 @@ typedef struct rw_request_s {
 	union {
 		void*						any;
 		struct as_file_handle_s*	proto_fd_h;
-		cf_node						proxy_node;
+		struct proxy_origin_s*		proxy_orig;
 		struct as_batch_shared_s*	batch_shared;
 		struct iudf_origin_s*		iudf_orig;
 		struct iops_origin_s*		iops_orig;

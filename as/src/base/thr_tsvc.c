@@ -168,7 +168,8 @@ as_tsvc_process_transaction(as_transaction *tr)
 	if (! as_partition_balance_is_init_resolved()) {
 		if (tr->origin == FROM_PROXY) {
 			as_proxy_return_to_sender(tr, ns);
-			tr->from.proxy_node = 0; // pattern, not needed
+			proxy_origin_destroy(tr->from.proxy_orig);
+			tr->from.proxy_orig = NULL; // pattern, not needed
 		}
 		else {
 			cf_debug(AS_TSVC, "rejecting transaction - initial partition balance unresolved");
@@ -354,7 +355,8 @@ as_tsvc_process_transaction(as_transaction *tr)
 			break;
 		case FROM_PROXY:
 			as_proxy_return_to_sender(tr, ns);
-			tr->from.proxy_node = 0; // pattern, not needed
+			proxy_origin_destroy(tr->from.proxy_orig);
+			tr->from.proxy_orig = NULL; // pattern, not needed
 			break;
 		case FROM_IUDF:
 			as_incr_uint64(&ns->n_udf_sub_tsvc_error);

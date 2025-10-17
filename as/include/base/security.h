@@ -45,6 +45,9 @@ struct as_transaction_s;
 // Typedefs & constants.
 //
 
+// Includes null-terminator, so max length is really 63.
+#define MAX_USER_SIZE 64
+
 // Security permissions.
 typedef enum {
 	PERM_NONE			= 0,
@@ -101,15 +104,18 @@ typedef struct as_sec_msg_s {
 void as_security_init(void);
 uint8_t as_security_check_auth(const struct as_file_handle_s* fd_h);
 uint8_t as_security_check_info_cmd(const struct as_file_handle_s* fd_h, const char* cmd, const char* params, as_sec_perm perm);
+uint8_t as_security_check_permission(const struct as_transaction_s* tr, const char* username, uint32_t ns_ix, uint16_t set_id, as_sec_perm perm);
 bool as_security_check_data_op(struct as_transaction_s* tr, struct as_namespace_s* ns, as_sec_perm perm);
 int as_security_check_rps(struct as_file_handle_s* fd_h, uint32_t rps, as_sec_perm perm, bool is_write, void** udata);
 void as_security_done_rps(void* udata, uint32_t rps, bool is_write);
 void* as_security_filter_create(void);
 void as_security_filter_destroy(void* pv_filter);
 void as_security_log(const struct as_file_handle_s* fd_h, uint8_t result, as_sec_perm perm, const char* action, const char* detail);
+void as_audit_log(const struct as_transaction_s* tr, const struct as_file_handle_s* fd_h, uint8_t result, const char* action, const char* detail);
 bool as_security_should_refresh(void);
 void as_security_refresh(struct as_file_handle_s* fd_h);
 void as_security_transact(struct as_transaction_s* tr);
+bool as_security_copy_username(const struct as_transaction_s* tr, char* dst, uint32_t dst_size);
 
 // Info.
 void as_security_get_config(cf_dyn_buf* db);

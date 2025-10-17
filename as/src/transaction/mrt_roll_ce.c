@@ -53,9 +53,11 @@ as_mrt_roll_start(as_transaction* tr)
 				tr->void_time, NULL, NULL, 0, tr->rsv.ns, NULL);
 		break;
 	case FROM_PROXY:
-		as_proxy_send_response(tr->from.proxy_node, tr->from_data.proxy_tid,
-				tr->result_code, tr->generation, tr->void_time, NULL, NULL, 0,
-				tr->rsv.ns, NULL);
+		as_proxy_send_response(tr->from.proxy_orig->node,
+				tr->from_data.proxy_tid, tr->result_code, tr->generation,
+				tr->void_time, NULL, NULL, 0, tr->rsv.ns, NULL);
+		proxy_origin_destroy(tr->from.proxy_orig);
+		tr->from.proxy_orig = NULL; // pattern, not needed
 		break;
 	case FROM_BATCH:
 		as_batch_add_ack(tr, NULL);

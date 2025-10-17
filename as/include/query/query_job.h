@@ -33,6 +33,7 @@
 #include "dynbuf.h"
 
 #include "base/datamodel.h"
+#include "base/security.h"
 #include "sindex/sindex.h"
 
 
@@ -157,6 +158,7 @@ typedef struct as_query_job_s {
 
 	// For tracking:
 	char client[64];
+	char username[MAX_USER_SIZE];
 	uint16_t n_pids_requested; // also to limit threads
 	uint16_t n_keyds_requested;
 	uint64_t start_ns;

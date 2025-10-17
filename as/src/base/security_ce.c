@@ -87,6 +87,20 @@ as_security_check_rps(as_file_handle* fd_h, uint32_t rps, as_sec_perm perm,
 }
 
 // Security is an enterprise feature - here, allow all operations.
+uint8_t
+as_security_check_permission(const as_transaction* tr, const char* username,
+		uint32_t ns_ix, uint16_t set_id, as_sec_perm perm)
+{
+	return AS_OK;
+}
+
+bool
+as_security_copy_username(const as_transaction* tr, char* dst, uint32_t dst_sz)
+{
+	return false;
+}
+
+// Security is an enterprise feature - here, allow all operations.
 void
 as_security_done_rps(void* udata, uint32_t rps, bool is_write)
 {
@@ -103,6 +117,12 @@ as_security_filter_create(void)
 // Security is an enterprise feature - here, there's no filter.
 void
 as_security_filter_destroy(void* pv_filter)
+{
+}
+
+void
+as_audit_log(const as_transaction* tr, const as_file_handle* fd_h, uint8_t res,
+		const char* action, const char* detail)
 {
 }
 

@@ -28,9 +28,12 @@
 
 #include <stdint.h>
 
+#include "citrusleaf/alloc.h"
+
 #include "dynbuf.h"
 #include "node.h"
 
+#include "base/security.h"
 
 //==========================================================
 // Forward declarations.
@@ -48,6 +51,17 @@ struct as_transaction_s;
 // Typedefs & constants.
 //
 
+typedef struct proxy_origin_s {
+	cf_node		node;		// The proxy node that sent the request
+	char		username[MAX_USER_SIZE];
+} proxy_origin;
+
+static inline void
+proxy_origin_destroy(proxy_origin* origin)
+{
+	cf_free(origin);
+}
+
 typedef enum {
 	// These values go on the wire, so mind backward compatibility if changing.
 	PROXY_FIELD_OP,
@@ -58,6 +72,7 @@ typedef enum {
 	PROXY_FIELD_UNUSED_5,
 	PROXY_FIELD_UNUSED_6,
 	PROXY_FIELD_UNUSED_7,
+	PROXY_FIELD_USERNAME,
 
 	NUM_PROXY_FIELDS
 } proxy_msg_field;

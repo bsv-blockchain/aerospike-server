@@ -441,9 +441,10 @@ send_delete_response(as_transaction* tr)
 				as_transaction_is_xdr(tr));
 		break;
 	case FROM_PROXY:
-		as_proxy_send_response(tr->from.proxy_node, tr->from_data.proxy_tid,
-				tr->result_code, 0, 0, NULL, NULL, 0, tr->rsv.ns,
-				mrt_write_fill_version(&v, tr));
+		as_proxy_send_response(tr->from.proxy_orig->node,
+				tr->from_data.proxy_tid, tr->result_code, 0, 0, NULL, NULL, 0,
+				tr->rsv.ns, mrt_write_fill_version(&v, tr));
+		proxy_origin_destroy(tr->from.proxy_orig);
 		if (as_transaction_is_batch_sub(tr)) {
 			from_proxy_batch_sub_delete_update_stats(tr->rsv.ns,
 					tr->result_code);

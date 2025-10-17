@@ -188,6 +188,7 @@ struct as_namespace_s;
 struct iudf_origin_s;
 struct iops_origin_s;
 struct monitor_roll_origin_s;
+struct proxy_origin_s;
 
 typedef struct as_transaction_s {
 
@@ -206,7 +207,7 @@ typedef struct as_transaction_s {
 	union {
 		void*						any;
 		as_file_handle*				proto_fd_h;
-		cf_node						proxy_node;
+		struct proxy_origin_s*		proxy_orig;
 		struct as_batch_shared_s*	batch_shared;
 		struct iudf_origin_s*		iudf_orig;
 		struct iops_origin_s*		iops_orig;

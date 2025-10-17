@@ -389,9 +389,10 @@ as_transaction_error(as_transaction* tr, as_namespace* ns, uint32_t error_code)
 		UPDATE_ERROR_STATS(client);
 		break;
 	case FROM_PROXY:
-		if (tr->from.proxy_node != 0) {
-			as_proxy_send_response(tr->from.proxy_node, tr->from_data.proxy_tid, error_code, 0, 0, NULL, NULL, 0, NULL, NULL);
-			tr->from.proxy_node = 0; // pattern, not needed
+		if (tr->from.proxy_orig != NULL) {
+			as_proxy_send_response(tr->from.proxy_orig->node, tr->from_data.proxy_tid, error_code, 0, 0, NULL, NULL, 0, NULL, NULL);
+			proxy_origin_destroy(tr->from.proxy_orig);
+			tr->from.proxy_orig = NULL; // pattern, not needed
 		}
 		if (as_transaction_is_batch_sub(tr)) {
 			UPDATE_ERROR_STATS(from_proxy_batch_sub);

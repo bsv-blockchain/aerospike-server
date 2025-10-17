@@ -81,6 +81,7 @@ const msg_template proxy_mt[] = {
 	{ PROXY_FIELD_UNUSED_5, M_FT_UINT64 },
 	{ PROXY_FIELD_UNUSED_6, M_FT_UINT32 },
 	{ PROXY_FIELD_UNUSED_7, M_FT_UINT32 },
+	{ PROXY_FIELD_USERNAME, M_FT_BUF },
 };
 
 COMPILER_ASSERT(sizeof(proxy_mt) / sizeof(msg_template) == NUM_PROXY_FIELDS);
@@ -269,6 +270,12 @@ as_proxy_divert(cf_node dst, as_transaction* tr, as_namespace* ns)
 				sizeof(as_proto) + tr->msgp->proto.sz, MSG_SET_HANDOFF_MALLOC);
 	}
 
+	char uname[MAX_USER_SIZE] = { 0 };
+
+	if (as_security_copy_username(tr, uname, sizeof(uname))) {
+		msg_set_buf(m, PROXY_FIELD_USERNAME, (void*)uname, strlen(uname),
+				MSG_SET_COPY);
+	}
 	// Set up a proxy_request and insert it in the hash.
 
 	proxy_request pr;
@@ -314,9 +321,10 @@ as_proxy_return_to_sender(const as_transaction* tr, as_namespace* ns)
 	msg_set_uint32(m, PROXY_FIELD_OP, PROXY_OP_RETURN_TO_SENDER);
 	msg_set_uint32(m, PROXY_FIELD_TID, tr->from_data.proxy_tid);
 	msg_set_uint64(m, PROXY_FIELD_REDIRECT,
-			redirect_node == (cf_node)0 ? tr->from.proxy_node : redirect_node);
+			redirect_node == (cf_node)0 ? tr->from.proxy_orig->node :
+					redirect_node);
 
-	if (as_fabric_send(tr->from.proxy_node, m, AS_FABRIC_CHANNEL_RW) !=
+	if (as_fabric_send(tr->from.proxy_orig->node, m, AS_FABRIC_CHANNEL_RW) !=
 			AS_FABRIC_SUCCESS) {
 		as_fabric_msg_put(m);
 	}
@@ -605,15 +613,33 @@ proxyee_handle_request(cf_node src, msg* m, uint32_t tid)
 	as_transaction_init_head(&tr, keyd, msgp);
 	// msgp might not have digest - batch sub-transactions.
 
-	tr.start_time = cf_getns();
-
 	tr.origin = FROM_PROXY;
-	tr.from.proxy_node = src;
+	tr.from.proxy_orig = cf_malloc(sizeof(proxy_origin));
+	tr.from.proxy_orig->node = src;
 	tr.from_data.proxy_tid = tid;
+
+	char* username = NULL;
+	size_t ulen = 0;
+
+	if (msg_get_buf(m, PROXY_FIELD_USERNAME, (uint8_t**)&username, &ulen,
+				MSG_GET_DIRECT) == 0) {
+		if (ulen >= sizeof(tr.from.proxy_orig->username)) {
+			cf_warning(AS_PROXY, "proxy username too big");
+			proxy_origin_destroy(tr.from.proxy_orig);
+			error_response(src, tid, AS_ERR_UNKNOWN);
+			return;
+		}
+
+		memcpy(tr.from.proxy_orig->username, username, ulen);
+		tr.from.proxy_orig->username[ulen] = 0;
+	}
+
+	tr.start_time = cf_getns();
 
 	// Proxyer has already done byte swapping in as_msg.
 	if (! as_transaction_prepare(&tr, false)) {
 		cf_warning(AS_PROXY, "bad proxy msg");
+		proxy_origin_destroy(tr.from.proxy_orig);
 		error_response(src, tid, AS_ERR_UNKNOWN);
 		return;
 	}

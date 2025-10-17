@@ -141,6 +141,7 @@ as_query_job_init(as_query_job* _job, const as_query_vtable* vtable,
 	}
 
 	strcpy(_job->client, tr->from.proto_fd_h->client);
+	as_security_copy_username(tr, _job->username, sizeof(_job->username));
 }
 
 void*
