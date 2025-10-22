@@ -22,3 +22,6 @@ Summary: Aerospike server
 Group: Applications
 %description server-@EDITION@
 This package contains all of the code for running the Aerospike server.
+
+%clean
+:

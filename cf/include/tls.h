@@ -66,9 +66,6 @@ void cf_tls_init(void);
 void cf_tls_start(void);
 char* cf_resolve_tls_name(char* tls_name, const char* cluster_name, const char* which);
 
-void tls_cleanup(void);
-void tls_thread_cleanup(void);
-
 void tls_socket_init(cf_socket* sock);
 void tls_socket_term(cf_socket* sock);
 int tls_socket_shutdown(cf_socket* sock);
