@@ -134,6 +134,7 @@ typedef struct as_storage_rd_s {
 	const uint8_t*			flat_bins;
 	uint16_t				flat_n_bins;
 	bool				check_flat;
+	struct as_masking_ctx_s*	mask_ctx;
 
 	union {
 		struct drv_ssd_s*	ssd;

@@ -1,7 +1,7 @@
 /*
  * log.c
  *
- * Copyright (C) 2019-2020 Aerospike, Inc.
+ * Copyright (C) 2019-2025 Aerospike, Inc.
  *
  * Portions may be licensed to Aerospike, Inc. under one or more contributor
  * license agreements.
@@ -136,7 +136,8 @@ static const char* context_strings[] = {
 		"tsvc",
 		"udf",
 		"xdr",
-		"xdr-client"
+		"xdr-client",
+		"masking"
 };
 
 ARRAY_ASSERT(context_strings, CF_LOG_N_CONTEXTS);

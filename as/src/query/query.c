@@ -57,9 +57,11 @@
 #include "vector.h"
 
 #include "base/aggr.h"
+#include "base/batch.h"
 #include "base/cdt.h"
 #include "base/cfg.h"
 #include "base/datamodel.h"
+#include "base/masking.h"
 #include "base/exp.h"
 #include "base/expop.h"
 #include "base/index.h"
@@ -1035,6 +1037,43 @@ sort_geo_range(as_query_geo_range* geo)
 }
 
 static bool
+sindex_must_mask(as_query_job* _job)
+{
+	as_masking_ctx ms;
+	if (! as_masking_ctx_init(&ms, _job->ns->name, _job->set_name,
+			_job->username, NULL)) {
+		return false;
+	}
+
+	if (! as_masking_must_mask(&ms, false)) {
+		return false;
+	}
+
+	if (_job->si->bin_name[0] != '\0') {
+		if (as_masking_has_rule(&ms, _job->si->bin_name, _job->si->ktype)) {
+			cf_warning(AS_QUERY, "query on masked bin '%s' denied for unauthorized user", _job->si->bin_name);
+			return true;
+		}
+	}
+
+	if (_job->si->exp_bins_info != NULL) {
+		uint32_t n_bins = cf_vector_size(_job->si->exp_bins_info);
+
+		for (uint32_t i = 0; i < n_bins; i++) {
+			as_bin_info* bin_info = (as_bin_info*)cf_vector_getp(
+					_job->si->exp_bins_info, i);
+
+			if (as_masking_has_rule(&ms, bin_info->name, bin_info->type)) {
+				cf_warning(AS_QUERY, "query on expression with masked bin '%s' (type %d) denied for unauthorized user", bin_info->name, bin_info->type);
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+static bool
 find_sindex(as_query_job* _job)
 {
 	as_query_range* range = _job->range;
@@ -1689,6 +1728,11 @@ basic_query_job_start(as_transaction* tr, as_namespace* ns)
 			return AS_ERR_SINDEX_NOT_READABLE;
 		}
 
+		if (sindex_must_mask (_job)) {
+			as_query_job_destroy(_job);
+			return AS_SEC_ERR_ROLE_VIOLATION;
+		}
+
 		_job->range->de_dup = _job->range->isrange &&
 				_job->si->itype != AS_SINDEX_ITYPE_DEFAULT;
 	}
@@ -2081,6 +2125,12 @@ basic_query_job_reduce_cb(as_index_ref* r_ref, int64_t bval, void* udata)
 
 	as_storage_record_open(ns, r, &rd);
 
+	as_storage_record_get_set_name(&rd);
+
+	as_masking_ctx ms;
+	rd.mask_ctx = as_masking_ctx_init(&ms, _job->ns->name, _job->set_name[0] ?
+			_job->set_name : rd.set_name, _job->username, NULL) ? &ms : NULL;
+
 	if (filter_exp != NULL && read_and_filter_bins(&rd, filter_exp) != 0) {
 		as_storage_record_close(&rd);
 		as_record_done(r_ref, ns);
@@ -2297,6 +2347,11 @@ aggr_query_job_start(as_transaction* tr, as_namespace* ns)
 		if (! _job->si->readable) {
 			as_query_job_destroy(_job);
 			return AS_ERR_SINDEX_NOT_READABLE;
+		}
+
+		if (sindex_must_mask (_job)) {
+			as_query_job_destroy(_job);
+			return AS_SEC_ERR_ROLE_VIOLATION;
 		}
 
 		_job->range->de_dup = _job->range->isrange &&
@@ -2781,6 +2836,11 @@ udf_bg_query_job_start(as_transaction* tr, as_namespace* ns)
 			return AS_ERR_SINDEX_NOT_READABLE;
 		}
 
+		if (sindex_must_mask (_job)) {
+			as_query_job_destroy(_job);
+			return AS_SEC_ERR_ROLE_VIOLATION;
+		}
+
 		_job->range->de_dup = _job->range->isrange &&
 				_job->si->itype != AS_SINDEX_ITYPE_DEFAULT;
 	}
@@ -3137,6 +3197,11 @@ ops_bg_query_job_start(as_transaction* tr, as_namespace* ns)
 		if (! _job->si->readable) {
 			as_query_job_destroy(_job);
 			return AS_ERR_SINDEX_NOT_READABLE;
+		}
+
+		if (sindex_must_mask (_job)) {
+			as_query_job_destroy(_job);
+			return AS_SEC_ERR_ROLE_VIOLATION;
 		}
 
 		_job->range->de_dup = _job->range->isrange &&

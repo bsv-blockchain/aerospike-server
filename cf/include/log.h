@@ -108,6 +108,7 @@ typedef enum {
 	AS_UDF,
 	AS_XDR,
 	AS_XDR_CLIENT,
+	AS_MASKING,
 
 	CF_LOG_N_CONTEXTS
 } cf_log_context;

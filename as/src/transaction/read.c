@@ -42,6 +42,7 @@
 #include "base/datamodel.h"
 #include "base/exp.h"
 #include "base/index.h"
+#include "base/masking.h"
 #include "base/proto.h"
 #include "base/security.h"
 #include "base/transaction.h"
@@ -564,6 +565,13 @@ read_local(as_transaction* tr)
 
 	as_storage_record_open(ns, r, &rd);
 
+	// Shortcut for set name storage.
+	as_storage_record_get_set_name(&rd);
+
+	as_masking_ctx ms;
+	rd.mask_ctx = as_masking_ctx_init(&ms, ns->name, rd.set_name, NULL, tr) ?
+			&ms : NULL;
+
 	// If configuration permits, allow reads to use page cache.
 	rd.read_page_cache = ns->storage_read_page_cache;
 
@@ -621,7 +629,13 @@ read_local(as_transaction* tr)
 			as_bin* b = &rd.bins[i];
 
 			if (! as_bin_is_tombstone(b)) {
-				response_bins[n_bins++] = b;
+				if (as_masking_apply(rd.mask_ctx, &result_bins[n_result_bins],
+						b)) {
+					response_bins[n_bins++] = &result_bins[n_result_bins++];
+				}
+				else {
+					response_bins[n_bins++] = b;
+				}
 			}
 		}
 	}
@@ -648,6 +662,10 @@ read_local(as_transaction* tr)
 			if (op->op == AS_MSG_OP_READ) {
 				as_bin* b = as_bin_get_live_w_len(&rd, op->name, op->name_sz);
 
+				if (b && as_masking_apply(rd.mask_ctx,
+						&result_bins[n_result_bins], b)) {
+					b = &result_bins[n_result_bins++];
+				}
 				if (b || respond_all_ops) {
 					ops[n_bins] = op;
 					response_bins[n_bins++] = b;

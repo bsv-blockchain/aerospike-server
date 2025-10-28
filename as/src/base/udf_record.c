@@ -45,8 +45,10 @@
 #include "base/cfg.h"
 #include "base/datamodel.h"
 #include "base/index.h"
+#include "base/masking.h"
 #include "base/proto.h"
 #include "base/transaction.h"
+#include "base/security.h"
 #include "storage/storage.h"
 #include "transaction/mrt_utils.h"
 #include "transaction/rw_utils.h"
@@ -287,6 +289,11 @@ udf_record_close(udf_record* urecord)
 				"unexpected - has particle buf");
 
 		if (urecord->is_loaded) {
+			if (urecord->rd->mask_ctx != NULL) {
+				cf_free(urecord->rd->mask_ctx);
+				urecord->rd->mask_ctx = NULL;
+			}
+
 			as_storage_record_close(urecord->rd);
 			urecord->is_loaded = false;
 		}
@@ -329,6 +336,16 @@ udf_record_load(udf_record* urecord)
 
 	as_storage_record_get_set_name(rd);
 	as_storage_rd_load_key(rd);
+
+	if (as_masking_ctx_init(NULL, rd->ns->name, rd->set_name, NULL,
+			urecord->tr)) {
+		rd->mask_ctx = cf_malloc(sizeof(as_masking_ctx));
+		as_masking_ctx_init(rd->mask_ctx, rd->ns->name, rd->set_name, NULL,
+				urecord->tr);
+	}
+	else {
+		rd->mask_ctx = NULL;
+	}
 
 	urecord->is_loaded = true;
 
@@ -439,7 +456,16 @@ udf_record_get(const as_rec* rec, const char* name)
 		return NULL;
 	}
 
+	as_bin rb;
+	if (as_masking_apply(urecord->rd->mask_ctx, &rb, b)) {
+		b = &rb;
+	}
+
 	value = as_bin_particle_to_asval(b);
+
+	if (b == &rb) {
+		as_bin_particle_destroy(&rb);
+	}
 
 	if (value == NULL) {
 		return NULL;

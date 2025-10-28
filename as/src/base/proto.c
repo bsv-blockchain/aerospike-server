@@ -47,6 +47,7 @@
 
 #include "base/datamodel.h"
 #include "base/index.h"
+#include "base/masking.h"
 #include "base/thr_tsvc.h"
 #include "base/transaction.h"
 #include "storage/storage.h"
@@ -351,14 +352,23 @@ as_msg_make_response_bufbuilder(cf_buf_builder **bb_r, as_storage_rd *rd,
 						(const char*)cf_vector_getp((cf_vector*)select_bins, i);
 
 				as_bin *b = as_bin_get_live(rd, bin_name);
+				as_bin rb;
 
 				if (! b) {
 					continue;
 				}
 
+				if (as_masking_apply(rd->mask_ctx, &rb, b)) {
+					b = &rb;
+				}
+
 				msg_sz += sizeof(as_msg_op);
 				msg_sz += strlen(bin_name);
 				msg_sz += as_bin_particle_client_value_size(b);
+
+				if (b == &rb) {
+					as_bin_particle_destroy(&rb);
+				}
 
 				n_bins_returned++;
 			}
@@ -371,14 +381,23 @@ as_msg_make_response_bufbuilder(cf_buf_builder **bb_r, as_storage_rd *rd,
 		else {
 			for (uint16_t i = 0; i < rd->n_bins; i++) {
 				as_bin *b = &rd->bins[i];
+				as_bin rb;
 
 				if (as_bin_is_tombstone(b)) {
 					continue;
 				}
 
+				if (as_masking_apply(rd->mask_ctx, &rb, b)) {
+					b = &rb;
+				}
+
 				msg_sz += sizeof(as_msg_op);
 				msg_sz += strlen(b->name);
 				msg_sz += as_bin_particle_client_value_size(b);
+
+				if (b == &rb) {
+					as_bin_particle_destroy(&rb);
+				}
 
 				n_bins_returned++;
 			}
@@ -465,31 +484,14 @@ as_msg_make_response_bufbuilder(cf_buf_builder **bb_r, as_storage_rd *rd,
 					(const char*)cf_vector_getp((cf_vector*)select_bins, i);
 
 			as_bin *b = as_bin_get_live(rd, bin_name);
+			as_bin rb;
 
 			if (! b) {
 				continue;
 			}
 
-			as_msg_op *op = (as_msg_op *)buf;
-
-			op->op = AS_MSG_OP_READ;
-			op->has_lut = 0;
-			op->unused_flags = 0;
-			op->name_sz = as_bin_memcpy_name(op->name, b);
-			op->op_sz = OP_FIXED_SZ + op->name_sz;
-
-			buf += sizeof(as_msg_op) + op->name_sz;
-			buf += as_bin_particle_to_client(b, op);
-
-			as_msg_swap_op(op);
-		}
-	}
-	else {
-		for (uint16_t i = 0; i < rd->n_bins; i++) {
-			as_bin *b = &rd->bins[i];
-
-			if (as_bin_is_tombstone(b)) {
-				continue;
+			if (as_masking_apply(rd->mask_ctx, &rb, b)) {
+				b = &rb;
 			}
 
 			as_msg_op *op = (as_msg_op *)buf;
@@ -504,6 +506,41 @@ as_msg_make_response_bufbuilder(cf_buf_builder **bb_r, as_storage_rd *rd,
 			buf += as_bin_particle_to_client(b, op);
 
 			as_msg_swap_op(op);
+
+			if (b == &rb) {
+				as_bin_particle_destroy(&rb);
+			}
+		}
+	}
+	else {
+		for (uint16_t i = 0; i < rd->n_bins; i++) {
+			as_bin *b = &rd->bins[i];
+			as_bin rb;
+
+			if (as_bin_is_tombstone(b)) {
+				continue;
+			}
+
+			if (as_masking_apply(rd->mask_ctx, &rb, b)) {
+				b = &rb;
+			}
+
+			as_msg_op *op = (as_msg_op *)buf;
+
+			op->op = AS_MSG_OP_READ;
+			op->has_lut = 0;
+			op->unused_flags = 0;
+			op->name_sz = as_bin_memcpy_name(op->name, b);
+			op->op_sz = OP_FIXED_SZ + op->name_sz;
+
+			buf += sizeof(as_msg_op) + op->name_sz;
+			buf += as_bin_particle_to_client(b, op);
+
+			as_msg_swap_op(op);
+
+			if (b == &rb) {
+				as_bin_particle_destroy(&rb);
+			}
 		}
 	}
 

@@ -42,6 +42,7 @@
 #include "log.h"
 
 #include "base/datamodel.h"
+#include "base/masking.h"
 #include "base/index.h"
 #include "base/proto.h"
 #include "base/set_index.h"
@@ -197,10 +198,20 @@ udf_aerospike_rec_create(const as_aerospike* as, const as_rec* rec)
 	}
 
 	as_storage_rd_load_bins(rd, urecord->stack_bins); // can't fail
+	as_storage_record_get_set_name(rd);
+
+	if (as_masking_ctx_init(NULL, rd->ns->name, rd->set_name, NULL, urecord->tr)) {
+		rd->mask_ctx = cf_malloc(sizeof(as_masking_ctx));
+		as_masking_ctx_init(rd->mask_ctx, rd->ns->name, rd->set_name, NULL, urecord->tr);
+	}
 
 	int exec_rv = execute_updates(urecord);
 
 	if (exec_rv != 0) {
+		if (rd->mask_ctx != NULL) {
+			cf_free(rd->mask_ctx);
+			rd->mask_ctx = NULL;
+		}
 		as_storage_record_close(rd);
 		as_index_delete(tree, keyd);
 		as_record_done(r_ref, ns);
@@ -439,15 +450,21 @@ static int
 execute_set_bin(udf_record* urecord, const char* name, const as_val* val)
 {
 	as_storage_rd* rd = urecord->rd;
+	as_bin* eb = as_bin_get(rd, name);
 
 	if (as_particle_type_from_asval(val) == AS_PARTICLE_TYPE_NULL) {
 		cf_warning(AS_UDF, "setting bin %s with unusable as_val", name);
 		return AS_ERR_INCOMPATIBLE_TYPE;
 	}
 
-	if (rd->n_bins == UDF_BIN_LIMIT && as_bin_get(rd, name) == NULL) {
+	if (rd->n_bins == UDF_BIN_LIMIT && eb == NULL) {
 		cf_warning(AS_UDF, "exceeded UDF max bins %d", UDF_BIN_LIMIT);
 		return AS_ERR_BIN_NAME;
+	}
+
+	if (eb != NULL && as_masking_apply(rd->mask_ctx, NULL, eb)) {
+		return as_masking_log_violation(urecord->tr, "udf",
+				"would overwrite masked bin", name, strlen(name));
 	}
 
 	as_bin* b = as_bin_get_or_create(rd, name);
@@ -455,6 +472,11 @@ execute_set_bin(udf_record* urecord, const char* name, const as_val* val)
 	uint8_t* buf = get_particle_buf(urecord, size);
 
 	as_bin_particle_from_asval(b, buf, val);
+
+	if (as_masking_apply(rd->mask_ctx, NULL, b)) {
+		return as_masking_log_violation(urecord->tr, "udf",
+				"would create masked bin", name, strlen(name));
+	}
 
 	return AS_OK;
 }

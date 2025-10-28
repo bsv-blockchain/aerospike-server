@@ -45,6 +45,7 @@
 
 #include "base/cdt.h"
 #include "base/datamodel.h"
+#include "base/masking.h"
 #include "base/proto.h"
 #include "base/particle.h"
 #include "base/particle_blob.h"
@@ -3843,30 +3844,67 @@ eval_bin(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 		return;
 	}
 
-	switch (bin_type) {
-	case AS_PARTICLE_TYPE_INTEGER:
-		ret_val->type = RT_INT;
-		ret_val->r_int = as_bin_particle_integer_value(bin);
-		break;
-	case AS_PARTICLE_TYPE_FLOAT:
-		ret_val->type = RT_FLOAT;
-		ret_val->r_float = as_bin_particle_float_value(bin);
-		break;
-	case AS_PARTICLE_TYPE_BOOL:
-		ret_val->type = RT_TRILEAN;
-		ret_val->r_trilean = as_bin_particle_bool_value(bin);
-		break;
-	case AS_PARTICLE_TYPE_STRING:
-	case AS_PARTICLE_TYPE_BLOB:
-	case AS_PARTICLE_TYPE_HLL:
-	case AS_PARTICLE_TYPE_MAP:
-	case AS_PARTICLE_TYPE_LIST:
-	case AS_PARTICLE_TYPE_GEOJSON:
-		ret_val->type = RT_BIN_PTR;
-		ret_val->r_bin_p = bin;
-		break;
-	default:
-		cf_crash(AS_EXP, "unexpected");
+	if (as_masking_apply(rt->ctx->rd->mask_ctx, &ret_val->r_bin, bin)) {
+		switch(bin_type) {
+		case AS_PARTICLE_TYPE_INTEGER: {
+			int64_t val = as_bin_particle_integer_value(&ret_val->r_bin);
+			as_bin_particle_destroy(&ret_val->r_bin);
+			ret_val->type = RT_INT;
+			ret_val->r_int = val;
+			break;
+		}
+		case AS_PARTICLE_TYPE_FLOAT: {
+			double val = as_bin_particle_float_value(&ret_val->r_bin);
+			as_bin_particle_destroy(&ret_val->r_bin);
+			ret_val->type = RT_FLOAT;
+			ret_val->r_float = val;
+			break;
+		}
+		case AS_PARTICLE_TYPE_BOOL:{
+			bool val = as_bin_particle_bool_value(&ret_val->r_bin);
+			as_bin_particle_destroy(&ret_val->r_bin);
+			ret_val->type = RT_TRILEAN;
+			ret_val->r_trilean = val;
+			break;
+		}
+		case AS_PARTICLE_TYPE_STRING:
+		case AS_PARTICLE_TYPE_BLOB:
+		case AS_PARTICLE_TYPE_HLL:
+		case AS_PARTICLE_TYPE_MAP:
+		case AS_PARTICLE_TYPE_LIST:
+		case AS_PARTICLE_TYPE_GEOJSON:
+			ret_val->type = RT_BIN;
+			break;
+		default:
+			cf_crash(AS_EXP, "unexpected");
+		}
+	}
+	else {
+		switch (bin_type) {
+		case AS_PARTICLE_TYPE_INTEGER:
+			ret_val->type = RT_INT;
+			ret_val->r_int = as_bin_particle_integer_value(bin);
+			break;
+		case AS_PARTICLE_TYPE_FLOAT:
+			ret_val->type = RT_FLOAT;
+			ret_val->r_float = as_bin_particle_float_value(bin);
+			break;
+		case AS_PARTICLE_TYPE_BOOL:
+			ret_val->type = RT_TRILEAN;
+			ret_val->r_trilean = as_bin_particle_bool_value(bin);
+			break;
+		case AS_PARTICLE_TYPE_STRING:
+		case AS_PARTICLE_TYPE_BLOB:
+		case AS_PARTICLE_TYPE_HLL:
+		case AS_PARTICLE_TYPE_MAP:
+		case AS_PARTICLE_TYPE_LIST:
+		case AS_PARTICLE_TYPE_GEOJSON:
+			ret_val->type = RT_BIN_PTR;
+			ret_val->r_bin_p = bin;
+			break;
+		default:
+			cf_crash(AS_EXP, "unexpected");
+		}
 	}
 }
 

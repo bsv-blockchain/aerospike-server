@@ -36,6 +36,7 @@
 #include "dynbuf.h"
 
 #include "base/datamodel.h"
+#include "base/masking.h"
 
 
 //==========================================================

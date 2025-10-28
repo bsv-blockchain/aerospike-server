@@ -161,6 +161,7 @@ static void add_blob_from_msgpack(msgpack_in* element, as_sindex_bin* sbin);
 static void add_geojson_from_msgpack(msgpack_in* element, as_sindex_bin* sbin);
 
 static char const* ktype_str(as_particle_type ktype);
+const char* sindex_particle_type_str(as_particle_type type);
 static as_particle_type ktype_from_smd_char(char c);
 static char ktype_to_smd_char(as_particle_type ktype);
 static as_sindex_type itype_from_smd_char(char c);
@@ -753,13 +754,13 @@ as_sindex_validate_exp_type(const char* iname, as_sindex_type itype,
 	if (exp_type != expected_type) {
 		if (db != NULL) {
 			as_info_respond_error(db, AS_ERR_PARAMETER, "bad 'exp' - expression type '%s' does not match expected type '%s'",
-					as_particle_type_str(exp_type),
-					as_particle_type_str(expected_type));
+					sindex_particle_type_str(exp_type),
+					sindex_particle_type_str(expected_type));
 		}
 
 		cf_warning(AS_SINDEX, "sindex-create %s: bad 'exp' - expression type '%s' does not match expected type '%s'",
-				iname, as_particle_type_str(exp_type),
-				as_particle_type_str(expected_type));
+				iname, sindex_particle_type_str(exp_type),
+				sindex_particle_type_str(expected_type));
 		return false;
 	}
 
@@ -1889,6 +1890,16 @@ ktype_str(as_particle_type ktype)
 	}
 
 	return NULL;
+}
+
+const char*
+sindex_particle_type_str(as_particle_type type)
+{
+	if (type == AS_PARTICLE_TYPE_INTEGER) {
+		return "numeric";
+	}
+
+	return as_particle_type_str(type);
 }
 
 static as_particle_type

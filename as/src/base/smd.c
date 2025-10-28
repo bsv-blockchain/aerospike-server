@@ -333,7 +333,8 @@ static smd_module g_module_table[] = {
 		[AS_SMD_MODULE_SINDEX] = { .name = "sindex" },
 		[AS_SMD_MODULE_TRUNCATE] = { .name = "truncate" },
 		[AS_SMD_MODULE_UDF] = { .name = "UDF" },
-		[AS_SMD_MODULE_XDR] = { .name = "XDR", .save_throttle_sec = 30 }
+		[AS_SMD_MODULE_XDR] = { .name = "XDR", .save_throttle_sec = 30 },
+		[AS_SMD_MODULE_MASKING] = { .name = "masking" }
 };
 
 COMPILER_ASSERT(sizeof(g_module_table) / sizeof(smd_module) ==

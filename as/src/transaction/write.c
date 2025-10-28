@@ -45,6 +45,7 @@
 #include "base/exp.h"
 #include "base/expop.h"
 #include "base/index.h"
+#include "base/masking.h"
 #include "base/mrt_monitor.h"
 #include "base/proto.h"
 #include "base/set_index.h"
@@ -800,6 +801,11 @@ write_master(rw_request* rw, as_transaction* tr)
 		as_storage_record_open(ns, r, &rd);
 	}
 
+	as_masking_ctx ms;
+
+	rd.mask_ctx = as_masking_ctx_init(&ms, ns->name, set_name, NULL, tr) ?
+			&ms : NULL;
+
 	// Add the MRT id, as appropriate.
 	if ((result = set_mrt_id_from_msg(&rd, tr)) != 0) {
 		write_master_failed(tr, &r_ref, tree, &rd, result);
@@ -1181,7 +1187,8 @@ write_master_apply(as_transaction* tr, as_index_ref* r_ref, as_storage_rd* rd,
 	}
 
 	// For sindex, we must read existing record even if replacing.
-	rd->ignore_record_on_device = is_replace && ! si_needs_bins;
+	rd->ignore_record_on_device = is_replace &&
+			! si_needs_bins && ! as_masking_must_mask(rd->mask_ctx, true);
 
 	as_bin stack_bins[RECORD_MAX_BINS + m->n_ops];
 
@@ -1190,6 +1197,15 @@ write_master_apply(as_transaction* tr, as_index_ref* r_ref, as_storage_rd* rd,
 	if (result < 0) {
 		cf_warning(AS_RW, "{%s} write_master: failed as_storage_rd_load_bins() %pD", ns->name, &tr->keyd);
 		return -result;
+	}
+
+	if (is_replace && as_masking_must_mask(rd->mask_ctx, true)) {
+		for (uint16_t i = 0; i < rd->n_bins; i++) {
+			as_bin* b = &rd->bins[i];
+			if (as_bin_is_live(b) && as_masking_apply(rd->mask_ctx, NULL, b)) {
+				return as_masking_log_violation(tr, "replace record", "would delete masked bin", b->name, strlen(b->name));
+			}
+		}
 	}
 
 	uint32_t n_old_bins = (uint32_t)rd->n_bins;
@@ -1354,6 +1370,7 @@ write_master_bin_ops(as_transaction* tr, as_storage_rd* rd,
 	if (n_response_bins == 0) {
 		// If 'ordered-ops' flag was not set, and there were no read ops or CDT
 		// ops with results, there's no response to build and send later.
+		as_bin_destroy_all(result_bins, n_result_bins);
 		return 0;
 	}
 
@@ -1434,17 +1451,30 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 		if (op->op == AS_MSG_OP_WRITE) {
 			// AS_PARTICLE_TYPE_NULL means delete the bin.
 			if (op->particle_type == AS_PARTICLE_TYPE_NULL) {
-				delete_bin(rd, op, msg_lut);
+				if (as_masking_apply(rd->mask_ctx, NULL, as_bin_get_w_len(rd, op->name, op->name_sz))) {
+				  return as_masking_log_violation(tr, "bin delete", "would delete masked bin", op->name, op->name_sz);
+				}
+				else {
+					delete_bin(rd, op, msg_lut);
+				}
 			}
 			// It's a regular bin write.
 			else {
 				as_bin* b = as_bin_get_or_create_w_len(rd, op->name, op->name_sz);
+
+				if (as_masking_apply(rd->mask_ctx, NULL, b)) {
+					return as_masking_log_violation(tr, "bin write", "would overwrite masked bin", op->name, op->name_sz);
+				}
 
 				write_resolved_bin(rd, op, msg_lut, b);
 
 				if ((result = as_bin_particle_from_client(b, particles_llb, op)) < 0) {
 					cf_warning(AS_RW, "{%s} write_master: failed as_bin_particle_from_client() %pD", ns->name, &tr->keyd);
 					return -result;
+				}
+
+				if (as_masking_apply(rd->mask_ctx, NULL, b)) {
+					return as_masking_log_violation(tr, "bin write", "would create masked bin", op->name, op->name_sz);
 				}
 			}
 
@@ -1457,9 +1487,17 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 		else if (OP_IS_MODIFY(op->op)) {
 			as_bin* b = as_bin_get_or_create_w_len(rd, op->name, op->name_sz);
 
+			if (as_masking_apply(rd->mask_ctx, NULL, b)) {
+				return as_masking_log_violation(tr, "bin modify","would overwrite masked bin", op->name, op->name_sz);
+			}
+
 			if ((result = as_bin_particle_modify_from_client(b, particles_llb, op)) < 0) {
 				cf_warning(AS_RW, "{%s} write_master: failed as_bin_particle_modify_from_client() %pD", ns->name, &tr->keyd);
 				return -result;
+			}
+
+			if (as_masking_apply(rd->mask_ctx, NULL, b)) {
+				return as_masking_log_violation(tr, "bin modify","would create masked bin", op->name, op->name_sz);
 			}
 
 			if (respond_all_ops) {
@@ -1468,6 +1506,16 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 			}
 		}
 		else if (op->op == AS_MSG_OP_DELETE_ALL) {
+			if (as_masking_must_mask(rd->mask_ctx, true)) {
+				for (uint16_t i = 0; i < rd->n_bins; i++) {
+					as_bin* b = &rd->bins[i];
+
+					if (as_bin_is_live(b) && as_masking_apply(rd->mask_ctx,
+							NULL, b)) {
+						return as_masking_log_violation(tr, "delete all", "would delete masked bin", b->name, strlen(b->name));
+					}
+				}
+			}
 			delete_all_bins(rd);
 
 			if (respond_all_ops) {
@@ -1481,7 +1529,14 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 
 				if (! as_bin_is_tombstone(b)) {
 					// ops array will not be not used in this case.
-					response_bins[(*p_n_response_bins)++] = *b;
+					if (as_masking_apply(rd->mask_ctx,
+							&result_bins[(*p_n_result_bins)], b)) {
+						response_bins[(*p_n_response_bins)++] =
+								result_bins[(*p_n_result_bins)++];
+					}
+					else {
+						response_bins[(*p_n_response_bins)++] = *b;
+					}
 				}
 			}
 		}
@@ -1490,7 +1545,15 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 
 			if (b) {
 				ops[*p_n_response_bins] = op;
-				response_bins[(*p_n_response_bins)++] = *b;
+
+				if (as_masking_apply(rd->mask_ctx,
+						&result_bins[(*p_n_result_bins)], b)) {
+					response_bins[(*p_n_response_bins)++] =
+							result_bins[(*p_n_result_bins)++];
+				}
+				else {
+					response_bins[(*p_n_response_bins)++] = *b;
+				}
 			}
 			else if (respond_all_ops) {
 				ops[*p_n_response_bins] = op;
@@ -1628,6 +1691,10 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 		else if (op->op == AS_MSG_OP_EXP_MODIFY) {
 			as_bin* b = as_bin_get_or_create_w_len(rd, op->name, op->name_sz);
 
+			if (as_masking_apply(rd->mask_ctx, NULL, b)) {
+				return as_masking_log_violation(tr, "exp write", "would overwrite masked bin", op->name, op->name_sz);
+			}
+
 			bool created_bin = as_bin_is_unused(b);
 			const as_exp_ctx exp_ctx = { .ns = ns, .rd = rd, .r = rd->r };
 			const iops_expop* expop = tr->origin == FROM_IOPS ?
@@ -1636,6 +1703,10 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 			if ((result = as_bin_exp_modify_from_client(&exp_ctx, b, particles_llb, op, expop)) < 0) {
 				cf_detail(AS_RW, "{%s} write_master: failed as_bin_exp_modify_from_client() %pD", ns->name, &tr->keyd);
 				return -result;
+			}
+
+			if (as_masking_apply(rd->mask_ctx, NULL, b)) {
+				return as_masking_log_violation(tr, "exp write", "would create masked bin", op->name, op->name_sz);
 			}
 
 			if (respond_all_ops) {

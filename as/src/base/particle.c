@@ -88,7 +88,7 @@ const as_particle_vtable *particle_vtable[] = {
 
 static const char* particle_strings[] = {
 	"null",
-	"numeric",
+	"integer",
 	"float",
 	"string",
 	"blob",
@@ -239,6 +239,18 @@ as_particle_type_str(as_particle_type type)
 			AS_PARTICLE, "bad particle type %u", type);
 
 	return particle_strings[type];
+}
+
+as_particle_type
+as_particle_type_from_str(const char* str)
+{
+	for (uint32_t i = 0; i < AS_PARTICLE_TYPE_MAX; i++) {
+		if (strcmp(particle_strings[i], str) == 0) {
+			return (as_particle_type)i;
+		}
+	}
+
+	return AS_PARTICLE_TYPE_BAD;
 }
 
 uint32_t

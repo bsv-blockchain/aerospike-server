@@ -69,6 +69,7 @@
 #include "base/cfg.h"
 #include "base/cfg_info.h"
 #include "base/datamodel.h"
+#include "base/masking.h"
 #include "base/features.h"
 #include "base/health.h"
 #include "base/index.h"
@@ -282,7 +283,7 @@ static void add_data_stripe_stats(as_namespace* ns, cf_dyn_buf* db);
 static void add_data_device_stats(as_namespace* ns, cf_dyn_buf* db);
 static void find_sindex_key(const cf_vector* items, void* udata);
 static void smd_show_cb(const cf_vector* items, void* udata);
-static void debug_record(const char* params, cf_dyn_buf* db, bool all_data);
+static void debug_record(const char* params, cf_dyn_buf* db, bool all_data, as_file_handle* fd_h);
 static void debug_dump_index(cf_dyn_buf* db, as_namespace* ns, as_record* r, bool is_orig);
 static void debug_dump_pickle(cf_dyn_buf* db, as_storage_rd* rd, bool is_orig);
 static void debug_dump_raw(cf_dyn_buf* db, as_storage_rd* rd, bool leave_encrypted, bool is_orig);
@@ -412,6 +413,8 @@ static const as_info_cmd SPECS[] = {
 	{ .name="log-message",             .fn=cmd_log_message,             .client_only=false, .ee_only=false, .perm=PERM_LOGGING_CTRL   },
 	{ .name="log-set",                 .fn=cmd_log_set,                 .client_only=false, .ee_only=false, .perm=PERM_LOGGING_CTRL   },
 	{ .name="logs",                    .fn=cmd_logs,                    .client_only=false, .ee_only=false, .perm=PERM_NONE           },
+	{ .name="masking",                 .fn=as_masking_info_cmd,         .client_only=false, .ee_only=true,  .perm=PERM_MASKING_ADMIN  },
+	{ .name="masking-show",            .fn=as_masking_info_cmd,         .client_only=false, .ee_only=true,  .perm=PERM_NONE           },
 	{ .name="mcast",                   .fn=cmd_hb_addr,                 .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="mesh",                    .fn=cmd_hb_addr,                 .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
 	{ .name="name",                    .fn=cmd_name,                    .client_only=true,  .ee_only=false, .perm=PERM_NONE           },
@@ -1452,7 +1455,7 @@ cmd_debug_record(as_info_cmd_args* args)
 	// debug-record:namespace=<ns-name>;keyd=<hex-digest>[;mode=<mode>]
 	// where <mode> is one of: pickle or raw or raw-encrypted
 
-	debug_record(params, db, true);
+	debug_record(params, db, true, args->fd_h);
 }
 
 static void
@@ -1463,7 +1466,7 @@ cmd_debug_record_meta(as_info_cmd_args* args)
 
 	// Command format: debug-record-meta:namespace=<ns-name>;keyd=<hex-digest>
 
-	debug_record(params, db, false);
+	debug_record(params, db, false, args->fd_h);
 }
 
 static void
@@ -3732,6 +3735,13 @@ cmd_smd_show(as_info_cmd_args* args)
 
 		as_smd_get_all(AS_SMD_MODULE_XDR, smd_show_cb, db);
 	}
+	else if(strcasecmp(module_str, "masking") == 0) {
+		if (as_info_respond_enterprise_only(db)) {
+			return;
+		}
+
+		as_smd_get_all(AS_SMD_MODULE_MASKING, smd_show_cb, db);
+	}
 	else {
 		cf_warning(AS_INFO, "smd-show: unknown 'module' %s", module_str);
 		as_info_respond_error(db, AS_ERR_PARAMETER, "unknown 'module'");
@@ -4381,7 +4391,13 @@ perm_to_string(as_sec_perm perm)
 	case PERM_XDR_SET_FILTER:
 		return "xdr-set-filter";
 	case PERM_USER_ADMIN:
-		return "urder-admin";
+		return "user-admin";
+	case PERM_MASKING_ADMIN:
+		return "masking-admin";
+	case PERM_READ_MASKED:
+		return "read-masked";
+	case PERM_WRITE_MASKED:
+		return "write-masked";
 	default:
 		cf_crash(AS_INFO, "unexpected perm %lu", perm);
 	}
@@ -5397,7 +5413,7 @@ db_append_hex(cf_dyn_buf* db, const char* name, const uint8_t* buf, uint32_t sz,
 }
 
 static void
-debug_record(const char* params, cf_dyn_buf* db, bool all_data)
+debug_record(const char* params, cf_dyn_buf* db, bool all_data, as_file_handle* fd_h)
 {
 	// Get the namespace name.
 
@@ -5501,19 +5517,32 @@ debug_record(const char* params, cf_dyn_buf* db, bool all_data)
 		return;
 	}
 
+	as_index* r = r_ref.r;
+	as_storage_rd rd;
+	as_storage_record_open(ns, r, &rd);
+	as_storage_record_get_set_name(&rd);
+
+	if (all_data && rd.set_name != NULL && as_masking_ctx_init(NULL, ns->name, rd.set_name, NULL, NULL)) {
+		uint8_t result = as_security_check_info_cmd(fd_h, "debug-record", params, PERM_READ_MASKED);
+
+		as_security_log(fd_h, result, PERM_READ_MASKED, "debug-record", params);
+
+		if (result != AS_OK) {
+			as_storage_record_close(&rd);
+			as_record_done(&r_ref, ns);
+			as_partition_release(&rsv);
+			append_security_error(db, result, PERM_READ_MASKED);
+			return;
+		}
+	}
+
 	info_append_uint32(db, "pid", pid);
 
 	cf_mutex_lock(&rsv.p->lock); // hack using lock outside of partition code
 	info_append_int(db, "repl-ix", find_self_in_replicas(rsv.p));
 	cf_mutex_unlock(&rsv.p->lock);
 
-	as_index* r = r_ref.r;
-
 	debug_dump_index(db, ns, r, false);
-
-	as_storage_rd rd;
-
-	as_storage_record_open(ns, r, &rd);
 
 	if (as_pickle) {
 		debug_dump_pickle(db, &rd, false);
@@ -5531,11 +5560,10 @@ debug_record(const char* params, cf_dyn_buf* db, bool all_data)
 		as_record* orig_r = cf_arenax_resolve(ns->arena, r->orig_h);
 
 		debug_dump_index(db, ns, orig_r, true);
-
 		if (orig_r->generation != 0) {
 			as_storage_rd orig_rd;
-
 			as_storage_record_open(ns, orig_r, &orig_rd);
+			as_storage_record_get_set_name(&orig_rd);
 
 			if (as_pickle) {
 				debug_dump_pickle(db, &orig_rd, true);

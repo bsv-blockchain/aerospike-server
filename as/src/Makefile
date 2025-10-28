@@ -14,6 +14,7 @@ BASE_HEADERS += cdt.h
 BASE_HEADERS += cfg.h
 BASE_HEADERS += cfg_info.h
 BASE_HEADERS += datamodel.h
+BASE_HEADERS += masking.h
 BASE_HEADERS += exp.h
 BASE_HEADERS += expop.h
 BASE_HEADERS += features.h
@@ -91,6 +92,7 @@ ifneq ($(USE_EE),1)
   BASE_SOURCES += cfg_ce.c
   BASE_SOURCES += features_ce.c
   BASE_SOURCES += index_ce.c
+  BASE_SOURCES += masking_ce.c
   BASE_SOURCES += mrt_monitor_ce.c
   BASE_SOURCES += namespace_ce.c
   BASE_SOURCES += proto_ce.c
