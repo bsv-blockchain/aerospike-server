@@ -60,7 +60,7 @@ absllib:
 
 .PHONY: s2lib
 s2lib: absllib
-	$(CMAKE) -S $(S2) -B $(S2)/build -G 'Unix Makefiles' $(S2_FLAGS) $(if $(OPENSSL_INCLUDE_DIR),-DOPENSSL_INCLUDE_DIR=$(OPENSSL_INCLUDE_DIR),) -DCMAKE_PREFIX_PATH=$(ABSL)/installation -DBUILD_SHARED_LIBS=OFF
+	$(CMAKE) -S $(S2) -B $(S2)/build -G 'Unix Makefiles' $(S2_FLAGS) $(if $(OPENSSL_INCLUDE_DIR),-DOPENSSL_INCLUDE_DIR=$(OPENSSL_INCLUDE_DIR),) -DCMAKE_PREFIX_PATH=$(ABSL)/installation -DBUILD_SHARED_LIBS=OFF -DBUILD_EXAMPLES=OFF
 	$(MAKE) -C $(S2)/build
 
 .PHONY: targetdirs
