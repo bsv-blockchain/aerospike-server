@@ -62,7 +62,7 @@ static void append_set_props(as_set *p_set, cf_dyn_buf *db);
 //
 
 as_namespace *
-as_namespace_create(char *name)
+as_namespace_create(const char *name)
 {
 	cf_assert_nostack(strlen(name) < AS_ID_NAMESPACE_SZ,
 			AS_NAMESPACE, "{%s} namespace name too long (max length is %u)",

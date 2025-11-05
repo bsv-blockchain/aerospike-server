@@ -25,6 +25,7 @@
 //
 
 #include "base/cfg.h"
+#include "base/cfg_tree_wrapper.h"
 
 #include <errno.h>
 #include <grp.h>
@@ -97,35 +98,21 @@ as_config g_config;
 // Forward declarations.
 //
 
-static void cfg_add_feature_key_file(const char* path);
 static void init_addr_list(cf_addr_list* addrs);
-static void add_addr(const char* name, cf_addr_list* addrs);
-static void add_tls_peer_name(const char* name, cf_serv_spec* spec);
 static void bind_to_access(const cf_serv_spec* from, cf_addr_list* to);
-static void cfg_add_addr_bind(const char* name, cf_serv_spec* spec);
-static void cfg_add_addr_std(const char* name, cf_serv_spec* spec);
-static void cfg_add_addr_alt(const char* name, cf_serv_spec* spec);
 static void cfg_mserv_config_from_addrs(cf_addr_list* addrs, cf_addr_list* bind_addrs, cf_mserv_cfg* serv_cfg, cf_ip_port port, cf_sock_owner owner, uint8_t ttl);
 static void cfg_serv_spec_to_bind(const cf_serv_spec* spec, cf_serv_cfg* bind, cf_sock_owner owner);
 static cf_tls_info* cfg_setup_tls_server(cf_serv_spec* spec, const char* which);
 static void cfg_serv_spec_std_to_access(const cf_serv_spec* spec, cf_addr_list* access);
 static void cfg_serv_spec_alt_to_access(const cf_serv_spec* spec, cf_addr_list* access);
 static void addrs_to_access(const cf_addr_list* addrs, cf_addr_list* access);
-static void cfg_add_mesh_seed_addr_port(char* addr, cf_ip_port port, bool tls);
-static void cfg_add_secrets_addr_port(char* addr, char* port, char* tls_name);
-static as_set* cfg_add_set(as_namespace* ns);
 static uint32_t cfg_check_set_default_ttl(const char* ns_name, const char* set_name, uint32_t value);
-static void cfg_add_pi_xmem_mount(as_namespace* ns, const char* mount);
-static void cfg_add_si_xmem_mount(as_namespace* ns, const char* mount);
 static void cfg_add_mem_shadow_file(as_namespace* ns, const char* file_name);
-static void cfg_add_storage_file(as_namespace* ns, const char* file_name, const char* shadow_name);
 static void cfg_add_mem_shadow_device(as_namespace* ns, const char* device_name);
-static void cfg_add_storage_device(as_namespace* ns, const char* device_name, const char* shadow_name);
 static void cfg_set_cluster_name(char* cluster_name);
 static void cfg_add_ldap_role_query_pattern(char* pattern);
 static void cfg_create_all_histograms();
 static void cfg_init_serv_spec(cf_serv_spec* spec_p);
-static cf_tls_spec* cfg_create_tls_spec(as_config* cfg, char* name);
 static void cfg_keep_cap(bool keep, bool* what, int32_t cap);
 static void cfg_best_practices_check(void);
 
@@ -2106,9 +2093,45 @@ const char CFG_WHITESPACE[] = " \t\n\r\f\v";
 //
 
 as_config*
+as_config_init_yaml(const char* config_file, const char* schema_file) {
+	as_config* c = &g_config; // shortcut pointer
+	
+	if (! config_file || ! schema_file) {
+		cf_crash_nostack(AS_CFG, "config file and schema file paths cannot be null");
+	}
+
+	// TODO: remove this when we have a way to set defaults from the schema
+	cfg_set_defaults();
+
+	cfg_tree_t cfg_tree = cfg_tree_create(config_file, schema_file,
+			CFG_FORMAT_YAML);
+	if (cfg_tree == NULL) {
+		printf("Failed to create CFGTree: %s\n", cfg_tree_get_last_error());
+		exit(1);
+	}
+
+	if (cfg_tree_validate(cfg_tree) != 0) {
+		printf("Validation failed: %s\n", cfg_tree_get_last_error());
+		cfg_tree_destroy(cfg_tree);
+		exit(1);
+	}
+
+	if (cfg_tree_apply_config(cfg_tree, c) != 0) {
+		printf("Apply configuration failed: %s\n", cfg_tree_get_last_error());
+		cfg_tree_destroy(cfg_tree);
+		exit(1);
+	}
+
+	cfg_tree_destroy(cfg_tree);
+
+	return c;
+}
+
+as_config*
 as_config_init(const char* config_file)
 {
 	as_config* c = &g_config; // shortcut pointer
+	
 
 	// Set the service context defaults. Values parsed from the config file will
 	// override the defaults.
@@ -2939,6 +2962,10 @@ as_config_init(const char* config_file)
 				tls_spec->pki_user_append_ou = cfg_bool(&line);
 				break;
 			case CASE_NETWORK_TLS_PROTOCOLS:
+				// By default, we set the protocols to strdup'ed "TLSv1.2".
+				if (tls_spec->protocols != NULL) {
+					cf_free(tls_spec->protocols);
+				}
 				tls_spec->protocols = cfg_strdup_no_checks(&line);
 				break;
 			case CASE_CONTEXT_END:
@@ -4935,11 +4962,11 @@ as_config_cluster_name_matches(const char* cluster_name)
 
 
 //==========================================================
-// Item-specific parsing utilities.
+// Public API - CFG field parsing utilities.
 //
 
 // TODO - should be split function or move to EE?
-static void
+void
 cfg_add_feature_key_file(const char* path)
 {
 	if (g_config.n_feature_key_files == MAX_FEATURE_KEY_FILES) {
@@ -4962,7 +4989,7 @@ init_addr_list(cf_addr_list* addrs)
 	memset(&addrs->addrs, '\0', sizeof(addrs->addrs));
 }
 
-static void
+void
 add_addr(const char* name, cf_addr_list* addrs)
 {
 	uint32_t n = addrs->n_addrs;
@@ -4976,7 +5003,7 @@ add_addr(const char* name, cf_addr_list* addrs)
 }
 
 // TODO - should be split function or move to EE?
-static void
+void
 add_tls_peer_name(const char* name, cf_serv_spec* spec)
 {
 	uint32_t n = spec->n_tls_peer_names;
@@ -5029,19 +5056,19 @@ bind_to_access(const cf_serv_spec* from, cf_addr_list* to)
 	cfg_serv_spec_std_to_access(&spec, to);
 }
 
-static void
+void
 cfg_add_addr_bind(const char* name, cf_serv_spec* spec)
 {
 	add_addr(name, &spec->bind);
 }
 
-static void
+void
 cfg_add_addr_std(const char* name, cf_serv_spec* spec)
 {
 	add_addr(name, &spec->std);
 }
 
-static void
+void
 cfg_add_addr_alt(const char* name, cf_serv_spec* spec)
 {
 	add_addr(name, &spec->alt);
@@ -5229,7 +5256,7 @@ addrs_to_access(const cf_addr_list* addrs, cf_addr_list* access)
 	}
 }
 
-static void
+void
 cfg_add_mesh_seed_addr_port(char* addr, cf_ip_port port, bool tls)
 {
 	int32_t i;
@@ -5248,7 +5275,7 @@ cfg_add_mesh_seed_addr_port(char* addr, cf_ip_port port, bool tls)
 	}
 }
 
-static void
+void
 cfg_add_secrets_addr_port(char* addr, char* port, char* tls_name)
 {
 	g_secrets_cfg.addr = addr;
@@ -5256,7 +5283,7 @@ cfg_add_secrets_addr_port(char* addr, char* port, char* tls_name)
 	g_secrets_cfg.tls_name = tls_name;
 }
 
-static as_set*
+as_set*
 cfg_add_set(as_namespace* ns)
 {
 	if (ns->sets_cfg_count >= AS_SET_MAX_COUNT) {
@@ -5287,7 +5314,7 @@ cfg_check_set_default_ttl(const char* ns_name, const char* set_name,
 }
 
 // TODO - should be split function or move to EE?
-static void
+void
 cfg_add_pi_xmem_mount(as_namespace* ns, const char* mount)
 {
 	if (ns->n_pi_xmem_mounts == CF_XMEM_MAX_MOUNTS) {
@@ -5304,7 +5331,7 @@ cfg_add_pi_xmem_mount(as_namespace* ns, const char* mount)
 }
 
 // TODO - should be split function or move to EE?
-static void
+void
 cfg_add_si_xmem_mount(as_namespace* ns, const char* mount)
 {
 	if (ns->n_si_xmem_mounts == CF_XMEM_MAX_MOUNTS) {
@@ -5343,7 +5370,7 @@ cfg_add_mem_shadow_file(as_namespace* ns, const char* file_name)
 	// later that shadows are files.
 }
 
-static void
+void
 cfg_add_storage_file(as_namespace* ns, const char* file_name,
 		const char* shadow_name)
 {
@@ -5402,7 +5429,7 @@ cfg_add_mem_shadow_device(as_namespace* ns, const char* device_name)
 	// will signify later that shadows are devices.
 }
 
-static void
+void
 cfg_add_storage_device(as_namespace* ns, const char* device_name,
 		const char* shadow_name)
 {
@@ -5512,8 +5539,8 @@ cfg_init_serv_spec(cf_serv_spec* spec_p)
 }
 
 // TODO - should be split function or move to EE?
-static cf_tls_spec*
-cfg_create_tls_spec(as_config* cfg, char* name)
+cf_tls_spec*
+cfg_create_tls_spec(as_config* cfg, const char* name)
 {
 	uint32_t ind = cfg->n_tls_specs++;
 
@@ -5523,7 +5550,7 @@ cfg_create_tls_spec(as_config* cfg, char* name)
 
 	cf_tls_spec* tls_spec = cfg->tls_specs + ind;
 	tls_spec->name = cf_strdup(name);
-	tls_spec->protocols = "TLSv1.2";
+	tls_spec->protocols = cf_strdup("TLSv1.2");
 
 	tls_init_change_check(tls_spec);
 

@@ -87,7 +87,8 @@ function main() {
 				pkg-config)
 			# EE dependencies.
 			packages+=(libcurl4-openssl-dev
-				   libldap2-dev)
+				   libldap2-dev \
+				   libgtest-dev)
 		fi
 
 		maybe "DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y --no-install-recommends ${packages[*]}"
@@ -109,7 +110,8 @@ function main() {
 				rpm-build)
 			# EE dependencies.
 			packages+=(libcurl-devel
-				   openldap-devel)
+				   openldap-devel \
+				   gtest-devel)
 		fi
 
 		maybe "${SUDO} yum install -y ${packages[*]}"

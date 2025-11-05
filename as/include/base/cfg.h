@@ -224,12 +224,32 @@ typedef struct as_config_s {
 // Public API.
 //
 
+as_config* as_config_init_yaml(const char* config_file, const char* schema_file); // experimental
 as_config* as_config_init(const char* config_file);
 void as_config_post_process(as_config* c, const char* config_file);
 
 void as_config_cluster_name_get(char* cluster_name);
 bool as_config_cluster_name_set(const char* cluster_name);
 bool as_config_cluster_name_matches(const char* cluster_name);
+
+// Forward declaration to prevent circular dependency
+// datamodel.h includes this file.
+typedef struct as_namespace_s as_namespace;
+typedef struct as_set_s as_set;
+
+void cfg_add_feature_key_file(const char* path);
+void add_addr(const char* name, cf_addr_list* addrs);
+void add_tls_peer_name(const char* name, cf_serv_spec* spec);
+void cfg_add_addr_bind(const char* name, cf_serv_spec* spec);
+void cfg_add_addr_std(const char* name, cf_serv_spec* spec);
+void cfg_add_addr_alt(const char* name, cf_serv_spec* spec);
+void cfg_add_mesh_seed_addr_port(char* addr, cf_ip_port port, bool tls);
+void cfg_add_secrets_addr_port(char* addr, char* port, char* tls_name);
+as_set* cfg_add_set(as_namespace* ns);
+void cfg_add_pi_xmem_mount(as_namespace* ns, const char* mount);
+void cfg_add_si_xmem_mount(as_namespace* ns, const char* mount);
+void cfg_add_storage_file(as_namespace* ns, const char* file_name, const char* shadow_name);
+void cfg_add_storage_device(as_namespace* ns, const char* device_name, const char* shadow_name);
 
 void as_config_init_namespace(struct as_namespace_s* ns);
 
@@ -276,4 +296,5 @@ typedef struct cfg_line_s {
 
 void cfg_enterprise_only(const cfg_line* p_line);
 void cfg_post_process();
+cf_tls_spec* cfg_create_tls_spec(as_config* cfg, const char* name);
 cf_tls_spec* cfg_link_tls(const char* which, char** our_name);

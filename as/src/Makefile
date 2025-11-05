@@ -13,6 +13,9 @@ BASE_HEADERS += batch.h
 BASE_HEADERS += cdt.h
 BASE_HEADERS += cfg.h
 BASE_HEADERS += cfg_info.h
+BASE_HEADERS += cfg_tree.hpp
+BASE_HEADERS += cfg_tree_handlers.hpp
+BASE_HEADERS += cfg_tree_wrapper.h
 BASE_HEADERS += datamodel.h
 BASE_HEADERS += masking.h
 BASE_HEADERS += exp.h
@@ -52,6 +55,9 @@ BASE_SOURCES += bin.c
 BASE_SOURCES += cdt.c
 BASE_SOURCES += cfg.c
 BASE_SOURCES += cfg_info.c
+BASE_SOURCES += cfg_tree.cc
+BASE_SOURCES += cfg_tree_handlers.cc
+BASE_SOURCES += cfg_tree_wrapper.cc
 BASE_SOURCES += exp.c
 BASE_SOURCES += expop.c
 BASE_SOURCES += health.c
@@ -247,14 +253,18 @@ INCLUDES += -I$(ABSL)
 INCLUDES += -I$(CF)/include
 INCLUDES += -I$(COMMON)/target/$(PLATFORM)/include
 INCLUDES += -I$(JANSSON)/src
+INCLUDES += -I$(JSON_PATH)/installation/include
+INCLUDES += -I$(JSON_SCHEMA_PATH)/installation/include
 INCLUDES += -I$(MOD_LUA)/target/$(PLATFORM)/include
 INCLUDES += -I$(S2)/src
-
+INCLUDES += -I$(YAML_CPP_PATH)/include
 AS_LIBRARIES += $(LIBRARY_DIR)/libcf.a
 AS_LIBRARIES += $(COMMON)/target/$(PLATFORM)/lib/libaerospike-common.a
 AS_LIBRARIES += $(JEMALLOC)/lib/libjemalloc.a
+AS_LIBRARIES += $(JSON_SCHEMA_PATH)/build/libnlohmann_json_schema_validator.a
 AS_LIBRARIES += $(LIBBACKTRACE)/.libs/libbacktrace.a
 AS_LIBRARIES += $(MOD_LUA)/target/$(PLATFORM)/lib/libmod_lua.a
+AS_LIBRARIES += $(YAML_CPP_PATH)/build/libyaml-cpp.a
 
 ifeq ($(DOPROFILE),1)
   LIBRARIES += -pg -fprofile-arcs -lgcov
@@ -319,3 +329,15 @@ endif
 
 $(OBJECT_DIR)/geospatial/%.o: CXXFLAGS += $(S2_WNO) -std=c++17 -D__STDC_LIMIT_MACROS
 $(OBJECT_DIR)/geospatial/%.o: CFLAGS := $(filter-out -std=gnu99,$(CFLAGS))
+
+$(OBJECT_DIR)/base/cfg_tree_wrapper.o: CXXFLAGS += $(S2_WNO) -std=c++17 -D__STDC_LIMIT_MACROS
+$(OBJECT_DIR)/base/cfg_tree_wrapper.o: CFLAGS := $(filter-out -std=gnu99,$(CFLAGS))
+
+$(OBJECT_DIR)/base/cfg_tree.o: CXXFLAGS += $(S2_WNO) -std=c++17 -D__STDC_LIMIT_MACROS
+$(OBJECT_DIR)/base/cfg_tree.o: CFLAGS := $(filter-out -std=gnu99,$(CFLAGS))
+
+$(OBJECT_DIR)/base/cfg_tree_handlers.o: CXXFLAGS += $(S2_WNO) -std=c++17 -D__STDC_LIMIT_MACROS
+$(OBJECT_DIR)/base/cfg_tree_handlers.o: CFLAGS := $(filter-out -std=gnu99,$(CFLAGS))
+
+# Embed schema file hash at compile time
+$(OBJECT_DIR)/base/as.o: CFLAGS += -DAS_SCHEMA_HASH="\"$(shell $(DEPTH)/build/gen_schema_hash $(SCHEMA_FILE))\""

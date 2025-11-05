@@ -1,0 +1,7 @@
+formatter:
+  retain_line_breaks: true         # avoid collapsing lines
+  retain_indentation: true         # keep indentation for block scalars
+  prefer_block_style: true         # use | or >- for multi-line strings
+  block_style_minimum_lines: 2     # only use block style if 2+ lines
+  line_width: 80
+  indent: 2

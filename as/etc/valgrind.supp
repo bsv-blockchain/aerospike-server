@@ -187,4 +187,16 @@
    fun:clone
 }
 
+# suppress false positives on arm64 shared pointer usage
+{
+   yaml-cpp-shared-ptr-arm64-atomic
+   Memcheck:Addr8
+   fun:_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv
+}
 
+{
+   yaml-cpp-unhandled-instruction
+   Memcheck:Value8
+   ...
+   fun:*YAML*
+}

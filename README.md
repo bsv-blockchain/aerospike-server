@@ -42,6 +42,7 @@ the build environment, including:
 
 The C++ compiler is required for the Aerospike geospatial indexing
 feature and its dependency, Google's S2 Geometry Library (both written in C++.)
+C++ is also used for yaml/json configuration parsing.
 
 - The Red Hat Enterprise Linux 8/9 requires `gcc-c++`.
 - The Debian 11/12/13 and Ubuntu 20/22/24 requires `g++`.
@@ -68,10 +69,13 @@ The Aerospike Database Server build depends upon the following submodules:
 | common    | The Aerospike Common Library |
 | jansson   | C library for encoding, decoding and manipulating JSON data |
 | jemalloc  | The JEMalloc Memory Allocator |
+| json      | nlohmann/json library for json in c++, used primarily for config parsing |
+| jsonschema | pboettch/json-schema-validator used to validate configuration against our schemas |
 | libbacktrace | A C library that may be linked into a C/C++ program to produce symbolic backtraces |
 | lua       | The Lua runtime |
 | mod-lua   | The Aerospike Lua Interface |
 | s2geometry | The S2 Spherical Geometry Library |
+| yamlcpp   | jbeder/yaml-cpp used to parse yaml config files |
 
 After the initial cloning of the `aerospike-server` repo., the
 submodules must be fetched for the first time using the following
@@ -122,12 +126,34 @@ command:
 
 ## Configuring Aerospike
 
-Sample Aerospike configuration files are provided in `as/etc`. The
+### Configuration Formats
+
+Aerospike supports two configuration formats:
+
+- **Traditional .conf format**: Sample configuration files are provided in `as/etc`. The
 developer configuration file, `aerospike_dev.conf`, contains basic
 settings that should work out-of-the-box on most systems. The package
 example configuration files, `aerospike.conf`, and the Solid State Drive
 (SSD) version, `aerospike_ssd.conf`, are suitable for running Aerospike
 as a system daemon.
+
+- **YAML format**: Aerospike supports YAML-based configuration with JSON schema validation
+as an experimental feature. This format provides structured configuration with automatic
+validation against a schema file.
+
+  To use YAML configuration:
+  
+  1. Enable the feature with the `--experimental` flag when starting the server
+  2. Optionally specify a custom schema file with `--schema-file <file>` (default location:
+     `/opt/aerospike/schema/aerospike_config_schema.json`)
+  3. Supply a YAML based configuration file that adheres to the schema.
+  
+  **Converting existing configurations**: Use the `asconfig` tool to convert traditional
+  `.conf` files to YAML format. The tool generates YAML files with metadata headers that
+  include version information.
+  
+  **Schema validation**: The JSON schema file validates your YAML configuration at startup,
+  catching configuration errors early and providing better error messages for invalid settings.
 
 These sample files may be modified for specific use cases (e.g., setting
 network addresses, defining namespaces, and setting storage engine

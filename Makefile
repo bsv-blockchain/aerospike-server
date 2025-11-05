@@ -10,6 +10,11 @@
 #   make cleangit     - Remove all files untracked by Git.  (Use with caution!)
 #   make strip        - Build stripped versions of the server executables.
 #
+# Test Targets:
+#
+#   make tests              - Build all tests. Depends on EE repo.
+#   make run-tests          - Build and run all tests. Depends on EE repo.
+#
 # Packaging Targets:
 #
 #   make deb     - Package server for Debian / Ubuntu platforms as a ".deb" file.
@@ -38,7 +43,7 @@ lib: aslibs
 	$(MAKE) -C as $@ STATIC_LIB=1 OS=$(OS)
 
 .PHONY: aslibs
-aslibs: targetdirs version $(JANSSON)/Makefile $(JEMALLOC)/Makefile $(LIBBACKTRACE)/Makefile s2lib
+aslibs: targetdirs version $(JANSSON)/Makefile $(JEMALLOC)/Makefile $(LIBBACKTRACE)/Makefile s2lib jsonlib jsonschema yamlcpp
 	$(MAKE) -C $(JANSSON)
 	$(MAKE) -C $(JEMALLOC)
 	$(MAKE) -C $(LIBBACKTRACE)
@@ -50,6 +55,7 @@ endif
 	$(MAKE) -C $(MOD_LUA) CF=$(CF) COMMON=$(COMMON) LUAMOD=$(LUAMOD) EXT_CFLAGS="$(EXT_CFLAGS)" TARGET_SERVER=1 OS=$(UNAME)
 
 S2_FLAGS = -DCMAKE_CXX_STANDARD=17 -DCMAKE_BUILD_TYPE=RelWithDebInfo
+JSON_SCHEMA_FLAGS = -DCMAKE_CXX_STANDARD=17 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFIX_PATH=$(JSON_PATH)/installation
 
 .PHONY: absllib
 absllib:
@@ -62,6 +68,32 @@ absllib:
 s2lib: absllib
 	$(CMAKE) -S $(S2) -B $(S2)/build -G 'Unix Makefiles' $(S2_FLAGS) $(if $(OPENSSL_INCLUDE_DIR),-DOPENSSL_INCLUDE_DIR=$(OPENSSL_INCLUDE_DIR),) -DCMAKE_PREFIX_PATH=$(ABSL)/installation -DBUILD_SHARED_LIBS=OFF -DBUILD_EXAMPLES=OFF
 	$(MAKE) -C $(S2)/build
+
+.PHONY: jsonlib
+jsonlib:
+	# Build nlohmann-json as a CMake project so it creates proper targets
+	$(CMAKE) -S $(JSON_PATH) -B $(JSON_PATH)/build -G 'Unix Makefiles' -DCMAKE_CXX_STANDARD=17 -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCMAKE_INSTALL_PREFIX=$(JSON_PATH)/installation -DJSON_Install=ON -DJSON_BuildTests=OFF
+	$(MAKE) -C $(JSON_PATH)/build install
+
+# NOTE this builds and links a static lib
+.PHONY: jsonschema
+jsonschema: jsonlib
+	# Configure the build using CMake.
+	# -S specifies the source directory.
+	# -B specifies the build directory (we create one inside the module).
+	# -DCMAKE_PREFIX_PATH tells it where to find the nlohmann-json installation.
+	$(CMAKE) -S $(JSON_SCHEMA_PATH) -B $(JSON_SCHEMA_PATH)/build -G 'Unix Makefiles' $(JSON_SCHEMA_FLAGS) \
+		-DCMAKE_PREFIX_PATH=$(JSON_PATH)/installation -DCMAKE_INSTALL_PREFIX=$(JSON_SCHEMA_PATH)/installation -DBUILD_SHARED_LIBS=OFF
+	$(MAKE) -C $(JSON_SCHEMA_PATH)/build install
+
+# NOTE this builds and links a static lib
+.PHONY: yamlcpp
+yamlcpp:
+	# Build yaml-cpp as a CMake project so it creates proper targets
+	$(CMAKE) -S $(YAML_CPP_PATH) -B $(YAML_CPP_PATH)/build -G 'Unix Makefiles' \
+		-DCMAKE_INSTALL_PREFIX=$(YAML_CPP_PATH)/installation
+	$(MAKE) -C $(YAML_CPP_PATH)/build
 
 .PHONY: targetdirs
 targetdirs:
@@ -89,6 +121,16 @@ cleanmodules:
 	if [ -e "$(JANSSON)/Makefile" ]; then \
 		$(MAKE) -C $(JANSSON) clean; \
 		$(MAKE) -C $(JANSSON) distclean; \
+	fi
+	if [ -e "$(JSON_PATH)/Makefile" ]; then \
+		$(MAKE) -C $(JSON_PATH) clean; \
+	fi
+	$(RM) -rf $(JSON_PATH)/build $(JSON_PATH)/installation # Clean nlohmann-json CMake build artifacts
+	if [ -e "$(JSON_SCHEMA_PATH)/build/Makefile" ]; then \
+		$(MAKE) -C $(JSON_SCHEMA_PATH)/build clean; \
+	fi
+	if [ -e "$(YAML_CPP_PATH)/build/Makefile" ]; then \
+		$(MAKE) -C $(YAML_CPP_PATH)/build clean; \
 	fi
 	if [ -e "$(JEMALLOC)/Makefile" ]; then \
 		$(MAKE) -C $(JEMALLOC) clean; \
@@ -123,6 +165,8 @@ cleangit:
 	cd $(LIBBACKTRACE); $(GIT_CLEAN)
 	cd $(MOD_LUA); $(GIT_CLEAN)
 	cd $(S2); $(GIT_CLEAN)
+	cd $(JSON_SCHEMA_PATH); $(GIT_CLEAN)
+	cd $(JSON_PATH); $(GIT_CLEAN)
 	$(GIT_CLEAN)
 
 .PHONY: rpm deb

@@ -1519,7 +1519,7 @@ as_bin_memcpy_name(uint8_t* buf, as_bin* b)
 }
 
 /* Namespace function declarations */
-as_namespace *as_namespace_create(char *name);
+as_namespace *as_namespace_create(const char *name);
 void as_namespaces_setup(bool cold_start_cmd, uint32_t instance);
 void as_namespaces_init(bool cold_start_cmd, uint32_t instance);
 void as_namespace_finish_setup(as_namespace *ns, uint32_t instance);

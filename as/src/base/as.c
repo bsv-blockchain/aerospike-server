@@ -37,6 +37,7 @@
 #include <syscall.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <openssl/evp.h>
 
 #include "citrusleaf/alloc.h"
 
@@ -88,16 +89,24 @@
 // Typedefs & constants.
 //
 
+
+// Schema file hash - can be overridden at compile time via -DAS_SCHEMA_HASH="..."
+#ifndef AS_SCHEMA_HASH
+#define AS_SCHEMA_HASH "unknown"
+#endif
+
 // Command line options for the Aerospike server.
 static const struct option CMD_OPTS[] = {
 		{ "help", no_argument, NULL, 'h' },
 		{ "version", no_argument, NULL, 'v' },
 		{ "config-file", required_argument, NULL, 'f' },
+		{ "schema-file", required_argument, NULL, 's' },
 		{ "foreground", no_argument, NULL, 'd' },
 		{ "fgdaemon", no_argument, NULL, 'F' },
 		{ "early-verbose", no_argument, NULL, 'e' },
 		{ "cold-start", no_argument, NULL, 'c' },
 		{ "instance", required_argument, NULL, 'n' },
+		{ "experimental", no_argument, NULL, 'x' },
 		{ NULL, 0, NULL, 0 }
 };
 
@@ -119,6 +128,11 @@ static const char HELP[] =
 		"\n"
 		"Specify the location of the Aerospike server config file. If this option is not\n"
 		"specified, the default location /etc/aerospike/aerospike.conf is used.\n"
+		"\n"
+		"--schema-file <file>"
+		"\n"
+		"Specify the location of the Aerospike server schema file. If this option is not\n"
+		"specified, the default location /opt/aerospike/schema/aerospike_config_schema.json is used.\n"
 		"\n"
 		"--foreground"
 		"\n"
@@ -145,6 +159,11 @@ static const char HELP[] =
 		"(Enterprise edition only.) If running multiple instances of Aerospike on one\n"
 		"machine (not recommended), each instance must be uniquely designated via this\n"
 		"option.\n"
+		"\n"
+		"--experimental"
+		"\n"
+		"Enable experimental features.\n"
+		"\n"
 		;
 
 static const char USAGE[] =
@@ -155,14 +174,17 @@ static const char USAGE[] =
 		"\n"
 		"asd runtime command-line options:\n"
 		"[--config-file <file>] "
+		"[--schema-file <file>] "
 		"[--foreground] "
 		"[--fgdaemon] "
 		"[--early-verbose] "
 		"[--cold-start] "
-		"[--instance <0-15>]\n"
+		"[--instance <0-15>] "
+		"[--experimental] \n"
 		;
 
 static const char DEFAULT_CONFIG_FILE[] = "/etc/aerospike/aerospike.conf";
+static const char DEFAULT_SCHEMA_FILE[] = "/opt/aerospike/schema/aerospike_config_schema.json";
 
 static const char SMD_DIR_NAME[] = "/smd";
 
@@ -188,6 +210,7 @@ extern void as_signal_setup(void);
 static void write_pidfile(char *pidfile);
 static void validate_directory(const char *path, const char *log_tag);
 static void validate_smd_directory(void);
+static void verify_schema_file(const char *schema_file);
 
 
 //==========================================================
@@ -202,11 +225,13 @@ as_run(int argc, char **argv)
 	int opt;
 	int opt_i;
 	const char *config_file = DEFAULT_CONFIG_FILE;
+	const char *schema_file = DEFAULT_SCHEMA_FILE;
 	bool run_in_foreground = false;
 	bool new_style_daemon = false;
 	bool early_verbose = false;
 	bool cold_start_cmd = false;
 	uint32_t instance = 0;
+	bool experimental = false;
 
 	// Parse command line options.
 	while ((opt = getopt_long(argc, argv, "", CMD_OPTS, &opt_i)) != -1) {
@@ -221,6 +246,9 @@ as_run(int argc, char **argv)
 			return 0;
 		case 'f':
 			config_file = cf_strdup(optarg);
+			break;
+		case 's':
+			schema_file = cf_strdup(optarg);
 			break;
 		case 'F':
 			// As a "new-style" daemon(*), asd runs in the foreground and
@@ -248,6 +276,9 @@ as_run(int argc, char **argv)
 		case 'n':
 			instance = (uint32_t)strtol(optarg, NULL, 0);
 			break;
+		case 'x':
+			experimental = true;
+			break;
 		default:
 			// fprintf() since we don't want cf_log's prefix.
 			fprintf(stderr, "%s\n", USAGE);
@@ -267,7 +298,17 @@ as_run(int argc, char **argv)
 	// Set all fields in the global runtime configuration instance. This parses
 	// the configuration file, and creates as_namespace objects. (Return value
 	// is a shortcut pointer to the global runtime configuration instance.)
-	as_config *c = as_config_init(config_file);
+	as_config *c = NULL;
+
+	if (experimental) {
+		// Verify that the schema file hasn't been modified since installation.
+		verify_schema_file(schema_file);
+		// assume the config is in yaml format in experimental mode
+		c = as_config_init_yaml(config_file, schema_file);
+	}
+	else {
+		c = as_config_init(config_file);
+	}
 
 	// Detect NUMA topology and, if requested, prepare for CPU and NUMA pinning.
 	cf_topo_config(c->auto_pin, (cf_topo_numa_node_index)instance,
@@ -312,6 +353,11 @@ as_run(int argc, char **argv)
 	// If we allocated a non-default config file name, free it.
 	if (config_file != DEFAULT_CONFIG_FILE) {
 		cf_free((void*)config_file);
+	}
+
+	// If we allocated a non-default schema file name, free it.
+	if (schema_file != DEFAULT_SCHEMA_FILE) {
+		cf_free((void*)schema_file);
 	}
 
 	// Write the pid file, if specified.
@@ -543,4 +589,82 @@ validate_smd_directory(void)
 	strcpy(smd_path, g_config.work_directory);
 	strcpy(smd_path + len, SMD_DIR_NAME);
 	validate_directory(smd_path, "system metadata");
+}
+
+static void
+verify_schema_file(const char *schema_file)
+{
+	cf_detail(AS_AS, "verifying schema file '%s', expecting hash: %s",
+			schema_file, AS_SCHEMA_HASH);
+	
+	// Compute the SHA-256 hash of the schema file at runtime
+	FILE *fp = fopen(schema_file, "rb");
+	
+	if (fp == NULL) {
+		cf_crash(AS_AS, "schema file '%s' not found: %s - skipping integrity check",
+				schema_file, cf_strerror(errno));
+		return;
+	}
+
+	EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+
+	if (mdctx == NULL) {
+		cf_crash(AS_AS, "failed to create hash context for schema verification");
+		fclose(fp);
+		return;
+	}
+
+	if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) {
+		cf_crash(AS_AS, "failed to initialize hash for schema verification");
+		EVP_MD_CTX_free(mdctx);
+		fclose(fp);
+		return;
+	}
+
+	unsigned char buffer[8192];
+	size_t bytes_read;
+
+	while ((bytes_read = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
+		if (EVP_DigestUpdate(mdctx, buffer, bytes_read) != 1) {
+			cf_crash(AS_AS, "failed to update hash for schema verification");
+			EVP_MD_CTX_free(mdctx);
+			fclose(fp);
+			return;
+		}
+	}
+
+	fclose(fp);
+
+	unsigned char hash[EVP_MAX_MD_SIZE];
+	unsigned int hash_len;
+
+	if (EVP_DigestFinal_ex(mdctx, hash, &hash_len) != 1) {
+		cf_crash(AS_AS, "failed to finalize hash for schema verification");
+		EVP_MD_CTX_free(mdctx);
+		return;
+	}
+
+	EVP_MD_CTX_free(mdctx);
+
+	// Convert hash to hex string
+	char hash_str[65]; // SHA-256 is 32 bytes = 64 hex chars + null terminator
+
+	for (unsigned int i = 0; i < hash_len; i++) {
+		sprintf(&hash_str[i * 2], "%02x", hash[i]);
+	}
+
+	hash_str[64] = '\0';
+
+	// Compare with the build-time hash
+	if (strcmp(hash_str, AS_SCHEMA_HASH) != 0) {
+		cf_warning(AS_AS, "unofficial configuration schema file detected: '%s'",
+				schema_file);
+		cf_warning(AS_AS, "expected hash: %s", AS_SCHEMA_HASH);
+		cf_warning(AS_AS, "actual hash:   %s", hash_str);
+		cf_warning(AS_AS, "using an unofficial configuration schema may result in unexpected behavior");
+		cf_warning(AS_AS, "continuing with unofficial schema");
+	}
+	else {
+		cf_info(AS_AS, "schema file integrity verified: %s", schema_file);
+	}
 }

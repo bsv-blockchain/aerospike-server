@@ -50,6 +50,9 @@ endif
 	install -d $(OPT_AS)/smd
 	install -d $(OPT_AS)/usr/udf/lua
 
+	install -d $(OPT_AS)/schema
+	install -pm 644 $(SCHEMA_FILE) $(OPT_AS)/schema/aerospike_config_schema.json
+
 	install -d $(OPT_AS)/bin
 	install -pm 755 $(DEPTH)/tools/memacct/asparsemem $(OPT_AS)/bin
 

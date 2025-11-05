@@ -30,3 +30,12 @@
 	path = modules/lua
 	url = https://github.com/aerospike/lua.git
 	ignore = dirty
+[submodule "modules/json"]
+	path = modules/json
+	url = https://github.com/aerospike/json
+[submodule "modules/jsonschema"]
+	path = modules/jsonschema
+	url = https://github.com/aerospike/json-schema-validator
+[submodule "modules/yamlcpp"]
+	path = modules/yamlcpp
+	url = https://github.com/aerospike/yaml-cpp
