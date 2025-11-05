@@ -703,10 +703,25 @@ as_storage_histogram_clear_all(as_namespace* ns)
 void
 as_storage_record_get_set_name(as_storage_rd* rd)
 {
-	rd->set_name = as_index_get_set_name(rd->r, rd->ns);
+	uint16_t set_id = as_index_get_set_id(rd->r);
 
-	if (rd->set_name != NULL) {
-		rd->set_name_len = strlen(rd->set_name);
+	if (set_id == INVALID_SET_ID) {
+		rd->set_name = NULL;
+		rd->p_set = NULL;
+		return;
+	}
+
+	as_set* p_set;
+
+	if (cf_vmapx_get_by_index(rd->ns->p_sets_vmap, (uint32_t)set_id - 1,
+			(void**)&p_set) == CF_VMAPX_OK) {
+		rd->p_set = p_set;
+		rd->set_name = p_set->name;
+		rd->set_name_len = strlen(p_set->name);
+	}
+	else {
+		rd->p_set = NULL;
+		rd->set_name = NULL;
 	}
 }
 

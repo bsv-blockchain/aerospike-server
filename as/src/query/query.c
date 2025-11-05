@@ -1039,9 +1039,11 @@ sort_geo_range(as_query_geo_range* geo)
 static bool
 sindex_must_mask(as_query_job* _job)
 {
+	as_set* p_set = as_namespace_get_set_by_name(_job->ns, _job->set_name);
 	as_masking_ctx ms;
-	if (! as_masking_ctx_init(&ms, _job->ns->name, _job->set_name,
-			_job->username, NULL)) {
+
+	if (! as_masking_ctx_init(&ms, _job->ns->name, p_set, _job->username,
+			NULL)) {
 		return false;
 	}
 
@@ -2128,8 +2130,8 @@ basic_query_job_reduce_cb(as_index_ref* r_ref, int64_t bval, void* udata)
 	as_storage_record_get_set_name(&rd);
 
 	as_masking_ctx ms;
-	rd.mask_ctx = as_masking_ctx_init(&ms, _job->ns->name, _job->set_name[0] ?
-			_job->set_name : rd.set_name, _job->username, NULL) ? &ms : NULL;
+	rd.mask_ctx = as_masking_ctx_init(&ms, _job->ns->name, rd.p_set,
+			_job->username, NULL) ? &ms : NULL;
 
 	if (filter_exp != NULL && read_and_filter_bins(&rd, filter_exp) != 0) {
 		as_storage_record_close(&rd);

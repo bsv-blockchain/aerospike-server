@@ -350,7 +350,7 @@ truncate_action_do(as_namespace* ns, const char* set_name, uint64_t lut)
 				ns->name, set_name, lut, n_threads);
 
 		p_set->truncate_lut = lut;
-		p_set->truncating = true;
+		p_set->flags |= AS_SET_FLAG_TRUNCATING;
 	}
 	else {
 		if (lut <= ns->truncate_lut) {
@@ -400,7 +400,7 @@ truncate_action_undo(as_namespace* ns, const char* set_name)
 				set_name, p_set->truncate_lut);
 
 		p_set->truncate_lut = 0;
-		p_set->truncating = false;
+		p_set->flags &= ~AS_SET_FLAG_TRUNCATING;
 	}
 	else {
 		cf_info(AS_TRUNCATE, "{%s} undoing truncate - was to %lu", ns->name,
@@ -458,7 +458,7 @@ run_truncate(void* arg)
 				cf_info(AS_TRUNCATE, "{%s|%s} done truncate to %lu deleted %lu",
 						ns->name, p_set->name, lut, jobi->n_deleted);
 
-				p_set->truncating = false;
+				p_set->flags &= ~AS_SET_FLAG_TRUNCATING;
 			}
 			else {
 				cf_info(AS_TRUNCATE, "{%s|%s} abandoned truncate to %lu deleted %lu - truncate-lut is now %lu",

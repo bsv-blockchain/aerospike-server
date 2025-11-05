@@ -635,7 +635,7 @@ append_set_props(as_set *p_set, cf_dyn_buf *db)
 	cf_dyn_buf_append_char(db, ':');
 
 	cf_dyn_buf_append_string(db, "truncating=");
-	cf_dyn_buf_append_bool(db, p_set->truncating);
+	cf_dyn_buf_append_bool(db, (p_set->flags & AS_SET_FLAG_TRUNCATING) != 0);
 	cf_dyn_buf_append_char(db, ':');
 
 	// Configuration:

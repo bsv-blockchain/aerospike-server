@@ -564,11 +564,11 @@ drop_master(as_transaction* tr, as_index_ref* r_ref, rw_request* rw)
 	}
 
 	bool check_key = as_transaction_has_key(tr);
-	const char* set_name = as_index_get_set_name(r, ns);
+	as_set* p_set = as_namespace_get_record_set(ns, r);
 	as_masking_ctx ms;
+	bool must_mask_any = as_masking_ctx_init(&ms, ns->name, p_set, NULL, tr);
 
-	if (filter_exp != NULL || check_key || as_masking_ctx_init(&ms, ns->name,
-			set_name, NULL, tr)) {
+	if (filter_exp != NULL || check_key || must_mask_any) {
 		as_storage_rd rd;
 		as_storage_record_open(ns, r, &rd);
 		rd.mask_ctx = &ms;

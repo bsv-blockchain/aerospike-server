@@ -569,7 +569,7 @@ read_local(as_transaction* tr)
 	as_storage_record_get_set_name(&rd);
 
 	as_masking_ctx ms;
-	rd.mask_ctx = as_masking_ctx_init(&ms, ns->name, rd.set_name, NULL, tr) ?
+	rd.mask_ctx = as_masking_ctx_init(&ms, ns->name, rd.p_set, NULL, tr) ?
 			&ms : NULL;
 
 	// If configuration permits, allow reads to use page cache.

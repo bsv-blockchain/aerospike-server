@@ -803,7 +803,7 @@ write_master(rw_request* rw, as_transaction* tr)
 
 	as_masking_ctx ms;
 
-	rd.mask_ctx = as_masking_ctx_init(&ms, ns->name, set_name, NULL, tr) ?
+	rd.mask_ctx = as_masking_ctx_init(&ms, ns->name, p_set, NULL, tr) ?
 			&ms : NULL;
 
 	// Add the MRT id, as appropriate.

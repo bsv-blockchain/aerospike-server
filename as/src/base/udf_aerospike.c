@@ -200,9 +200,9 @@ udf_aerospike_rec_create(const as_aerospike* as, const as_rec* rec)
 	as_storage_rd_load_bins(rd, urecord->stack_bins); // can't fail
 	as_storage_record_get_set_name(rd);
 
-	if (as_masking_ctx_init(NULL, rd->ns->name, rd->set_name, NULL, urecord->tr)) {
+	if (as_masking_ctx_init(NULL, rd->ns->name, rd->p_set, NULL, urecord->tr)) {
 		rd->mask_ctx = cf_malloc(sizeof(as_masking_ctx));
-		as_masking_ctx_init(rd->mask_ctx, rd->ns->name, rd->set_name, NULL, urecord->tr);
+		as_masking_ctx_init(rd->mask_ctx, rd->ns->name, rd->p_set, NULL, urecord->tr);
 	}
 
 	int exec_rv = execute_updates(urecord);

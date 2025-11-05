@@ -118,6 +118,7 @@ typedef struct as_storage_rd_s {
 	// Shortcuts for handling set name storage:
 	uint32_t				set_name_len; // could make it a uint8_t
 	const char*				set_name;
+	const struct as_set_s*			p_set;
 
 	// Parameters used when handling key storage:
 	uint32_t				key_size;

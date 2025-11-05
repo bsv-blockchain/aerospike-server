@@ -1457,6 +1457,10 @@ typedef struct as_namespace_s {
 
 #define INVALID_SET_ID 0
 
+// as_set flag bits
+#define AS_SET_FLAG_TRUNCATING         0x01
+#define AS_SET_FLAG_HAS_MASKING_RULES  0x02
+
 // Caution - changing the size of this struct will break warm restart.
 typedef struct as_set_s {
 	char			name[AS_SET_NAME_MAX_SIZE];
@@ -1474,7 +1478,7 @@ typedef struct as_set_s {
 	bool			eviction_disabled;	// don't evict anything in this set (note - expiration still works)
 	bool			index_enabled;
 	bool			index_populating;
-	bool			truncating;
+	uint8_t			flags;				// Packed flags (2 bits used)
 } as_set;
 
 COMPILER_ASSERT(sizeof(as_set) == 128);

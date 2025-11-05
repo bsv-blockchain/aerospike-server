@@ -5522,8 +5522,10 @@ debug_record(const char* params, cf_dyn_buf* db, bool all_data, as_file_handle* 
 	as_storage_record_open(ns, r, &rd);
 	as_storage_record_get_set_name(&rd);
 
-	if (all_data && rd.set_name != NULL && as_masking_ctx_init(NULL, ns->name, rd.set_name, NULL, NULL)) {
-		uint8_t result = as_security_check_info_cmd(fd_h, "debug-record", params, PERM_READ_MASKED);
+	if (all_data && rd.p_set != NULL &&
+			as_masking_ctx_init(NULL, ns->name, rd.p_set, NULL, NULL)) {
+		uint8_t result = as_security_check_info_cmd(fd_h, "debug-record",
+				params, PERM_READ_MASKED);
 
 		as_security_log(fd_h, result, PERM_READ_MASKED, "debug-record", params);
 

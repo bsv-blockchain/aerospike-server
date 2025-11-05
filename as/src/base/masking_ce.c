@@ -57,7 +57,7 @@ as_masking_init(void)
 // Masking is an enterprise feature - here, no masking context.
 bool
 as_masking_ctx_init(as_masking_ctx* state, const char* ns_name,
-		const char* set_name, const char* username, const as_transaction* tr)
+		const as_set* p_set, const char* username, const as_transaction* tr)
 {
 	return false; // No masking rules in CE
 }
