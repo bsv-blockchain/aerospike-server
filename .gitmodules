@@ -33,9 +33,12 @@
 [submodule "modules/json"]
 	path = modules/json
 	url = https://github.com/aerospike/json
+	ignore = dirty
 [submodule "modules/jsonschema"]
 	path = modules/jsonschema
 	url = https://github.com/aerospike/json-schema-validator
+	ignore = dirty
 [submodule "modules/yamlcpp"]
 	path = modules/yamlcpp
 	url = https://github.com/aerospike/yaml-cpp
+	ignore = dirty
