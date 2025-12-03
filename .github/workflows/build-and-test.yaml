@@ -11,15 +11,20 @@ jobs:
     if: ${{ github.repository_owner == 'citrusleaf' }}
     runs-on: ubuntu-24.04
     steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@df199fb7be9f65074067a9eb93f12bb4c5547cf2 # v2.13.3
+        with:
+          egress-policy: audit
+
       - name: Fetch app token
         id: app-token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@7e473efe3cb98aa54f8d4bac15400b15fad77d94 # v2.2.0
         with:
           app-id: ${{ vars.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
       - name: Checkout aerospike-server
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           repository: citrusleaf/aerospike-server
           submodules: true
@@ -31,7 +36,7 @@ jobs:
           cd "$GITHUB_WORKSPACE/aerospike-server"
           ./bin/install-dependencies.sh
       - name: Checkout aerospike-server-enterprise
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         continue-on-error: true
         id: checkout-branch
         with:
@@ -44,7 +49,7 @@ jobs:
           ref: ${{ github.head_ref }}
       - name: Checkout master if branch doesn't exist
         if: steps.checkout-branch.outcome == 'failure'
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           repository: citrusleaf/aerospike-server-enterprise
           submodules: true
@@ -69,7 +74,7 @@ jobs:
             --config-file ./aerospike-server/as/etc/gh-action.conf \
             --cold-start
       - name: Checkout C client repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           repository: aerospike/aerospike-client-c
           submodules: recursive
