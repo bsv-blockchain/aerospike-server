@@ -54,7 +54,6 @@
 #include "base/batch.h"
 #include "base/cfg.h"
 #include "base/datamodel.h"
-#include "base/masking.h"
 #include "base/health.h"
 #include "base/index.h"
 #include "base/json_init.h"
@@ -449,7 +448,6 @@ as_run(int argc, char **argv)
 	as_udf_init();				// user-defined functions
 	as_batch_init();			// batch transaction handling
 	as_set_index_init();		// dynamic set-index population
-	as_masking_init();			// create masking hash tables, background thread
 
 	// Start subsystems. At this point we may begin communicating with other
 	// cluster nodes, and ultimately with clients.
