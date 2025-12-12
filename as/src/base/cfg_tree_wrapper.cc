@@ -101,7 +101,7 @@ cfg_tree_validate(cfg_tree_t cfg_tree)
 		tree->validate();
 	}
 	catch (const std::exception& e) {
-		set_last_error(std::string("Validation failed: ") + e.what());
+		set_last_error(e.what());
 		return -1;
 	}
 

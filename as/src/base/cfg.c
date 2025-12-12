@@ -2106,20 +2106,18 @@ as_config_init_yaml(const char* config_file, const char* schema_file) {
 	cfg_tree_t cfg_tree = cfg_tree_create(config_file, schema_file,
 			CFG_FORMAT_YAML);
 	if (cfg_tree == NULL) {
-		printf("Failed to create CFGTree: %s\n", cfg_tree_get_last_error());
-		exit(1);
+		cf_crash_nostack(AS_CFG, "failed to create CFGTree: %s",
+				cfg_tree_get_last_error());
 	}
 
 	if (cfg_tree_validate(cfg_tree) != 0) {
-		printf("Validation failed: %s\n", cfg_tree_get_last_error());
-		cfg_tree_destroy(cfg_tree);
-		exit(1);
+		cf_crash_nostack(AS_CFG, "error while validating config file: %s",
+				cfg_tree_get_last_error());
 	}
 
 	if (cfg_tree_apply_config(cfg_tree, c) != 0) {
-		printf("Apply configuration failed: %s\n", cfg_tree_get_last_error());
-		cfg_tree_destroy(cfg_tree);
-		exit(1);
+		cf_crash_nostack(AS_CFG, "failed during config apply: %s",
+				cfg_tree_get_last_error());
 	}
 
 	cfg_tree_destroy(cfg_tree);

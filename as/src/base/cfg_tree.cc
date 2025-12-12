@@ -142,11 +142,11 @@ CFGTree::validate()
 		validator.validate(json_tree);
 	}
 	catch (const std::exception& e) {
-		// TODO: we probably need a custom error handler
-		// the schema validation library supports this but we need to provide it.
-		// TODO: sometimes this results in double Validation error: at the start of error messages
-		// probably because of the wrapper code.
-		throw std::runtime_error("Validation error: " + std::string(e.what()));
+		std::string error_msg = "Validation error: " + std::string(e.what());
+		// Validation errors from JSON schema library include newlines
+		// which mess with logging output so we remove them here.
+		std::replace(error_msg.begin(), error_msg.end(), '\n', ' ');
+		throw std::runtime_error(error_msg);
 	}
 }
 
