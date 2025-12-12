@@ -2,11 +2,16 @@
 
 scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-branch="$(git branch -r --contains HEAD | grep -v HEAD | \
-    sed -e 's/origin\///' -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
+branch="$(git branch --show-current)"
+
+if [[ -z "$branch" ]]; then
+    branch="$(git branch -r --contains HEAD | grep -v HEAD |
+        sed -e 's/origin\///' -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
+fi
+
 buildType=$(<$scriptDir/../.STAGE)
 
-if [[ ( "$branch" = 'master' || "$branch" =~ 'hotfix/' ) && "$buildType" = 'release' ]]; then
+if [[ ("$branch" = 'master' || "$branch" =~ 'hotfix/') && "$buildType" = 'release' ]]; then
     rev="$(git describe --long | cut -d'-' -f1)"
 else
     rev="$(git describe --abbrev=9)"
