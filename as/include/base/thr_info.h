@@ -109,6 +109,7 @@ char* as_info_bind_to_string(const cf_serv_cfg* cfg, cf_sock_owner owner);
 
 // Needed by ticker:
 uint32_t as_info_queue_get_size();
+void get_mem_info(int host_mode, uint64_t* free_mem_kbytes, uint32_t* free_mem_pct, uint64_t* thp_mem_kbytes);
 uint32_t process_cpu(void);
 void sys_cpu_info(uint32_t* user_pct, uint32_t* kernel_pct);
 void sys_mem_info(uint64_t* free_mem_kbytes, uint32_t* free_mem_pct, uint64_t* thp_mem_kbytes);
