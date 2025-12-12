@@ -571,7 +571,7 @@ drop_master(as_transaction* tr, as_index_ref* r_ref, rw_request* rw)
 	if (filter_exp != NULL || check_key || must_mask_any) {
 		as_storage_rd rd;
 		as_storage_record_open(ns, r, &rd);
-		rd.mask_ctx = &ms;
+		rd.mask_ctx = must_mask_any ? &ms : NULL;
 
 		// Apply predexp record bins filter if present.
 		if (filter_exp != NULL) {
@@ -596,7 +596,7 @@ drop_master(as_transaction* tr, as_index_ref* r_ref, rw_request* rw)
 			return TRANS_DONE;
 		}
 
-		if (as_masking_must_mask(&ms, true)) {
+		if (as_masking_must_mask(rd.mask_ctx, true)) {
 			as_bin stack_bins[RECORD_MAX_BINS];
 			result = as_storage_rd_load_bins(&rd, stack_bins);
 
@@ -610,7 +610,7 @@ drop_master(as_transaction* tr, as_index_ref* r_ref, rw_request* rw)
 
 			for (uint16_t i = 0; i < rd.n_bins; i++) {
 				as_bin* b = &rd.bins[i];
-				if (as_bin_is_live(b) && as_masking_apply(&ms, NULL, b)) {
+				if (as_bin_is_live(b) && as_masking_apply(rd.mask_ctx, NULL, b)) {
 					as_storage_record_close(&rd);
 					as_record_done(r_ref, ns);
 					tr->result_code = as_masking_log_violation(tr, "drop record",
