@@ -67,6 +67,7 @@ typedef struct as_masking_ctx_s {
 //
 
 void as_masking_init(void);
+void as_masking_start(void);
 
 bool as_masking_ctx_init(as_masking_ctx* state, const char* ns_name, const as_set* p_set, const char* username, const struct as_transaction_s* tr);
 bool as_masking_has_rule(as_masking_ctx* state, const char* bin_name, as_particle_type bin_type);

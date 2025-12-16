@@ -57,6 +57,7 @@
 #include "base/health.h"
 #include "base/index.h"
 #include "base/json_init.h"
+#include "base/masking.h"
 #include "base/mrt_monitor.h"
 #include "base/nsup.h"
 #include "base/security.h"
@@ -453,6 +454,7 @@ as_run(int argc, char **argv)
 	// cluster nodes, and ultimately with clients.
 
 	cf_tls_start();				// starts tls certificate refresh thread
+	as_security_start();		// starts security threads
 	as_sindex_start();			// starts sindex GC threads
 	as_smd_start();				// enables receiving cluster state change events
 	as_health_start();			// starts before fabric and hb to capture them

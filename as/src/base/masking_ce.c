@@ -48,12 +48,6 @@ struct as_file_handle_s;
 // Public API.
 //
 
-// Masking is an enterprise feature - here, do nothing.
-void
-as_masking_init(void)
-{
-}
-
 // Masking is an enterprise feature - here, no masking context.
 bool
 as_masking_ctx_init(as_masking_ctx* state, const char* ns_name,

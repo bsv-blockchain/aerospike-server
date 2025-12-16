@@ -55,6 +55,12 @@ as_security_init(void)
 {
 }
 
+// Security is an enterprise feature - here, do nothing.
+void
+as_security_start(void)
+{
+}
+
 // Security is an enterprise feature - here, authenticate all.
 uint8_t
 as_security_check_auth(const as_file_handle* fd_h)
