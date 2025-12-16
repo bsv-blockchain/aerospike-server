@@ -473,9 +473,9 @@ execute_set_bin(udf_record* urecord, const char* name, const as_val* val)
 
 	as_bin_particle_from_asval(b, buf, val);
 
-	if (as_masking_apply(rd->mask_ctx, NULL, b)) {
-		return as_masking_log_violation(urecord->tr, "udf",
-				"would create masked bin", name, strlen(name));
+	if (as_masking_type_mismatch(rd->mask_ctx, b)) {
+		cf_warning(AS_UDF, "udf would create masked bin with type that does not match rule, bin: %s", name);
+		return AS_ERR_INCOMPATIBLE_TYPE;
 	}
 
 	return AS_OK;

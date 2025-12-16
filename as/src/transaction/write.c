@@ -1473,8 +1473,9 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 					return -result;
 				}
 
-				if (as_masking_apply(rd->mask_ctx, NULL, b)) {
-					return as_masking_log_violation(tr, "bin write", "would create masked bin", op->name, op->name_sz);
+				if (as_masking_type_mismatch(rd->mask_ctx, b)) {
+					cf_warning(AS_RW, "bin write would create masked bin with type that does not match rule, bin: %s", op->name);
+					return AS_ERR_INCOMPATIBLE_TYPE;
 				}
 			}
 
@@ -1496,8 +1497,9 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 				return -result;
 			}
 
-			if (as_masking_apply(rd->mask_ctx, NULL, b)) {
-				return as_masking_log_violation(tr, "bin modify","would create masked bin", op->name, op->name_sz);
+			if (as_masking_type_mismatch(rd->mask_ctx, b)) {
+				cf_warning(AS_RW, "bin modify would create masked bin with type that does not match rule, bin: %s", op->name);
+				return AS_ERR_INCOMPATIBLE_TYPE;
 			}
 
 			if (respond_all_ops) {
@@ -1705,8 +1707,9 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 				return -result;
 			}
 
-			if (as_masking_apply(rd->mask_ctx, NULL, b)) {
-				return as_masking_log_violation(tr, "exp write", "would create masked bin", op->name, op->name_sz);
+			if (as_masking_type_mismatch(rd->mask_ctx, b)) {
+				cf_warning(AS_RW, "exp write would create masked bin with type that does not match rule, bin: %s", op->name);
+				return AS_ERR_INCOMPATIBLE_TYPE;
 			}
 
 			if (respond_all_ops) {

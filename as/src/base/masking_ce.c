@@ -70,6 +70,13 @@ as_masking_has_rule(as_masking_ctx* state, const char* bin_name,
 	return false;
 }
 
+// Masking is an enterprise feature - here, no type mismatch.
+bool
+as_masking_type_mismatch(as_masking_ctx* state, const as_bin* b)
+{
+	return false;
+}
+
 // Masking is an enterprise feature - here, no masking applied.
 bool
 as_masking_apply(as_masking_ctx* state, as_bin* dst, const as_bin* src)
