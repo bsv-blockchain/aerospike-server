@@ -893,11 +893,11 @@ cgroup_mem_info(uint64_t host_free_mem_kbytes, uint64_t* free_mem_kbytes,
 	char* cg_limit[64] = {};
 	char* cg_used[64] = {};
 	const char* cg_max_path[] = {	// try v2 first (common)
-		"/sys/fs/cgroup/memory.max"
+		"/sys/fs/cgroup/memory.max",
 		"/sys/fs/cgroup/memory/memory.limit_in_bytes",
 	};
 	const char* cg_current_path[] = {
-		"/sys/fs/cgroup/memory.current"
+		"/sys/fs/cgroup/memory.current",
 		"/sys/fs/cgroup/memory/memory.usage_in_bytes",
 	};
 	uint64_t used_bytes = 0;
