@@ -2095,7 +2095,7 @@ const char CFG_WHITESPACE[] = " \t\n\r\f\v";
 as_config*
 as_config_init_yaml(const char* config_file, const char* schema_file) {
 	as_config* c = &g_config; // shortcut pointer
-	
+
 	if (! config_file || ! schema_file) {
 		cf_crash_nostack(AS_CFG, "config file and schema file paths cannot be null");
 	}
@@ -2129,7 +2129,6 @@ as_config*
 as_config_init(const char* config_file)
 {
 	as_config* c = &g_config; // shortcut pointer
-	
 
 	// Set the service context defaults. Values parsed from the config file will
 	// override the defaults.
@@ -5612,7 +5611,7 @@ cfg_best_practices_check(void)
 	}
 
 	if (c->admin.bind_port == 0 && c->tls_admin.bind_port == 0) {
-		check_failed(&g_bad_practices, "network", "admin section is not configured");
+		check_failed(&g_bad_practices, "admin-port", "admin section is not configured");
 	}
 
 	uint64_t ns_mem = 0;
