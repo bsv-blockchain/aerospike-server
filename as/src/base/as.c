@@ -601,7 +601,7 @@ verify_schema_file(const char *schema_file)
 	FILE *fp = fopen(schema_file, "rb");
 	
 	if (fp == NULL) {
-		cf_crash(AS_AS, "schema file '%s' not found: %s - skipping integrity check",
+		cf_crash_nostack(AS_AS, "schema file '%s' not found: %s - skipping integrity check",
 				schema_file, cf_strerror(errno));
 		return;
 	}
@@ -609,13 +609,13 @@ verify_schema_file(const char *schema_file)
 	EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
 
 	if (mdctx == NULL) {
-		cf_crash(AS_AS, "failed to create hash context for schema verification");
+		cf_crash_nostack(AS_AS, "failed to create hash context for schema verification");
 		fclose(fp);
 		return;
 	}
 
 	if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) {
-		cf_crash(AS_AS, "failed to initialize hash for schema verification");
+		cf_crash_nostack(AS_AS, "failed to initialize hash for schema verification");
 		EVP_MD_CTX_free(mdctx);
 		fclose(fp);
 		return;
@@ -626,7 +626,7 @@ verify_schema_file(const char *schema_file)
 
 	while ((bytes_read = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
 		if (EVP_DigestUpdate(mdctx, buffer, bytes_read) != 1) {
-			cf_crash(AS_AS, "failed to update hash for schema verification");
+			cf_crash_nostack(AS_AS, "failed to update hash for schema verification");
 			EVP_MD_CTX_free(mdctx);
 			fclose(fp);
 			return;
@@ -639,7 +639,7 @@ verify_schema_file(const char *schema_file)
 	unsigned int hash_len;
 
 	if (EVP_DigestFinal_ex(mdctx, hash, &hash_len) != 1) {
-		cf_crash(AS_AS, "failed to finalize hash for schema verification");
+		cf_crash_nostack(AS_AS, "failed to finalize hash for schema verification");
 		EVP_MD_CTX_free(mdctx);
 		return;
 	}
