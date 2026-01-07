@@ -188,7 +188,7 @@ as_val* teranode_unspend(as_rec* rec, as_list* args);
  * Track which block(s) a transaction is mined in.
  *
  * Args (as_list):
- *   [0] blockID (bytes)
+ *   [0] blockID (int64)
  *   [1] blockHeight (int64)
  *   [2] subtreeIdx (int64)
  *   [3] currentBlockHeight (int64)

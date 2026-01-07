@@ -178,7 +178,6 @@ teranode_apply_record(as_module* m, as_udf_context* ctx,
     as_rec* rec, as_list* args, as_result* res)
 {
     (void)m;
-    (void)ctx;
     (void)filename;
 
     if (function == NULL) {
@@ -213,6 +212,20 @@ teranode_apply_record(as_module* m, as_udf_context* ctx,
         LOG_ERROR("mod-teranode: function '%s' returned NULL", function);
         as_result_setfailure(res, (as_val*)as_string_new("function returned NULL", false));
         return -1;
+    }
+
+    // Commit record changes - equivalent to Lua's aerospike:update(rec)
+    // This is required to persist any bin modifications made by the function
+    // Only call update if the record exists (has bins) - otherwise there's nothing to update
+    // This matches Lua behavior where aerospike:update(rec) is only called after
+    // confirming aerospike:exists(rec) returns true
+    if (ctx != NULL && ctx->as != NULL && rec != NULL && as_rec_numbins(rec) > 0) {
+        int update_rc = as_aerospike_rec_update(ctx->as, rec);
+        if (update_rc != 0) {
+            LOG_ERROR("mod-teranode: as_aerospike_rec_update failed with rc=%d", update_rc);
+            // Don't fail the whole operation - the function result may still be valid
+            // (e.g., returning an error response about the record state)
+        }
     }
 
     // Set success result
