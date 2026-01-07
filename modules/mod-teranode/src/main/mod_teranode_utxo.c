@@ -673,9 +673,9 @@ teranode_spend_multi(as_rec* rec, as_list* args)
         if (existing_spending_data) as_bytes_destroy(existing_spending_data);
     }
 
-    // Note: utxos list was modified in place, no need to call as_rec_set again
-    // (calling as_rec_set with the same object would cause the map to destroy it!)
-    as_rec_set(rec, BIN_UTXOS, (as_val*)utxos);
+    // Mark utxos bin as dirty to persist changes
+    // Like Lua's "rec[BIN_UTXOS] = utxos", we need to re-set the bin after modification
+    as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
 
     // Call setDeleteAtHeight
     int64_t child_count = 0;
@@ -756,7 +756,9 @@ teranode_unspend(as_rec* rec, as_list* args)
         // Create unspent UTXO
         as_bytes* new_utxo = utxo_create_with_spending_data(utxo_hash, NULL);
         as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
-        as_rec_set(rec, BIN_UTXOS, (as_val*)utxos);
+
+        // Mark utxos bin as dirty to persist changes
+        as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
 
         // Decrement spent count
         as_val* spent_count_val = as_rec_get(rec, BIN_SPENT_UTXOS);
@@ -798,8 +800,8 @@ teranode_set_mined(as_rec* rec, as_list* args)
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
     }
 
-    // Extract arguments
-    as_bytes* block_id = get_list_bytes(args, 0);
+    // Extract arguments - all numeric args use the same helper for consistency
+    int64_t block_id = get_list_int64(args, 0);
     int64_t block_height = get_list_int64(args, 1);
     int64_t subtree_idx = get_list_int64(args, 2);
     int64_t current_block_height = get_list_int64(args, 3);
@@ -807,7 +809,10 @@ teranode_set_mined(as_rec* rec, as_list* args)
     bool on_longest_chain = get_list_bool(args, 5);
     bool unset_mined = get_list_bool(args, 6);
 
-    // Initialize lists if they don't exist
+    // Get or create lists for block tracking
+    // When creating new lists, we immediately call as_rec_set to add them to the record.
+    // This ensures the record knows about the new bin. After modifications, we call
+    // as_rec_set again with as_val_reserve to mark the bin as dirty for persistence.
     as_val* block_ids_val = as_rec_get(rec, BIN_BLOCK_IDS);
     as_list* block_ids = NULL;
     if (block_ids_val == NULL || as_val_type(block_ids_val) == AS_NIL) {
@@ -841,8 +846,8 @@ teranode_set_mined(as_rec* rec, as_list* args)
         int32_t found_idx = -1;
 
         for (uint32_t i = 0; i < block_count; i++) {
-            as_bytes* existing_block = as_bytes_fromval(as_list_get(block_ids, i));
-            if (existing_block != NULL && utxo_bytes_equal(existing_block, block_id)) {
+            as_integer* existing_int = as_integer_fromval(as_list_get(block_ids, i));
+            if (existing_int && as_integer_get(existing_int) == block_id) {
                 found_idx = (int32_t)i;
                 break;
             }
@@ -853,9 +858,12 @@ teranode_set_mined(as_rec* rec, as_list* args)
             as_list_remove(block_heights, (uint32_t)found_idx);
             as_list_remove(subtree_idxs, (uint32_t)found_idx);
 
-            as_rec_set(rec, BIN_BLOCK_IDS, (as_val*)block_ids);
-            as_rec_set(rec, BIN_BLOCK_HEIGHTS, (as_val*)block_heights);
-            as_rec_set(rec, BIN_SUBTREE_IDXS, (as_val*)subtree_idxs);
+            // Set bins on record to persist changes
+            // For existing lists, we need as_val_reserve to prevent double-free
+            // since the record already owns the list
+            as_rec_set(rec, BIN_BLOCK_IDS, as_val_reserve((as_val*)block_ids));
+            as_rec_set(rec, BIN_BLOCK_HEIGHTS, as_val_reserve((as_val*)block_heights));
+            as_rec_set(rec, BIN_SUBTREE_IDXS, as_val_reserve((as_val*)subtree_idxs));
         }
     } else {
         // Add blockID if not already exists
@@ -863,29 +871,29 @@ teranode_set_mined(as_rec* rec, as_list* args)
         bool block_exists = false;
 
         for (uint32_t i = 0; i < block_count; i++) {
-            as_bytes* existing_block = as_bytes_fromval(as_list_get(block_ids, i));
-            if (existing_block != NULL && utxo_bytes_equal(existing_block, block_id)) {
+            as_integer* existing_int = as_integer_fromval(as_list_get(block_ids, i));
+            if (existing_int && as_integer_get(existing_int) == block_id) {
                 block_exists = true;
                 break;
             }
         }
 
         if (!block_exists) {
-            as_list_append(block_ids, as_val_reserve((as_val*)block_id));
+            as_list_append(block_ids, (as_val*)as_integer_new(block_id));
             as_list_append(block_heights, (as_val*)as_integer_new(block_height));
             as_list_append(subtree_idxs, (as_val*)as_integer_new(subtree_idx));
 
-            as_rec_set(rec, BIN_BLOCK_IDS, (as_val*)block_ids);
-            as_rec_set(rec, BIN_BLOCK_HEIGHTS, (as_val*)block_heights);
-            as_rec_set(rec, BIN_SUBTREE_IDXS, (as_val*)subtree_idxs);
+            // Set bins on record to persist changes
+            // After modification, call as_rec_set with as_val_reserve to mark as dirty
+            as_rec_set(rec, BIN_BLOCK_IDS, as_val_reserve((as_val*)block_ids));
+            as_rec_set(rec, BIN_BLOCK_HEIGHTS, as_val_reserve((as_val*)block_heights));
+            as_rec_set(rec, BIN_SUBTREE_IDXS, as_val_reserve((as_val*)subtree_idxs));
         }
     }
 
     // Handle unminedSince based on block count
-    // Get size before any as_rec_set calls that might invalidate the pointer
-    as_val* final_block_ids_val = as_rec_get(rec, BIN_BLOCK_IDS);
-    as_list* final_block_ids = as_list_fromval(final_block_ids_val);
-    uint32_t has_blocks = final_block_ids ? as_list_size(final_block_ids) : 0;
+    // Use block_ids directly since it now reflects the current state
+    uint32_t has_blocks = block_ids ? as_list_size(block_ids) : 0;
     if (has_blocks > 0) {
         if (on_longest_chain) {
             as_rec_set(rec, BIN_UNMINED_SINCE, (as_val*)&as_nil);
@@ -989,7 +997,9 @@ teranode_freeze(as_rec* rec, as_list* args)
     // Create new UTXO with frozen data
     as_bytes* new_utxo = utxo_create_with_spending_data(utxo_hash, frozen_data);
     as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
-    as_rec_set(rec, BIN_UTXOS, (as_val*)utxos);
+
+    // Mark utxos bin as dirty to persist changes
+    as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
 
     as_bytes_destroy(frozen_data);
 
@@ -1034,7 +1044,9 @@ teranode_unfreeze(as_rec* rec, as_list* args)
     // Create unspent UTXO (remove spending data)
     as_bytes* new_utxo = utxo_create_with_spending_data(utxo_hash, NULL);
     as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
-    as_rec_set(rec, BIN_UTXOS, (as_val*)utxos);
+
+    // Mark utxos bin as dirty to persist changes
+    as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
 
     as_bytes_destroy(existing_spending_data);
 
@@ -1082,9 +1094,13 @@ teranode_reassign(as_rec* rec, as_list* args)
     // Create new UTXO with new hash (unspent)
     as_bytes* new_utxo = utxo_create_with_spending_data(new_utxo_hash, NULL);
     as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
-    as_rec_set(rec, BIN_UTXOS, (as_val*)utxos);
+
+    // Mark utxos bin as dirty to persist changes
+    as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
 
     // Initialize reassignments list if needed
+    // When creating new lists/maps, we immediately call as_rec_set to add them to the record
+    // After that, modifications are in-place and we never call as_rec_set again
     as_val* reassignments_val = as_rec_get(rec, BIN_REASSIGNMENTS);
     as_list* reassignments = NULL;
     if (reassignments_val == NULL || as_val_type(reassignments_val) == AS_NIL) {
@@ -1120,13 +1136,15 @@ teranode_reassign(as_rec* rec, as_list* args)
         (as_val*)as_integer_new(block_height));
 
     as_list_append(reassignments, (as_val*)reassignment_entry);
-    as_rec_set(rec, BIN_REASSIGNMENTS, (as_val*)reassignments);
+    as_rec_set(rec, BIN_REASSIGNMENTS, as_val_reserve((as_val*)reassignments));
+
 
     // Set spendable height
     as_map_set(spendable_in,
         (as_val*)as_integer_new(offset),
         (as_val*)as_integer_new(block_height + spendable_after));
-    as_rec_set(rec, BIN_UTXO_SPENDABLE_IN, (as_val*)spendable_in);
+    as_rec_set(rec, BIN_UTXO_SPENDABLE_IN, as_val_reserve((as_val*)spendable_in));
+
 
     // Increment recordUtxos to prevent deletion
     as_val* record_utxos_val = as_rec_get(rec, BIN_RECORD_UTXOS);

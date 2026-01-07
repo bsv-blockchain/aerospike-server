@@ -20,11 +20,10 @@ TEST(setMined_add_block)
     as_rec* rec = mock_rec_new();
     mock_rec_init_utxos(rec, 5);
 
-    uint8_t block_id[32];
-    memset(block_id, 0xAA, 32);
+    int64_t block_id = 12345;
 
     as_arraylist* args = as_arraylist_new(7, 0);
-    as_arraylist_append(args, (as_val*)as_bytes_new_wrap(block_id, 32, false));
+    as_arraylist_append_int64(args, block_id);  // blockID as integer
     as_arraylist_append_int64(args, 500);   // blockHeight
     as_arraylist_append_int64(args, 1);     // subtreeIdx
     as_arraylist_append_int64(args, 1000);  // currentBlockHeight
@@ -43,6 +42,10 @@ TEST(setMined_add_block)
     ASSERT_NOT_NULL(block_ids_val);
     as_list* block_ids = as_list_fromval(block_ids_val);
     ASSERT_EQ(as_list_size(block_ids), 1);
+
+    // Verify the stored block ID matches
+    as_integer* stored_id = as_integer_fromval(as_list_get(block_ids, 0));
+    ASSERT_EQ(as_integer_get(stored_id), block_id);
 
     // Verify block heights list
     as_val* heights_val = as_rec_get(rec, "blockHeights");
@@ -66,12 +69,11 @@ TEST(setMined_remove_block)
     as_rec* rec = mock_rec_new();
     mock_rec_init_utxos(rec, 5);
 
-    uint8_t block_id[32];
-    memset(block_id, 0xAA, 32);
+    int64_t block_id = 54321;
 
     // Add a block first
     as_arraylist* args1 = as_arraylist_new(7, 0);
-    as_arraylist_append(args1, (as_val*)as_bytes_new_wrap(block_id, 32, false));
+    as_arraylist_append_int64(args1, block_id);  // blockID as integer
     as_arraylist_append_int64(args1, 500);
     as_arraylist_append_int64(args1, 1);
     as_arraylist_append_int64(args1, 1000);
@@ -84,7 +86,7 @@ TEST(setMined_remove_block)
 
     // Now remove it
     as_arraylist* args2 = as_arraylist_new(7, 0);
-    as_arraylist_append(args2, (as_val*)as_bytes_new_wrap(block_id, 32, false));
+    as_arraylist_append_int64(args2, block_id);  // blockID as integer
     as_arraylist_append_int64(args2, 500);
     as_arraylist_append_int64(args2, 1);
     as_arraylist_append_int64(args2, 1000);
@@ -115,11 +117,10 @@ TEST(setMined_clears_locked)
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "locked", (as_val*)as_boolean_new(true));
 
-    uint8_t block_id[32];
-    memset(block_id, 0xAA, 32);
+    int64_t block_id = 99999;
 
     as_arraylist* args = as_arraylist_new(7, 0);
-    as_arraylist_append(args, (as_val*)as_bytes_new_wrap(block_id, 32, false));
+    as_arraylist_append_int64(args, block_id);  // blockID as integer
     as_arraylist_append_int64(args, 500);
     as_arraylist_append_int64(args, 1);
     as_arraylist_append_int64(args, 1000);
@@ -144,11 +145,10 @@ TEST(setMined_clears_creating)
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "creating", (as_val*)as_boolean_new(true));
 
-    uint8_t block_id[32];
-    memset(block_id, 0xAA, 32);
+    int64_t block_id = 88888;
 
     as_arraylist* args = as_arraylist_new(7, 0);
-    as_arraylist_append(args, (as_val*)as_bytes_new_wrap(block_id, 32, false));
+    as_arraylist_append_int64(args, block_id);  // blockID as integer
     as_arraylist_append_int64(args, 500);
     as_arraylist_append_int64(args, 1);
     as_arraylist_append_int64(args, 1000);
@@ -462,9 +462,8 @@ TEST(setDeleteAtHeight_all_spent_master)
 
     // Add at least one blockID
     as_arraylist* block_ids = as_arraylist_new(1, 0);
-    uint8_t block_id[32];
-    memset(block_id, 0xAA, 32);
-    as_arraylist_append(block_ids, (as_val*)as_bytes_new_wrap(block_id, 32, false));
+    int64_t block_id = 77777;
+    as_arraylist_append_int64(block_ids, block_id);
     as_rec_set(rec, "blockIDs", (as_val*)block_ids);
 
     as_arraylist* args = as_arraylist_new(2, 0);
@@ -542,11 +541,10 @@ TEST(setMined_tx_not_found)
     as_rec* rec = mock_rec_new();
     // Don't initialize anything
 
-    uint8_t block_id[32];
-    memset(block_id, 0xAA, 32);
+    int64_t block_id = 66666;
 
     as_arraylist* args = as_arraylist_new(7, 0);
-    as_arraylist_append(args, (as_val*)as_bytes_new_wrap(block_id, 32, false));
+    as_arraylist_append_int64(args, block_id);  // blockID as integer
     as_arraylist_append_int64(args, 500);
     as_arraylist_append_int64(args, 1);
     as_arraylist_append_int64(args, 1000);
@@ -686,11 +684,10 @@ TEST(setMined_ownership_after_args_and_result_destroy)
     as_rec* rec = mock_rec_new();
     mock_rec_init_utxos(rec, 5);
 
-    uint8_t block_id[32];
-    memset(block_id, 0xCD, 32);
+    int64_t block_id = 55555;
 
     as_arraylist* args = as_arraylist_new(7, 0);
-    as_arraylist_append(args, (as_val*)as_bytes_new_wrap(block_id, 32, false));
+    as_arraylist_append_int64(args, block_id);  // blockID as integer
     as_arraylist_append_int64(args, 600);   // blockHeight
     as_arraylist_append_int64(args, 2);     // subtreeIdx
     as_arraylist_append_int64(args, 1000);  // currentBlockHeight
@@ -707,8 +704,8 @@ TEST(setMined_ownership_after_args_and_result_destroy)
     ASSERT_NOT_NULL(block_ids_val);
     as_list* block_ids = as_list_fromval(block_ids_val);
     ASSERT_EQ(as_list_size(block_ids), 1);
-    as_bytes* stored = as_bytes_fromval(as_list_get(block_ids, 0));
-    ASSERT_BYTES_EQ(as_bytes_get(stored), block_id, 32);
+    as_integer* stored = as_integer_fromval(as_list_get(block_ids, 0));
+    ASSERT_EQ(as_integer_get(stored), block_id);
 
     mock_rec_destroy(rec);
 }
