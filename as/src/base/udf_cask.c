@@ -58,6 +58,7 @@
 //
 
 #define LUA_TYPE_STR "LUA"
+#define TERANODE_TYPE_STR "TERANODE"
 
 #define MAX_USER_PATH_SZ 256 // from g_config.mod_lua.user_path
 #define MAX_FILE_NAME_SZ 128
@@ -92,7 +93,8 @@ static void file_remove(const char* filename);
 static inline bool
 is_valid_udf_type(const char* type)
 {
-	return strcmp(type, LUA_TYPE_STR) == 0;
+	return strcmp(type, LUA_TYPE_STR) == 0 ||
+		   strcmp(type, TERANODE_TYPE_STR) == 0;
 }
 
 
