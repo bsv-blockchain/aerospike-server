@@ -32,6 +32,7 @@
 #include <stdint.h>
 
 #include "aerospike/mod_lua_config.h"
+#include "aerospike/mod_teranode_config.h"
 
 #include "enhanced_alloc.h"
 #include "hardware.h"
@@ -183,6 +184,7 @@ typedef struct as_config_s {
 	//
 
 	mod_lua_config	mod_lua;
+	mod_teranode_config	mod_teranode;
 	as_sec_config	sec_cfg;
 	as_xdr_config	xdr_cfg; // TODO - Forcing cfg.h to include xdr.h. Consider *.
 

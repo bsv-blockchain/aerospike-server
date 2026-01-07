@@ -41,6 +41,7 @@
 #include "aerospike/as_types.h"
 #include "aerospike/as_udf_context.h"
 #include "aerospike/mod_lua.h"
+#include "aerospike/mod_teranode.h"
 #include "citrusleaf/alloc.h"
 #include "citrusleaf/cf_clock.h"
 
@@ -268,6 +269,7 @@ void
 as_udf_init()
 {
 	as_module_configure(&mod_lua, &g_config.mod_lua);
+	as_module_configure(&mod_teranode, &g_config.mod_teranode);
 	as_log_set_callback(log_callback);
 	udf_cask_init();
 	as_aerospike_init(&g_as_aerospike, NULL, &udf_aerospike_hooks);
@@ -1090,7 +1092,16 @@ udf_apply_record(udf_call* call, as_rec* rec, as_result* result)
 
 	as_udf_context ctx = { .as = &g_as_aerospike, .timer = &timer };
 
-	return as_module_apply_record(&mod_lua, &ctx, call->def->filename,
+	// Route to appropriate module based on filename
+	const char* filename = call->def->filename;
+	as_module* module = &mod_lua;  // Default to Lua
+
+	// Check for TERANODE module (by filename containing "teranode")
+	if (filename != NULL && strstr(filename, "teranode") != NULL) {
+		module = &mod_teranode;
+	}
+
+	return as_module_apply_record(module, &ctx, call->def->filename,
 			call->def->function, rec, call->def->arglist, result);
 }
 
