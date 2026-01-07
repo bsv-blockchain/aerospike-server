@@ -882,7 +882,10 @@ teranode_set_mined(as_rec* rec, as_list* args)
     }
 
     // Handle unminedSince based on block count
-    uint32_t has_blocks = as_list_size(block_ids);
+    // Get size before any as_rec_set calls that might invalidate the pointer
+    as_val* final_block_ids_val = as_rec_get(rec, BIN_BLOCK_IDS);
+    as_list* final_block_ids = as_list_fromval(final_block_ids_val);
+    uint32_t has_blocks = final_block_ids ? as_list_size(final_block_ids) : 0;
     if (has_blocks > 0) {
         if (on_longest_chain) {
             as_rec_set(rec, BIN_UNMINED_SINCE, (as_val*)&as_nil);
