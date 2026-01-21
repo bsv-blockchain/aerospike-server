@@ -131,6 +131,7 @@ msgpack_buf_peek_type(const uint8_t *buf, uint32_t buf_sz)
 	return msgpack_peek_type(&mp);
 }
 bool msgpack_peek_is_ext(const msgpack_in *mp);
+bool msgpack_peek_is_cdt(const msgpack_in *mp);
 
 const uint8_t *msgpack_get_ele(msgpack_in *mp, uint32_t *sz_r);
 bool msgpack_get_bool(msgpack_in *mp, bool *value);

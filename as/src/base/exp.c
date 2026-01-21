@@ -1,7 +1,7 @@
 /*
  * exp.c
  *
- * Copyright (C) 2020-2023 Aerospike, Inc.
+ * Copyright (C) 2020-2025 Aerospike, Inc.
  *
  * Portions may be licensed to Aerospike,),Inc. under one or more contributor
  * license agreements.
@@ -130,6 +130,9 @@ typedef enum {
 	EXP_BIN = 81,
 	EXP_BIN_TYPE = 82,
 
+	EXP_RESULT_REMOVE = 100,
+
+	EXP_VAR_BUILTIN = 122,
 	EXP_COND = 123,
 	EXP_VAR = 124,
 	EXP_LET = 125,
@@ -167,6 +170,8 @@ typedef enum {
 	TYPE_GEOJSON = 8,
 	TYPE_HLL = 9,
 
+	TYPE_INPUT_END,
+	TYPE_RESULT_REMOVE, // internal type
 	TYPE_END
 } result_type;
 
@@ -194,6 +199,7 @@ typedef enum {
 	RT_BIN_PTR, // bin -> list, map
 	RT_BIN, // call -> list, map, string
 
+	RT_RESULT_REMOVE,
 	RT_END
 } runtime_type;
 
@@ -207,7 +213,8 @@ static const char* result_type_str[] = {
 		[TYPE_BLOB] = "blob",
 		[TYPE_FLOAT] = "float",
 		[TYPE_GEOJSON] = "geojson",
-		[TYPE_HLL] = "hll"
+		[TYPE_HLL] = "hll",
+		[TYPE_RESULT_REMOVE] = "result_remove"
 };
 
 ARRAY_ASSERT(result_type_str, TYPE_END);
@@ -222,7 +229,8 @@ static const exp_op_code result_type_to_op_code[] = {
 		[TYPE_BLOB] = VOP_VALUE_BLOB,
 		[TYPE_FLOAT] = VOP_VALUE_FLOAT,
 		[TYPE_GEOJSON] = VOP_VALUE_GEO,
-		[TYPE_HLL] = VOP_VALUE_HLL
+		[TYPE_HLL] = VOP_VALUE_HLL,
+		[TYPE_RESULT_REMOVE] = EXP_RESULT_REMOVE
 };
 
 ARRAY_ASSERT(result_type_to_op_code, TYPE_END);
@@ -292,7 +300,6 @@ typedef struct op_call_s {
 	op_vec vecs[OP_CALL_MAX_VEC_IDX + 2];
 	uint32_t n_vecs;
 	uint32_t eval_count;
-	bool is_cdt_context_eval;
 	call_system_type system_type;
 	result_type type;
 } op_call;
@@ -401,6 +408,7 @@ typedef struct runtime_s {
 	const as_exp_ctx* ctx;
 	const uint8_t* instr_ptr;
 	rt_value* vars;
+	rt_value vars_builtin[AS_EXP_BUILTIN_COUNT];
 	uint32_t op_ix;
 } runtime;
 
@@ -455,11 +463,12 @@ struct op_table_entry_s {
 		[__code].eval_param_count = __eval_param_count, \
 		[__code].r_type = __r_type,
 
-#define result_type_to_str(__type) (__type >= 0 && __type < TYPE_END ? \
-		result_type_str[__type] : "invalid")
-
 static const uint8_t* EMPTY_STRING = (uint8_t*)"";
 static const uint8_t call_eval_token[1] = "";
+static const rt_value rt_unk = {
+		.type = RT_TRILEAN,
+		.r_trilean = AS_EXP_UNK
+};
 
 
 //==========================================================
@@ -497,6 +506,7 @@ static bool build_rec_key(build_args* args);
 static bool build_bin(build_args* args);
 static bool build_bin_type(build_args* args);
 static bool build_cond(build_args* args);
+static bool build_var_builtin(build_args* args);
 static bool build_var(build_args* args);
 static bool build_let(build_args* args);
 static bool build_quote(build_args* args);
@@ -513,9 +523,10 @@ static bool build_value_msgpack(build_args* args);
 static bool parse_op_call(op_call* op, build_args* args);
 static bool build_set_expected_particle_type(build_args* args);
 static as_exp* check_filter_exp(as_exp* exp);
+static bool geo_mp_to_op(msgpack_in* mp, op_value_geo *op, const char* debug_str);
 
 // Runtime.
-static as_exp_trilean match_internal(const as_exp* predexp, const as_exp_ctx* ctx);
+static as_exp_trilean match_internal(const as_exp* exp, const as_exp_ctx* ctx);
 static bool rt_eval(runtime* rt, rt_value* ret_val);
 static void eval_unknown(runtime* rt, const op_base_mem* ob, rt_value* ret_val);
 static void eval_compare(runtime* rt, const op_base_mem* ob, rt_value* ret_val);
@@ -562,7 +573,9 @@ static void eval_meta_record_size(runtime* rt, const op_base_mem* ob, rt_value* 
 static void eval_rec_key(runtime* rt, const op_base_mem* ob, rt_value* ret_val);
 static void eval_bin(runtime* rt, const op_base_mem* ob, rt_value* ret_val);
 static void eval_bin_type(runtime* rt, const op_base_mem* ob, rt_value* ret_val);
+static void eval_result_remove(runtime* rt, const op_base_mem* ob, rt_value* ret_val);
 static void eval_cond(runtime* rt, const op_base_mem* ob, rt_value* ret_val);
+static void eval_var_builtin(runtime* rt, const op_base_mem* ob, rt_value* ret_val);
 static void eval_var(runtime* rt, const op_base_mem* ob, rt_value* ret_val);
 static void eval_let(runtime* rt, const op_base_mem* ob, rt_value* ret_val);
 static void eval_call(runtime* rt, const op_base_mem* ob, rt_value* ret_val);
@@ -579,6 +592,8 @@ static void rt_value_translate(rt_value* to, const rt_value* from);
 static void rt_value_destroy(rt_value* val);
 static void rt_value_get_geo(rt_value* val, geo_data* result);
 static bool get_live_bin(as_storage_rd* rd, const uint8_t* name, size_t len, as_bin** p_bin);
+static bool rt_is_type(const rt_value* v, result_type type);
+static void rt_init_builtin_vars(runtime* rt, op_value_geo* geo_mem);
 
 // Runtime compare utilities.
 static as_exp_trilean cmp_nil(exp_op_code code, const rt_value* e0, const rt_value* e1);
@@ -609,6 +624,7 @@ static void display_meta_digest_mod(runtime* rt, const op_base_mem* ob, cf_dyn_b
 static void display_bin(runtime* rt, const op_base_mem* ob, cf_dyn_buf* db);
 static void display_bin_type(runtime* rt, const op_base_mem* ob, cf_dyn_buf* db);
 static void display_cond(runtime* rt, const op_base_mem* ob, cf_dyn_buf* db);
+static void display_var_builtin(runtime* rt, const op_base_mem* ob, cf_dyn_buf* db);
 static void display_var(runtime* rt, const op_base_mem* ob, cf_dyn_buf* db);
 static void display_let(runtime* rt, const op_base_mem* ob, cf_dyn_buf* db);
 static void display_call(runtime* rt, const op_base_mem* ob, cf_dyn_buf* db);
@@ -624,6 +640,24 @@ static void debug_exp_check(const as_exp* exp);
 //==========================================================
 // Inlines & macros.
 //
+
+static inline const char*
+result_type_to_str(result_type type)
+{
+	return (uint32_t)type >= TYPE_END ? "invalid" : result_type_str[type]; // (uint32_t) cast because enum can be signed
+}
+
+static inline bool
+rt_has_ns(const runtime* rt)
+{
+	return rt->ctx->ns != NULL;
+}
+
+static inline bool
+rt_has_rd(const runtime* rt)
+{
+	return rt->ctx->rd != NULL;
+}
 
 static inline bool
 rt_value_is_unknown(const rt_value* entry)
@@ -734,6 +768,9 @@ static const op_table_entry op_table[] = {
 		OP_TABLE_ENTRY(EXP_BIN, "bin", op_bin, build_bin, eval_bin, display_bin, 2, 0, TYPE_END)
 		OP_TABLE_ENTRY(EXP_BIN_TYPE, "bin_type", op_bin_type, build_bin_type, eval_bin_type, display_bin_type, 1, 0, TYPE_INT)
 
+		OP_TABLE_ENTRY(EXP_RESULT_REMOVE, "result_remove", op_base_mem, build_default, eval_result_remove, display_0_args, 0, 0, TYPE_RESULT_REMOVE)
+
+		OP_TABLE_ENTRY(EXP_VAR_BUILTIN, "var_builtin", op_var, build_var_builtin, eval_var_builtin, display_var_builtin, 2, 0, TYPE_END)
 		OP_TABLE_ENTRY(EXP_COND, "cond", op_cond, build_cond, eval_cond, display_cond, 0, 0, TYPE_END)
 		OP_TABLE_ENTRY(EXP_VAR, "var", op_var, build_var, eval_var, display_var, 1, 0, TYPE_END)
 		OP_TABLE_ENTRY(EXP_LET, "let", op_let, build_let, eval_let, display_let, 0, 0, TYPE_END)
@@ -817,6 +854,7 @@ as_exp_eval(const as_exp* exp, const as_exp_ctx* ctx, as_bin* rb,
 			.ctx = ctx,
 			.instr_ptr = exp->mem,
 			.vars = vars,
+			.vars_builtin = {[0 ... (AS_EXP_BUILTIN_COUNT - 1)] = rt_unk}
 	};
 
 	rt_eval(&rt, &ret_val);
@@ -929,22 +967,303 @@ as_exp_eval(const as_exp* exp, const as_exp_ctx* ctx, as_bin* rb,
 	return true;
 }
 
+uint32_t
+as_exp_result_msgpack_sz(const as_exp_result* res)
+{
+	switch (res->type) {
+	case AS_EXP_RESULT_BIN: {
+		as_bin b = {
+				.particle = res->particle.ptr,
+		};
+
+		as_bin_state_set_from_type(&b, res->particle.ptr->type);
+
+		switch (as_bin_get_particle_type(&b)) {
+		case AS_PARTICLE_TYPE_STRING:
+		case AS_PARTICLE_TYPE_BLOB:
+		case AS_PARTICLE_TYPE_HLL: {
+			char* temp;
+
+			uint32_t sz = as_bin_particle_string_ptr(&b, &temp);
+
+			return as_pack_bin_size(sz + 1);
+		}
+		case AS_PARTICLE_TYPE_GEOJSON: {
+			size_t sz;
+
+			as_geojson_mem_jsonstr(b.particle, &sz);
+
+			return as_pack_bin_size(sz + 1);
+		}
+		case AS_PARTICLE_TYPE_MAP:
+		case AS_PARTICLE_TYPE_LIST: {
+			cdt_payload packed;
+
+			as_bin_particle_list_get_packed_val(&b, &packed);
+
+			return packed.sz;
+		}
+		default:
+			break;
+		}
+
+		return 0;
+	}
+	case AS_EXP_RESULT_MP_SMALL:
+		return res->mp_small.sz;
+	case AS_EXP_RESULT_MSGPACK:
+		return res->msgpack.sz;
+	case AS_EXP_RESULT_STR:
+		return as_pack_bin_size(res->str.sz);
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+void
+as_exp_result_msgpack_write(const as_exp_result* res, uint8_t* wptr)
+{
+	as_packer pk = {.buffer = wptr, .capacity = UINT32_MAX};
+
+	as_exp_result_msgpack_pack(res, &pk);
+}
+
+void
+as_exp_result_msgpack_pack(const as_exp_result* res, as_packer* pk)
+{
+	switch (res->type) {
+	case AS_EXP_RESULT_BIN: {
+		as_bin b = {
+				.particle = res->particle.ptr,
+		};
+
+		as_bin_state_set_from_type(&b, res->particle.ptr->type);
+
+		switch (as_bin_get_particle_type(&b)) {
+		case AS_PARTICLE_TYPE_STRING:
+		case AS_PARTICLE_TYPE_BLOB:
+		case AS_PARTICLE_TYPE_HLL: {
+			char* ptr;
+			uint32_t sz = as_bin_particle_string_ptr(&b, &ptr);
+
+			as_pack_str_with_type(pk, res->type, (uint8_t*)ptr, sz);
+			break;
+		}
+		case AS_PARTICLE_TYPE_GEOJSON: {
+			size_t sz;
+			const char* str = as_geojson_mem_jsonstr(b.particle, &sz);
+
+			as_pack_str_with_type(pk, res->type, (uint8_t*)str, sz);
+			break;
+		}
+		case AS_PARTICLE_TYPE_MAP:
+		case AS_PARTICLE_TYPE_LIST: {
+			cdt_payload packed;
+
+			as_bin_particle_list_get_packed_val(&b, &packed);
+			as_pack_append(pk, packed.ptr, packed.sz);
+			break;
+		}
+		default:
+			break;
+		}
+
+		break;
+	}
+	case AS_EXP_RESULT_MP_SMALL:
+		as_pack_append(pk, res->mp_small.buf, res->mp_small.sz);
+		break;
+	case AS_EXP_RESULT_MSGPACK:
+		as_pack_append(pk, res->msgpack.ptr, res->msgpack.sz);
+		break;
+	case AS_EXP_RESULT_STR:
+		as_pack_str_with_type(pk, res->str.bytes_type, res->str.ptr,
+				res->str.sz);
+		break;
+	case AS_EXP_RESULT_REMOVE:
+		break;
+	default:
+		cf_crash(AS_EXP, "unexpected type %d", res->type);
+	}
+}
+
+bool
+as_exp_result_has_nonstorage(const as_exp_result* res)
+{
+	return res->type == AS_EXP_RESULT_MSGPACK &&
+			res->msgpack.has_nonstorage != 0;
+}
+
+bool
+as_exp_eval_to_result(const as_exp* exp, const as_exp_ctx* ctx,
+		as_exp_result* res)
+{
+	rt_value vars[exp->max_var_count];
+	rt_value ret_val;
+
+	runtime rt = {
+			.ctx = ctx,
+			.instr_ptr = exp->mem,
+			.vars = vars,
+			.vars_builtin = {[0 ... (AS_EXP_BUILTIN_COUNT - 1)] = rt_unk}
+	};
+
+	op_value_geo geo_mem = {.contents = NULL}; // 1 object -- only value built-in var should have geo
+
+	rt_init_builtin_vars(&rt, &geo_mem);
+	rt_eval(&rt, &ret_val);
+
+	if (geo_mem.contents != NULL && geo_mem.compiled.type == GEO_REGION) {
+		geo_region_destroy(geo_mem.compiled.region);
+	}
+
+	if (ret_val.type == RT_BIN) {
+		as_bin* b = &ret_val.r_bin;
+		uint8_t btype = as_bin_get_particle_type(b);
+
+		switch (btype) {
+		case AS_PARTICLE_TYPE_STRING:
+		case AS_PARTICLE_TYPE_BLOB:
+		case AS_PARTICLE_TYPE_HLL:
+		case AS_PARTICLE_TYPE_GEOJSON:
+		case AS_PARTICLE_TYPE_MAP:
+		case AS_PARTICLE_TYPE_LIST:
+			res->type = AS_EXP_RESULT_BIN;
+			res->particle.ptr = b->particle;
+			return true;
+		default:
+			break;
+		}
+	}
+
+	rt_value t_val;
+	as_packer pk = {.capacity = UINT32_MAX};
+
+	if (! rt_value_bin_translate(&t_val, &ret_val)) {
+		cf_warning(AS_EXP, "as_exp_eval_to_result - unexpected result type (%u)",
+				ret_val.type);
+		return false;
+	}
+
+	switch (t_val.type) {
+	case RT_NIL:
+		res->type = AS_EXP_RESULT_MP_SMALL;
+		res->mp_small.sz = as_pack_nil_size();
+		pk.buffer = res->mp_small.buf;
+		as_pack_nil(&pk);
+		break;
+	case RT_INT:
+		res->type = AS_EXP_RESULT_MP_SMALL;
+		res->mp_small.sz = as_pack_int64_size(t_val.r_int);
+		pk.buffer = res->mp_small.buf;
+		as_pack_int64(&pk, t_val.r_int);
+		break;
+	case RT_FLOAT:
+		res->type = AS_EXP_RESULT_MP_SMALL;
+		res->mp_small.sz = as_pack_double_size();
+		pk.buffer = res->mp_small.buf;
+		as_pack_double(&pk, t_val.r_float);
+		break;
+	case RT_TRILEAN:
+		if (t_val.r_trilean == AS_EXP_UNK) {
+			return false;
+		}
+
+		res->type = AS_EXP_RESULT_MP_SMALL;
+		res->mp_small.sz = as_pack_bool_size();
+		pk.buffer = res->mp_small.buf;
+		as_pack_bool(&pk, t_val.r_trilean == AS_EXP_TRUE);
+		break;
+	case RT_MSGPACK:
+		res->type = AS_EXP_RESULT_MSGPACK;
+		res->msgpack.sz = t_val.r_bytes.sz;
+		res->msgpack.ptr = t_val.r_bytes.contents;
+
+		msgpack_in mp = {
+				.buf = res->msgpack.ptr,
+				.buf_sz = res->msgpack.sz
+		};
+
+		if (msgpack_sz(&mp) == 0) {
+			return false;
+		}
+
+		res->msgpack.has_nonstorage = (mp.has_nonstorage ? 1 : 0);
+		break;
+	case RT_GEO_CONST:
+		res->type = AS_EXP_RESULT_MSGPACK;
+		res->msgpack.sz = t_val.r_geo_const.op->content_sz;
+		res->msgpack.ptr = t_val.r_geo_const.op->contents;
+		res->msgpack.has_nonstorage = 0;
+		break;
+	case RT_STR:
+		res->type = AS_EXP_RESULT_STR;
+		res->str.bytes_type = AS_BYTES_STRING;
+		res->str.sz = t_val.r_bytes.sz;
+		res->str.ptr = t_val.r_bytes.contents;
+		break;
+	case RT_BLOB:
+		res->type = AS_EXP_RESULT_STR;
+		res->str.bytes_type = AS_BYTES_BLOB;
+		res->str.sz = t_val.r_bytes.sz;
+		res->str.ptr = t_val.r_bytes.contents;
+		break;
+	case RT_HLL:
+		res->type = AS_EXP_RESULT_STR;
+		res->str.bytes_type = AS_BYTES_HLL;
+		res->str.sz = t_val.r_bytes.sz;
+		res->str.ptr = t_val.r_bytes.contents;
+		break;
+	case RT_GEO_STR:
+		res->type = AS_EXP_RESULT_STR;
+		res->str.bytes_type = AS_BYTES_GEOJSON;
+		res->str.sz = t_val.r_bytes.sz;
+		res->str.ptr = t_val.r_bytes.contents;
+		break;
+	case RT_RESULT_REMOVE:
+		res->type = AS_EXP_RESULT_REMOVE;
+		break;
+	default:
+		cf_warning(AS_EXP, "as_exp_eval_to_result - unexpected result type (%u)",
+				t_val.type);
+		rt_value_destroy(&t_val);
+		return false;
+	}
+
+	return true;
+}
+
+void
+as_exp_result_destroy(as_exp_result* res)
+{
+	if (res->type == AS_EXP_RESULT_BIN) {
+		as_bin b = {
+				.particle = res->particle.ptr,
+		};
+
+		as_bin_state_set_from_type(&b, res->particle.ptr->type);
+		as_bin_particle_destroy(&b);
+	}
+}
+
 as_exp_trilean
-as_exp_matches_metadata(const as_exp* predexp, const as_exp_ctx* ctx)
+as_exp_matches_metadata(const as_exp* exp, const as_exp_ctx* ctx)
 {
 	cf_assert(ctx->rd == NULL, AS_EXP, "invalid parameter");
 
-	as_exp_trilean ret = match_internal(predexp, ctx);
+	as_exp_trilean ret = match_internal(exp, ctx);
 
 	return ret;
 }
 
 bool
-as_exp_matches_record(const as_exp* predexp, const as_exp_ctx* ctx)
+as_exp_matches_record(const as_exp* exp, const as_exp_ctx* ctx)
 {
 	cf_assert(ctx->rd != NULL, AS_EXP, "invalid parameter");
 
-	as_exp_trilean ret = match_internal(predexp, ctx);
+	as_exp_trilean ret = match_internal(exp, ctx);
 
 	return ret == AS_EXP_TRUE;
 }
@@ -1165,7 +1484,7 @@ build_next(build_args* args)
 static const op_table_entry*
 build_get_entry(result_type type)
 {
-	if ((uint32_t)type >= TYPE_END) {
+	if ((uint32_t)type >= TYPE_END) { // (uint32_t) cast because enum can be signed
 		return NULL;
 	}
 
@@ -1280,12 +1599,13 @@ build_count_sz(msgpack_in* mp, uint32_t* total_sz, uint32_t* cleanup_count,
 
 		if (op_code == EXP_CALL) {
 			uint32_t param_count;
-			int64_t call_op_code;
+			uint64_t call_op_code;
 
 			(*counter_r)--;
 
 			if (! msgpack_get_list_ele_count(mp, &param_count) ||
-					param_count == 0 || ! msgpack_get_int64(mp, &call_op_code)) {
+					param_count == 0 ||
+					! msgpack_get_uint64(mp, &call_op_code)) {
 				cf_warning(AS_EXP, "build_count_sz - invalid instruction at offset %u",
 						mp->offset);
 				return false;
@@ -1294,7 +1614,7 @@ build_count_sz(msgpack_in* mp, uint32_t* total_sz, uint32_t* cleanup_count,
 			if (call_op_code == AS_CDT_OP_CONTEXT_EVAL && (param_count != 3 ||
 					msgpack_sz(mp) == 0 || // skip context
 					! msgpack_get_list_ele_count(mp, &param_count) ||
-					! msgpack_get_int64(mp, &call_op_code))) {
+					! msgpack_get_uint64(mp, &call_op_code))) {
 				cf_warning(AS_EXP, "build_count_sz - invalid instruction at offset %u",
 						mp->offset);
 				return false;
@@ -2038,9 +2358,9 @@ build_rec_key(build_args* args)
 		return false;
 	}
 
-	int64_t type64;
+	uint64_t type64;
 
-	if (! msgpack_get_int64(&args->mp, &type64)) {
+	if (! msgpack_get_uint64(&args->mp, &type64)) {
 		cf_warning(AS_EXP, "build_rec_key - error %u failed to parse an integer",
 				AS_ERR_PARAMETER);
 		return false;
@@ -2057,7 +2377,7 @@ build_rec_key(build_args* args)
 		op->type = RT_BLOB;
 		break;
 	default:
-		cf_warning(AS_EXP, "build_rec_key - error %u invalid result_type %ld (%s)",
+		cf_warning(AS_EXP, "build_rec_key - error %u invalid result_type %lu (%s)",
 				AS_ERR_PARAMETER, type64, result_type_to_str(type64));
 		return false;
 	}
@@ -2078,11 +2398,17 @@ build_bin(build_args* args)
 		return false;
 	}
 
-	int64_t type64;
+	uint64_t type64;
 
-	if (! msgpack_get_int64(&args->mp, &type64)) {
+	if (! msgpack_get_uint64(&args->mp, &type64)) {
 		cf_warning(AS_EXP, "build_bin - error %u failed to parse an integer",
 				AS_ERR_PARAMETER);
+		return false;
+	}
+
+	if (type64 >= TYPE_INPUT_END) {
+		cf_warning(AS_EXP, "build_bin - error %u invalid type %lu",
+				AS_ERR_PARAMETER, type64);
 		return false;
 	}
 
@@ -2235,6 +2561,54 @@ build_cond(build_args* args)
 
 	args->entry = build_get_entry(type);
 	cf_assert(args->entry != NULL, AS_EXP, "unexpected type %d", type);
+
+	return true;
+}
+
+static bool
+build_var_builtin(build_args* args)
+{
+	op_var* op = (op_var*)args->mem;
+
+	if (! build_args_setup(args, "build_var_builtin")) {
+		return false;
+	}
+
+	uint64_t type64;
+	uint64_t idx64;
+
+	if (! msgpack_get_uint64(&args->mp, &type64)) {
+		cf_warning(AS_EXP, "build_var_builtin - error %u failed to parse an integer",
+				AS_ERR_PARAMETER);
+		return false;
+	}
+
+	op->type = (result_type)type64;
+
+	if (! msgpack_get_uint64(&args->mp, &idx64)) {
+		cf_warning(AS_EXP, "build_var_builtin - error %u failed to parse an integer at offset %u",
+				AS_ERR_PARAMETER, args->mp.offset);
+		return false;
+	}
+
+	if (idx64 >= AS_EXP_BUILTIN_COUNT) {
+		cf_warning(AS_EXP, "build_var_builtin - error %u invalid builtin var %lu at offset %u",
+				AS_ERR_PARAMETER, idx64, args->mp.offset);
+		return false;
+	}
+	else if (idx64 == AS_EXP_BUILTIN_INDEX && op->type != TYPE_INT) {
+		cf_warning(AS_EXP, "build_var_builtin - error %u invalid builtin var type %ld for index is not integer at offset %u",
+				AS_ERR_PARAMETER, idx64, args->mp.offset);
+		return false;
+	}
+
+	op->idx = (uint32_t)idx64;
+
+	if ((args->entry = build_get_entry(op->type)) == NULL) {
+		cf_warning(AS_EXP, "build_var_builtin - error %u invalid result_type %d (%s)",
+				AS_ERR_PARAMETER, op->type, result_type_to_str(op->type));
+		return false;
+	}
 
 	return true;
 }
@@ -2419,17 +2793,23 @@ build_call(build_args* args)
 		return false;
 	}
 
-	int64_t type64;
+	uint64_t type64;
 
-	if (! msgpack_get_int64(&args->mp, &type64)) {
+	if (! msgpack_get_uint64(&args->mp, &type64)) {
 		cf_warning(AS_EXP, "build_call - error %u invalid result_type arg",
 				AS_ERR_PARAMETER);
 		return false;
 	}
 
-	int64_t system_type64;
+	if (type64 >= TYPE_INPUT_END) {
+		cf_warning(AS_EXP, "build_call - error %u invalid type %lu",
+				AS_ERR_PARAMETER, type64);
+		return false;
+	}
 
-	if (! msgpack_get_int64(&args->mp, &system_type64)) {
+	uint64_t system_type64;
+
+	if (! msgpack_get_uint64(&args->mp, &system_type64)) {
 		cf_warning(AS_EXP, "build_call - error %u invalid system_type arg",
 				AS_ERR_PARAMETER);
 		return false;
@@ -2437,12 +2817,6 @@ build_call(build_args* args)
 
 	op->type = (result_type)type64;
 	op->system_type = (call_system_type)system_type64;
-
-	if ((uint32_t)op->type >= TYPE_END) { // (uint32_t) cast because enum can be signed
-		cf_warning(AS_EXP, "build_call - error %u invalid type %u",
-				AS_ERR_PARAMETER, op->type);
-		return false;
-	}
 
 	if (! parse_op_call(op, args)) {
 		cf_warning(AS_EXP, "build_call - error %u invalid msgpack list",
@@ -2620,45 +2994,12 @@ build_value_geo(build_args* args)
 		return false;
 	}
 
-	op->contents = args->mp.buf + args->mp.offset;
-
-	uint32_t json_sz;
-	const uint8_t* json = msgpack_get_bin(&args->mp, &json_sz);
-
-	cf_assert(json_sz != 0, AS_EXP, "unexpected");
-
-	op->content_sz = (uint32_t)(args->mp.buf + args->mp.offset - op->contents);
-
-	if (json == NULL) {
-		cf_warning(AS_EXP, "build_value_geo - error %u failed to parse string",
-				AS_ERR_PARAMETER);
+	if (! geo_mp_to_op(&args->mp, op, "build_value_geo")) {
 		return false;
 	}
 
-	// Skip as_bytes type.
-	json++;
-	json_sz--;
-
-	uint64_t cellid;
-	geo_region_t region;
-
-	op->compiled.region = NULL;
-
-	if (! as_geojson_parse(NULL, (const char*)json, json_sz, &cellid,
-			&region)) {
-		cf_warning(AS_EXP, "build_value_geo - error %u invalid geojson",
-				AS_ERR_PARAMETER);
-		return false;
-	}
-
-	if (region != NULL) {
-		op->compiled.type = GEO_REGION;
-		op->compiled.region = region;
+	if (op->compiled.type == GEO_REGION) {
 		args->exp->cleanup_stack[args->exp->cleanup_stack_ix++] = op;
-	}
-	else {
-		op->compiled.type = GEO_CELL;
-		op->compiled.cellid = cellid;
 	}
 
 	return true;
@@ -2714,17 +3055,15 @@ parse_op_call(op_call* op, build_args* args)
 		return false;
 	}
 
-	int64_t op_code;
+	uint64_t op_code;
 
-	if (! msgpack_get_int64(mp, &op_code)) {
+	if (ele_count == 0 || ! msgpack_get_uint64(mp, &op_code)) {
 		return false;
 	}
 
 	op->vecs[0].buf_sz = mp->offset - offset_start;
 
 	if (op_code == AS_CDT_OP_CONTEXT_EVAL) {
-		op->is_cdt_context_eval = true;
-
 		if (ele_count != 3 || msgpack_sz(mp) == 0) { // skip context
 			return false;
 		}
@@ -2733,14 +3072,19 @@ parse_op_call(op_call* op, build_args* args)
 			return false;
 		}
 
-		if (! msgpack_get_int64(mp, &op_code)) {
+		if (! msgpack_get_uint64(mp, &op_code)) {
 			return false;
 		}
 
 		op->vecs[0].buf_sz = mp->offset - offset_start;
 	}
-	else {
-		op->is_cdt_context_eval = false;
+	else if (op_code == AS_CDT_OP_SELECT) {
+		if (msgpack_sz_rep(mp, ele_count - 1) == 0) {
+			return false;
+		}
+
+		ele_count = 1;
+		op->vecs[0].buf_sz = mp->offset - offset_start;
 	}
 
 	uint32_t idx = 0;
@@ -2828,6 +3172,9 @@ build_set_expected_particle_type(build_args* args)
 	case TYPE_HLL:
 		args->exp->expected_type = AS_PARTICLE_TYPE_HLL;
 		break;
+	case TYPE_RESULT_REMOVE:
+		args->exp->expected_type = AS_PARTICLE_TYPE_NULL; // TODO - maybe need new type
+		break;
 	case TYPE_END:
 	default:
 		cf_warning(AS_EXP, "build_set_expected_particle_type - unexpected result_type %u",
@@ -2851,24 +3198,78 @@ check_filter_exp(as_exp* exp)
 	return exp;
 }
 
+static bool
+geo_mp_to_op(msgpack_in* mp, op_value_geo *op, const char* debug_str)
+{
+	op->contents = mp->buf + mp->offset;
+
+	uint32_t json_sz;
+	const uint8_t* json = msgpack_get_bin(mp, &json_sz);
+
+	cf_assert(json_sz != 0, AS_EXP, "unexpected");
+
+	op->content_sz = (uint32_t)(mp->buf + mp->offset - op->contents);
+
+	if (json == NULL) {
+		cf_warning(AS_EXP, "%s - error %u failed to parse string",
+				debug_str, AS_ERR_PARAMETER);
+		return false;
+	}
+
+	// Skip as_bytes type.
+	json++;
+	json_sz--;
+
+	uint64_t cellid;
+	geo_region_t region;
+
+	op->compiled.region = NULL;
+
+	if (! as_geojson_parse(NULL, (const char*)json, json_sz, &cellid,
+			&region)) {
+		cf_warning(AS_EXP, "build_value_geo - error %u invalid geojson",
+				AS_ERR_PARAMETER);
+		return false;
+	}
+
+	if (region != NULL) {
+		op->compiled.type = GEO_REGION;
+		op->compiled.region = region;
+	}
+	else {
+		op->compiled.type = GEO_CELL;
+		op->compiled.cellid = cellid;
+	}
+
+	return true;
+}
+
 
 //==========================================================
 // Local helpers - runtime.
 //
 
 static as_exp_trilean
-match_internal(const as_exp* predexp, const as_exp_ctx* ctx)
+match_internal(const as_exp* exp, const as_exp_ctx* ctx)
 {
-	rt_value vars[predexp->max_var_count];
+	rt_value vars[exp->max_var_count];
 	rt_value ret_val;
 
 	runtime rt = {
 			.ctx = ctx,
-			.instr_ptr = predexp->mem,
-			.vars = vars
+			.instr_ptr = exp->mem,
+			.vars = vars,
+			.vars_builtin = {[0 ... (AS_EXP_BUILTIN_COUNT - 1)] = rt_unk}
 	};
 
+	op_value_geo geo_mem = {.contents = NULL}; // 1 object -- only value built-in var should have geo
+
+	rt_init_builtin_vars(&rt, &geo_mem);
 	rt_eval(&rt, &ret_val);
+
+	if (geo_mem.contents != NULL && geo_mem.compiled.type == GEO_REGION) { // geojson needs cleanup
+		geo_region_destroy(geo_mem.compiled.region);
+	}
 
 	if (ret_val.type != RT_TRILEAN) {
 		rt_value_destroy(&ret_val);
@@ -3637,6 +4038,11 @@ eval_max(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 static void
 eval_meta_digest_mod(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 {
+	if (! rt_has_ns(rt)) {
+		*ret_val = rt_unk;
+		return;
+	}
+
 	op_meta_digest_modulo* op = (op_meta_digest_modulo*)ob;
 	uint32_t val = *(uint32_t*)&rt->ctx->r->keyd.digest[16];
 
@@ -3650,6 +4056,11 @@ eval_meta_device_size(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 {
 	(void)ob;
 
+	if (! rt_has_ns(rt)) {
+		*ret_val = rt_unk;
+		return;
+	}
+
 	ret_val->type = RT_INT;
 	ret_val->r_int = as_namespace_is_memory_only(rt->ctx->ns) ?
 			0 : (int64_t)as_record_stored_size(rt->ctx->r);
@@ -3659,6 +4070,12 @@ static void
 eval_meta_last_update(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 {
 	(void)ob;
+
+	if (! rt_has_ns(rt)) {
+		*ret_val = rt_unk;
+		return;
+	}
+
 	ret_val->type = RT_INT;
 	ret_val->r_int =
 			(int64_t)cf_utc_ns_from_clepoch_ms(rt->ctx->r->last_update_time);
@@ -3668,6 +4085,11 @@ static void
 eval_meta_since_update(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 {
 	(void)ob;
+
+	if (! rt_has_ns(rt)) {
+		*ret_val = rt_unk;
+		return;
+	}
 
 	uint64_t now = cf_clepoch_milliseconds();
 	uint64_t lut = rt->ctx->r->last_update_time;
@@ -3681,6 +4103,11 @@ eval_meta_void_time(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 {
 	(void)ob;
 
+	if (! rt_has_ns(rt)) {
+		*ret_val = rt_unk;
+		return;
+	}
+
 	ret_val->type = RT_INT;
 	ret_val->r_int = (rt->ctx->r->void_time == 0) ?
 			-1 : (int64_t)cf_utc_ns_from_clepoch_sec(rt->ctx->r->void_time);
@@ -3691,6 +4118,11 @@ eval_meta_ttl(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 {
 	(void)ob;
 
+	if (! rt_has_ns(rt)) {
+		*ret_val = rt_unk;
+		return;
+	}
+
 	ret_val->type = RT_INT;
 	ret_val->r_int = (int64_t)(int32_t)
 			cf_server_void_time_to_ttl(rt->ctx->r->void_time);
@@ -3700,6 +4132,11 @@ static void
 eval_meta_set_name(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 {
 	(void)ob;
+
+	if (! rt_has_ns(rt)) {
+		*ret_val = rt_unk;
+		return;
+	}
 
 	uint16_t set_id = as_index_get_set_id(rt->ctx->r);
 
@@ -3722,6 +4159,11 @@ eval_meta_key_exists(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 {
 	(void)ob;
 
+	if (! rt_has_ns(rt)) {
+		*ret_val = rt_unk;
+		return;
+	}
+
 	ret_val->type = RT_TRILEAN;
 	ret_val->r_trilean = (rt->ctx->r->key_stored == 0 ?
 			AS_EXP_FALSE : AS_EXP_TRUE);
@@ -3731,6 +4173,11 @@ static void
 eval_meta_is_tombstone(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 {
 	(void)ob;
+
+	if (! rt_has_ns(rt)) {
+		*ret_val = rt_unk;
+		return;
+	}
 
 	ret_val->type = RT_TRILEAN;
 	ret_val->r_trilean = (as_record_is_live(rt->ctx->r) ?
@@ -3743,6 +4190,11 @@ eval_meta_memory_size(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 {
 	(void)ob;
 
+	if (! rt_has_ns(rt)) {
+		*ret_val = rt_unk;
+		return;
+	}
+
 	ret_val->type = RT_INT;
 	ret_val->r_int = rt->ctx->ns->storage_type == AS_STORAGE_ENGINE_MEMORY ?
 			(int64_t)as_record_stored_size(rt->ctx->r) : 0;
@@ -3753,6 +4205,11 @@ eval_meta_record_size(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 {
 	(void)ob;
 
+	if (! rt_has_ns(rt)) {
+		*ret_val = rt_unk;
+		return;
+	}
+
 	ret_val->type = RT_INT;
 	ret_val->r_int = (int64_t)as_record_stored_size(rt->ctx->r);
 }
@@ -3760,15 +4217,13 @@ eval_meta_record_size(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 static void
 eval_rec_key(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 {
-	if (rt->ctx->rd == NULL) {
-		ret_val->type = RT_TRILEAN;
-		ret_val->r_trilean = AS_EXP_UNK;
+	if (! rt_has_rd(rt)) {
+		*ret_val = rt_unk;
 		return;
 	}
 
 	if (! as_storage_rd_load_key(rt->ctx->rd)) {
-		ret_val->type = RT_TRILEAN;
-		ret_val->r_trilean = AS_EXP_UNK;
+		*ret_val = rt_unk;
 		return;
 	}
 
@@ -3813,9 +4268,8 @@ eval_rec_key(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 static void
 eval_bin(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 {
-	if (rt->ctx->rd == NULL) {
-		ret_val->type = RT_TRILEAN;
-		ret_val->r_trilean = AS_EXP_UNK;
+	if (! rt_has_rd(rt)) {
+		*ret_val = rt_unk;
 		return;
 	}
 
@@ -3823,14 +4277,12 @@ eval_bin(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 	as_bin* bin;
 
 	if (! get_live_bin(rt->ctx->rd, op->name, op->name_sz, &bin)) {
-		ret_val->type = RT_TRILEAN;
-		ret_val->r_trilean = AS_EXP_UNK;
+		*ret_val = rt_unk;
 		return;
 	}
 
 	if (bin == NULL) {
-		ret_val->type = RT_TRILEAN;
-		ret_val->r_trilean = AS_EXP_UNK;
+		*ret_val = rt_unk;
 		return;
 	}
 
@@ -3839,8 +4291,7 @@ eval_bin(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 	if (! bin_is_type(bin, op->type)) {
 		cf_detail(AS_EXP, "eval_bin - bin (%.*s) type mismatch %u does not map to %u",
 				op->name_sz, op->name, bin_type, op->type);
-		ret_val->type = RT_TRILEAN;
-		ret_val->r_trilean = AS_EXP_UNK;
+		*ret_val = rt_unk;
 		return;
 	}
 
@@ -3913,23 +4364,27 @@ eval_bin_type(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 {
 	op_bin_type* op = (op_bin_type*)ob;
 
-	if (rt->ctx->rd == NULL) {
-		ret_val->type = RT_TRILEAN;
-		ret_val->r_trilean = AS_EXP_UNK;
+	if (! rt_has_rd(rt)) {
+		*ret_val = rt_unk;
 		return;
 	}
 
 	as_bin* b;
 
 	if (! get_live_bin(rt->ctx->rd, op->name, op->name_sz, &b)) {
-		ret_val->type = RT_TRILEAN;
-		ret_val->r_trilean = AS_EXP_UNK;
+		*ret_val = rt_unk;
 		return;
 	}
 
 	ret_val->type = RT_INT;
 	ret_val->r_int = (b == NULL) ?
 			AS_PARTICLE_TYPE_NULL : (uint64_t)as_bin_get_particle_type(b);
+}
+
+static void
+eval_result_remove(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
+{
+	ret_val->type = RT_RESULT_REMOVE;
 }
 
 static void
@@ -3961,6 +4416,18 @@ eval_cond(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
 	}
 
 	rt_eval(rt, ret_val);
+}
+
+static void
+eval_var_builtin(runtime* rt, const op_base_mem* ob, rt_value* ret_val)
+{
+	op_var* op = (op_var*)ob;
+
+	*ret_val = rt->vars_builtin[op->idx];
+
+	if (! rt_is_type(ret_val, op->type)) {
+		*ret_val = rt_unk;
+	}
 }
 
 static void
@@ -4610,6 +5077,141 @@ get_live_bin(as_storage_rd* rd, const uint8_t* name, size_t len, as_bin** p_bin)
 	return true;
 }
 
+static bool
+rt_is_type(const rt_value* v, result_type type)
+{
+	switch (type) {
+	case TYPE_NIL:
+		return v->type == RT_NIL;
+	case TYPE_TRILEAN:
+		return v->type == RT_TRILEAN;
+	case TYPE_INT:
+		return v->type == RT_INT;
+	case TYPE_STR:
+		return v->type == RT_STR;
+	case TYPE_LIST:
+		return (v->type == RT_MSGPACK) ?
+				msgpack_buf_peek_type(v->r_bytes.contents, v->r_bytes.sz) ==
+						MSGPACK_TYPE_LIST : false;
+	case TYPE_MAP:
+		return (v->type == RT_MSGPACK) ?
+				msgpack_buf_peek_type(v->r_bytes.contents, v->r_bytes.sz) ==
+						MSGPACK_TYPE_MAP : false;
+	case TYPE_BLOB:
+		return v->type == RT_BLOB;
+	case TYPE_FLOAT:
+		return v->type == RT_FLOAT;
+	case TYPE_GEOJSON:
+		return v->type == RT_GEO_STR || v->type == RT_GEO_CONST ||
+				v->type == RT_GEO_COMPILED;
+	case TYPE_HLL:
+		return v->type == RT_HLL;
+	default:
+		break;
+	}
+
+	return false;
+}
+
+static void
+rt_init_builtin_vars(runtime* rt, op_value_geo* geo_mem)
+{
+	if (rt->ctx->vars_table == NULL) {
+		return;
+	}
+
+	for (uint32_t i = 0; i < AS_EXP_BUILTIN_COUNT; i++) {
+		msgpack_in* mp = rt->ctx->vars_table[i];
+		rt_value* vp = &rt->vars_builtin[i];
+
+		if (mp == NULL) {
+			continue;
+		}
+
+		msgpack_type type = msgpack_peek_type(mp);
+
+		if (i == AS_EXP_BUILTIN_INDEX && type != MSGPACK_TYPE_INT) {
+			continue;
+		}
+
+		rt_value v = {.do_not_destroy = 1};
+
+		switch (type) {
+		case MSGPACK_TYPE_NIL:
+			vp->type = RT_NIL;
+			break;
+		case MSGPACK_TYPE_FALSE:
+			vp->r_trilean = AS_EXP_FALSE;
+			break;
+		case MSGPACK_TYPE_TRUE:
+			vp->r_trilean = AS_EXP_TRUE;
+			break;
+		case MSGPACK_TYPE_NEGINT:
+		case MSGPACK_TYPE_INT:
+			if (msgpack_get_int64(mp, &v.r_int)) {
+				v.type = RT_INT;
+				*vp = v;
+			}
+
+			break;
+		case MSGPACK_TYPE_LIST:
+		case MSGPACK_TYPE_MAP:
+			v.r_bytes.contents = msgpack_get_ele(mp, &v.r_bytes.sz);
+
+			if (v.r_bytes.contents != NULL) {
+				v.type = RT_MSGPACK;
+				*vp = v;
+			}
+
+			break;
+		case MSGPACK_TYPE_STRING:
+		case MSGPACK_TYPE_BYTES:
+			v.r_bytes.contents = msgpack_get_bin(mp, &v.r_bytes.sz);
+
+			if (v.r_bytes.contents == NULL || v.r_bytes.sz == 0) {
+				break;
+			}
+
+			as_bytes_type btype = *v.r_bytes.contents++;
+			v.r_bytes.sz--;
+
+			switch (btype) {
+			case AS_BYTES_BLOB:
+				v.type = RT_BLOB;
+				break;
+			case AS_BYTES_STRING:
+				v.type = RT_STR;
+				break;
+			case AS_BYTES_HLL:
+				v.type = RT_HLL;
+				break;
+			default:
+				continue;
+			}
+
+			*vp = v;
+			break;
+		case MSGPACK_TYPE_DOUBLE:
+			if (msgpack_get_double(mp, &v.r_float)) {
+				v.type = RT_FLOAT;
+				*vp = v;
+			}
+
+			break;
+		case MSGPACK_TYPE_GEOJSON:
+			if (geo_mp_to_op(mp, geo_mem, "rt_init_builtin_vars")) {
+				v.type = RT_GEO_CONST;
+				v.r_geo_const.op = geo_mem;
+				*vp = v;
+			}
+
+			break;
+		default:
+			break;
+		}
+	}
+}
+
 
 //==========================================================
 // Local helpers - runtime compare utilities.
@@ -4880,6 +5482,11 @@ rt_value_bin_translate(rt_value* to, const rt_value* from)
 	*to = (rt_value){ 0 };
 
 	switch (type) {
+	case AS_PARTICLE_TYPE_BOOL:
+		to->type = RT_TRILEAN;
+		to->r_trilean =
+				as_bin_particle_bool_value(&b) ? AS_EXP_TRUE : AS_EXP_FALSE;
+		break;
 	case AS_PARTICLE_TYPE_INTEGER:
 		to->type = RT_INT;
 		to->r_int = as_bin_particle_integer_value(&b);
@@ -5132,6 +5739,17 @@ display_cond(runtime* rt, const op_base_mem* ob, cf_dyn_buf* db)
 }
 
 static void
+display_var_builtin(runtime* rt, const op_base_mem* ob, cf_dyn_buf* db)
+{
+	(void)rt;
+
+	op_var* op = (op_var*)ob;
+
+	cf_dyn_buf_append_format(db, "%s(%u)",
+			op_table[ob->code].name, op->idx);
+}
+
+static void
 display_var(runtime* rt, const op_base_mem* ob, cf_dyn_buf* db)
 {
 	(void)rt;
@@ -5178,9 +5796,9 @@ display_call(runtime* rt, const op_base_mem* ob, cf_dyn_buf* db)
 		cf_crash(AS_EXP, "unexpected");
 	}
 
-	int64_t op_code;
+	uint64_t op_code;
 
-	if (! msgpack_get_int64(&mp, &op_code)) {
+	if (! msgpack_get_uint64(&mp, &op_code)) {
 		cf_crash(AS_EXP, "unexpected");
 	}
 
@@ -5195,7 +5813,7 @@ display_call(runtime* rt, const op_base_mem* ob, cf_dyn_buf* db)
 				cf_crash(AS_EXP, "unexpected");
 			}
 
-			if (! msgpack_get_int64(&mp, &op_code)) {
+			if (! msgpack_get_uint64(&mp, &op_code)) {
 				cf_crash(AS_EXP, "unexpected");
 			}
 
@@ -5206,6 +5824,29 @@ display_call(runtime* rt, const op_base_mem* ob, cf_dyn_buf* db)
 			}
 
 			cf_dyn_buf_append_string(db, ", ");
+		}
+		else if (op_code == AS_CDT_OP_SELECT) {
+			cf_dyn_buf_append_format(db, "%s(", cdt_exp_display_name(op_code));
+
+			if (! cdt_msgpack_ctx_to_dynbuf(&mp, db)) {
+				cf_crash(AS_EXP, "unexpected");
+			}
+
+			uint64_t flags;
+
+			if (! msgpack_get_uint64(&mp, &flags)) {
+				cf_crash(AS_EXP, "unexpected");
+			}
+
+			if (ele_count > 3) {
+				uint32_t mod_exp_sz = msgpack_sz(&mp);
+
+				cf_assert(mod_exp_sz != 0, AS_EXP, "unexpected");
+				cf_dyn_buf_append_format(db, ", 0x%x, <mod_exp/%u>, ", (uint32_t)flags, mod_exp_sz);
+			}
+			else {
+				cf_dyn_buf_append_format(db, "0x%x", (uint32_t)flags);
+			}
 		}
 		else {
 			cf_dyn_buf_append_format(db, "%s(NULL, ",

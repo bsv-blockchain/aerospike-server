@@ -10,6 +10,7 @@ endif
 
 HEADERS += arenax.h
 HEADERS += bits.h
+HEADERS += cf_defer.h
 HEADERS += cf_mutex.h
 HEADERS += cf_str.h
 HEADERS += cf_thread.h

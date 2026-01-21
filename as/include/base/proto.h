@@ -558,6 +558,7 @@ typedef enum {
 	AS_CDT_CTX_RANK  = 1,
 	AS_CDT_CTX_KEY   = 2,
 	AS_CDT_CTX_VALUE = 3,
+	AS_CDT_CTX_EXP   = 4,
 	AS_CDT_MAX_CTX
 } as_cdt_subcontext;
 
@@ -673,6 +674,7 @@ typedef enum {
 	AS_CDT_OP_MAP_GET_BY_KEY_REL_INDEX_RANGE        = 109,
 	AS_CDT_OP_MAP_GET_BY_VALUE_REL_RANK_RANGE       = 110,
 
+	AS_CDT_OP_SELECT                                = 0xFE,
 	AS_CDT_OP_CONTEXT_EVAL                          = 0xFF
 } as_cdt_optype;
 

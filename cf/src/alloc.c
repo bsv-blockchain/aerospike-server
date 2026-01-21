@@ -339,8 +339,8 @@ hook_handle_free_check(const void* ra, const void* p, size_t jem_sz)
 
 	for (uint32_t i = 0; i < 4 && i < delta; ++i) {
 		if (mark[i] != data[i]) {
-			cf_crash(CF_ALLOC, "corruption %zu@%p RA 0x%lx, invalid mark, possibly allocated with RA 0x%lx",
-					jem_sz, p, cf_strip_aslr(ra),
+			cf_crash(CF_ALLOC, "corruption %zu@%p RA 0x%lx, invalid mark 0x%x, possibly allocated with RA 0x%lx",
+					jem_sz, p, cf_strip_aslr(ra), *(uint32_t*)mark,
 					cf_strip_aslr(as_load_rlx(g_site_ras + site_id)));
 		}
 	}

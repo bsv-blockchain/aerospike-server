@@ -677,6 +677,19 @@ msgpack_peek_is_ext(const msgpack_in *mp)
 	return false;
 }
 
+bool
+msgpack_peek_is_cdt(const msgpack_in *mp){
+	switch (msgpack_peek_type(mp)) {
+	case MSGPACK_TYPE_LIST:
+	case MSGPACK_TYPE_MAP:
+		return true;
+	default:
+		break;
+	}
+
+	return false;
+}
+
 const uint8_t *
 msgpack_get_ele(msgpack_in *mp, uint32_t *sz_r)
 {
@@ -1653,10 +1666,13 @@ msgpack_cmp_internal(parse_meta *meta0, parse_meta *meta1)
 		msgpack_cmp_parse(meta0);
 		msgpack_cmp_parse(meta1);
 
-		if (meta0->buf == NULL || meta0->type == MSGPACK_TYPE_ERROR ||
-				meta0->buf > meta0->end ||
-				meta1->buf == NULL || meta1->type == MSGPACK_TYPE_ERROR ||
-				meta1->buf > meta1->end) {
+		if (meta0->buf == NULL || meta0->buf > meta0->end ||
+					meta1->buf == NULL || meta1->buf > meta1->end) {
+			return MSGPACK_CMP_END;
+		}
+
+		if (meta0->type == MSGPACK_TYPE_ERROR ||
+				meta1->type == MSGPACK_TYPE_ERROR) {
 			return MSGPACK_CMP_ERROR;
 		}
 
