@@ -681,6 +681,9 @@ teranode_spend_multi(as_rec* rec, as_list* args)
     int64_t child_count = 0;
     const char* signal = utxo_set_delete_at_height_impl(rec, current_block_height, block_height_retention, &child_count);
 
+    // Re-fetch block_ids after as_rec_set calls (both above and inside setDeleteAtHeight)
+    as_val* response_block_ids_val = as_rec_get(rec, BIN_BLOCK_IDS);
+
     // Build response
     if (as_hashmap_size(errors) > 0) {
         as_hashmap_set(response,
@@ -696,10 +699,10 @@ teranode_spend_multi(as_rec* rec, as_list* args)
         as_hashmap_destroy(errors);
     }
 
-    if (block_ids_val != NULL && as_val_type(block_ids_val) == AS_LIST) {
+    if (response_block_ids_val != NULL && as_val_type(response_block_ids_val) == AS_LIST) {
         as_hashmap_set(response,
             (as_val*)as_string_new((char*)FIELD_BLOCK_IDS, false),
-            as_val_reserve(block_ids_val));
+            as_val_reserve(response_block_ids_val));
     }
 
     if (signal != NULL && strlen(signal) > 0) {
@@ -918,11 +921,15 @@ teranode_set_mined(as_rec* rec, as_list* args)
     int64_t child_count = 0;
     const char* signal = utxo_set_delete_at_height_impl(rec, current_block_height, block_height_retention, &child_count);
 
+    // Re-fetch block_ids from record since as_rec_set calls above may have invalidated the pointer
+    as_val* response_block_ids_val = as_rec_get(rec, BIN_BLOCK_IDS);
+    as_list* response_block_ids = as_list_fromval(response_block_ids_val);
+
     // Build response
     as_hashmap* response = (as_hashmap*)utxo_create_ok_response();
     as_hashmap_set(response,
         (as_val*)as_string_new((char*)FIELD_BLOCK_IDS, false),
-        as_val_reserve((as_val*)block_ids));
+        as_val_reserve((as_val*)response_block_ids));
 
     if (signal != NULL && strlen(signal) > 0) {
         as_hashmap_set(response,
