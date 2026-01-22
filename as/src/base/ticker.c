@@ -262,21 +262,13 @@ log_line_system()
 	uint32_t free_mem_pct;
 	uint64_t thp_mem_kbytes;
 
-	get_mem_info(0, &free_mem_kbytes, &free_mem_pct, &thp_mem_kbytes);
+	sys_mem_info(&free_mem_kbytes, &free_mem_pct, &thp_mem_kbytes);
 
-	uint64_t host_free_mem_kbytes;
-	uint32_t host_free_mem_pct;
-	uint64_t host_thp_mem_kbytes;
-
-	get_mem_info(1, &host_free_mem_kbytes, &host_free_mem_pct, &host_thp_mem_kbytes);
-
-	cf_info(AS_INFO, "   system: total-cpu-pct %u user-cpu-pct %u kernel-cpu-pct %u free-mem-kbytes %lu free-mem-pct %d thp-mem-kbytes %lu host-free-mem-kbytes %lu host-free-mem-pct %d",
+	cf_info(AS_INFO, "   system: total-cpu-pct %u user-cpu-pct %u kernel-cpu-pct %u free-mem-kbytes %lu free-mem-pct %d thp-mem-kbytes %lu",
 			user_pct + kernel_pct, user_pct, kernel_pct,
 			free_mem_kbytes,
 			free_mem_pct,
-			thp_mem_kbytes,
-			host_free_mem_kbytes,
-			host_free_mem_pct);
+			thp_mem_kbytes);
 }
 
 void

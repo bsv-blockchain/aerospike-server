@@ -179,9 +179,6 @@ static const as_info_cmd* parse_cmd(char** cmd_str_p, cf_dyn_buf* db);
 static const as_info_cmd* find_cmd(const char* name, size_t name_len);
 static void handle_cmd(const as_info_cmd* cmd, const char* params, as_file_handle* fd_h, cf_dyn_buf* db);
 
-// Memory utilities.
-static int cgroup_mem_info(uint64_t host_free_mem_kbytes, uint64_t* free_mem_kbytes, uint32_t* free_mem_pct);
-
 // Info commands.
 static void cmd_best_practices(as_info_cmd_args* args);
 static void cmd_build(as_info_cmd_args* args);
@@ -883,68 +880,6 @@ sys_cpu_info(uint32_t* user_pct, uint32_t* kernel_pct)
 	}
 }
 
-static int
-cgroup_mem_info(uint64_t host_free_mem_kbytes, uint64_t* free_mem_kbytes,
-		uint32_t* free_mem_pct)
-{
-	*free_mem_kbytes = 0;
-	*free_mem_pct = 0;
-
-	char* cg_limit[64] = {};
-	char* cg_used[64] = {};
-	const char* cg_max_path[] = {	// try v2 first (common)
-		"/sys/fs/cgroup/memory.max",
-		"/sys/fs/cgroup/memory/memory.limit_in_bytes",
-	};
-	const char* cg_current_path[] = {
-		"/sys/fs/cgroup/memory.current",
-		"/sys/fs/cgroup/memory/memory.usage_in_bytes",
-	};
-	uint64_t used_bytes = 0;
-	uint64_t limit_bytes = 0;
-	const char* max_value = "9223372036854771712";
-
-	for (uint32_t i = 0; i < sizeof(cg_max_path) / sizeof(char*); i++) {
-		size_t limit_buf_sz = sizeof(cg_limit);
-		cf_os_file_res cg_max_read =
-		cf_os_read_file(cg_max_path[i], cg_limit, &limit_buf_sz);
-		size_t limit_used_sz = sizeof(cg_used);
-		cf_os_file_res cg_current_read = cf_os_read_file(
-				cg_current_path[i], cg_used, &limit_used_sz);
-
-		if (cg_max_read == CF_OS_FILE_RES_OK &&
-				cg_current_read == CF_OS_FILE_RES_OK) {
-			if (strcmp((char*)cg_limit, "max") == 0 ||
-					strcmp((char*)cg_limit, max_value) == 0) {
-
-				return 0; // unlimited memory
-			}
-
-			used_bytes = strtoull((char*)cg_used, NULL, 10);
-			limit_bytes = strtoull((char*)cg_limit, NULL, 10);
-
-			break;
-		}
-	}
-
-	if (used_bytes == 0 || limit_bytes == 0) {
-		return 0;
-	}
-
-	uint64_t used_kbytes = used_bytes / 1024;
-	uint64_t limit_kbytes = limit_bytes / 1024;
-
-	if (host_free_mem_kbytes < limit_kbytes) {
-		limit_kbytes = host_free_mem_kbytes;
-	}
-
-	*free_mem_kbytes = limit_kbytes - used_kbytes;
-	*free_mem_pct = ((limit_kbytes - used_kbytes) * 100) / limit_kbytes;
-
-	return 1;
-}
-
-
 // TODO: This function should move elsewhere.
 void
 sys_mem_info(uint64_t* free_mem_kbytes, uint32_t* free_mem_pct,
@@ -1027,28 +962,6 @@ sys_mem_info(uint64_t* free_mem_kbytes, uint32_t* free_mem_pct,
 	*free_mem_kbytes = mem_available;
 	*free_mem_pct = mem_total == 0 ? 0 : (mem_available * 100) / mem_total;
 	*thp_mem_kbytes = anon_huge_pages;
-}
-
-void
-get_mem_info(int host_mode, uint64_t* free_mem_kbytes, uint32_t* free_mem_pct,
-		uint64_t* thp_mem_kbytes)
-{
-	uint64_t host_free_mem_kbytes = 0;
-	uint32_t host_free_mem_pct = 0;
-	uint64_t host_thp_kbytes = 0;
-
-	sys_mem_info(&host_free_mem_kbytes, &host_free_mem_pct,
-			&host_thp_kbytes);
-
-	if (! host_mode && cgroup_mem_info(
-		host_free_mem_kbytes, free_mem_kbytes, free_mem_pct) == 1) {
-		*thp_mem_kbytes = host_thp_kbytes;
-	}
-	else {
-		*free_mem_kbytes = host_free_mem_kbytes;
-		*free_mem_pct = host_free_mem_pct;
-		*thp_mem_kbytes = host_thp_kbytes;
-	}
 }
 
 void
@@ -3864,18 +3777,11 @@ cmd_statistics(as_info_cmd_args* args)
 	info_append_uint32(db, "system_user_cpu_pct", user_pct);
 	info_append_uint32(db, "system_kernel_cpu_pct", kernel_pct);
 
-	uint64_t host_free_mem_kbytes;
-	uint32_t host_free_mem_pct;
-	uint64_t thp_mem_kbytes;
-
-	get_mem_info(1, &host_free_mem_kbytes, &host_free_mem_pct, &thp_mem_kbytes);
-	info_append_uint64(db, "host_free_mem_kbytes", host_free_mem_kbytes);
-	info_append_int(db, "host_free_mem_pct", host_free_mem_pct);
-
 	uint64_t free_mem_kbytes;
 	uint32_t free_mem_pct;
+	uint64_t thp_mem_kbytes;
 
-	get_mem_info(0, &free_mem_kbytes, &free_mem_pct, &thp_mem_kbytes);
+	sys_mem_info(&free_mem_kbytes, &free_mem_pct, &thp_mem_kbytes);
 	info_append_uint64(db, "system_free_mem_kbytes", free_mem_kbytes);
 	info_append_int(db, "system_free_mem_pct", free_mem_pct);
 	info_append_uint64(db, "system_thp_mem_kbytes", thp_mem_kbytes);

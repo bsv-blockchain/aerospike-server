@@ -1033,7 +1033,7 @@ sys_mem_pct(void)
 	uint32_t free_mem_pct;
 	uint64_t thp_mem_kbytes;
 
-	get_mem_info(0, &free_mem_kbytes, &free_mem_pct, &thp_mem_kbytes);
+	sys_mem_info(&free_mem_kbytes, &free_mem_pct, &thp_mem_kbytes);
 
 	return 100 - free_mem_pct;
 }
