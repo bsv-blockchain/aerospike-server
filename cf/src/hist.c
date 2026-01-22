@@ -325,7 +325,20 @@ histogram_dump(histogram* h)
 			continue;
 		}
 
-		pos += sprintf(buf + pos, " (%02u: %010lu)", i, counts[i]);
+		int n = snprintf(buf + pos, sizeof(buf) - (size_t)pos,
+				" (%02u: %010lu)", i, counts[i]);
+
+		if (n < 0 || (size_t)n >= sizeof(buf) - (size_t)pos) {
+			// Truncated - force flush current buffer.
+			buf[sizeof(buf) - 1] = '\0';
+			cf_info(AS_INFO, "%s", buf);
+			pos = 0;
+			buf[0] = '\0';
+			k = 0;
+			continue;
+		}
+
+		pos += n;
 
 		if ((k & 3) == 3) { // maximum of 4 printed columns per log line
 			cf_info(AS_INFO, "%s", buf);
@@ -361,11 +374,22 @@ histogram_dump(histogram* h)
 	double tps = (double)diff_total / (double)slice;
 
 	char* out = h->dump_output;
+	size_t remaining = sizeof(h->dump_output);
 
 	cf_mutex_lock(&h->dump_lock);
 
 	if (h->timestamp != 0) {
-		out += sprintf(out, "%s,%.1f", h->scale_tag, tps);
+		int n = snprintf(out, remaining, "%s,%.1f", h->scale_tag, tps);
+		if (n < 0 || (size_t)n >= remaining) {
+			h->dump_output[0] = ';';
+			h->dump_output[1] = '\0';
+			cf_mutex_unlock(&h->dump_lock);
+			h->timestamp = now;
+			h->total = total;
+			return;
+		}
+		out += n;
+		remaining -= (size_t)n;
 	}
 
 	// b's "over" is total minus sum of values in all buckets 0 thru b.
@@ -377,14 +401,30 @@ histogram_dump(histogram* h)
 				(double)(diff_overs * 100) / (double)diff_total : 0;
 
 		if (h->timestamp != 0) {
-			out += sprintf(out, ",%.2f", pct_over_b);
+			int n = snprintf(out, remaining, ",%.2f", pct_over_b);
+			if (n < 0 || (size_t)n >= remaining) {
+				h->dump_output[0] = ';';
+				h->dump_output[1] = '\0';
+				cf_mutex_unlock(&h->dump_lock);
+				h->timestamp = now;
+				h->total = total;
+				return;
+			}
+			out += n;
+			remaining -= (size_t)n;
 		}
 
 		// Store for next time.
 		h->overs[b] = over;
 	}
 
-	append_semicolon(out);
+	if (remaining >= 2) {
+		append_semicolon(out);
+	}
+	else {
+		h->dump_output[sizeof(h->dump_output) - 2] = ';';
+		h->dump_output[sizeof(h->dump_output) - 1] = '\0';
+	}
 
 	cf_mutex_unlock(&h->dump_lock);
 
