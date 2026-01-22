@@ -4675,147 +4675,147 @@ as_config_post_process(as_config* c, const char* config_file)
 
 		// One-way activated histograms.
 
-		sprintf(hist_name, "{%s}-read", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-read", ns->name);
 		ns->read_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-write", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-write", ns->name);
 		ns->write_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-udf", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-udf", ns->name);
 		ns->udf_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-batch-sub-read", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-batch-sub-read", ns->name);
 		ns->batch_sub_read_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-batch-sub-write", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-batch-sub-write", ns->name);
 		ns->batch_sub_write_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-batch-sub-udf", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-batch-sub-udf", ns->name);
 		ns->batch_sub_udf_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-pi-query", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-pi-query", ns->name);
 		ns->pi_query_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-pi-query-rec-count", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-pi-query-rec-count", ns->name);
 		ns->pi_query_rec_count_hist = histogram_create(hist_name, HIST_COUNT);
 
-		sprintf(hist_name, "{%s}-si-query", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-si-query", ns->name);
 		ns->si_query_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-si-query-rec-count", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-si-query-rec-count", ns->name);
 		ns->si_query_rec_count_hist = histogram_create(hist_name, HIST_COUNT);
 
-		sprintf(hist_name, "{%s}-read-touch", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-read-touch", ns->name);
 		ns->read_touch_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-re-repl", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-re-repl", ns->name);
 		ns->re_repl_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-writes-per-mrt", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-writes-per-mrt", ns->name);
 		ns->writes_per_mrt_hist = histogram_create(hist_name, HIST_COUNT);
 
 		// Activate-by-config histograms.
 
-		sprintf(hist_name, "{%s}-proxy", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-proxy", ns->name);
 		ns->proxy_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-read-start", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-read-start", ns->name);
 		ns->read_start_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-read-restart", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-read-restart", ns->name);
 		ns->read_restart_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-read-dup-res", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-read-dup-res", ns->name);
 		ns->read_dup_res_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-read-repl-ping", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-read-repl-ping", ns->name);
 		ns->read_repl_ping_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-read-local", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-read-local", ns->name);
 		ns->read_local_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-read-response", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-read-response", ns->name);
 		ns->read_response_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-write-start", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-write-start", ns->name);
 		ns->write_start_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-write-restart", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-write-restart", ns->name);
 		ns->write_restart_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-write-dup-res", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-write-dup-res", ns->name);
 		ns->write_dup_res_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-write-master", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-write-master", ns->name);
 		ns->write_master_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-write-repl-write", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-write-repl-write", ns->name);
 		ns->write_repl_write_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-write-response", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-write-response", ns->name);
 		ns->write_response_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-udf-start", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-udf-start", ns->name);
 		ns->udf_start_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-udf-restart", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-udf-restart", ns->name);
 		ns->udf_restart_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-udf-dup-res", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-udf-dup-res", ns->name);
 		ns->udf_dup_res_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-udf-master", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-udf-master", ns->name);
 		ns->udf_master_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-udf-repl-write", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-udf-repl-write", ns->name);
 		ns->udf_repl_write_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-udf-response", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-udf-response", ns->name);
 		ns->udf_response_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-batch-sub-prestart", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-batch-sub-prestart", ns->name);
 		ns->batch_sub_prestart_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-batch-sub-start", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-batch-sub-start", ns->name);
 		ns->batch_sub_start_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-batch-sub-restart", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-batch-sub-restart", ns->name);
 		ns->batch_sub_restart_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-batch-sub-dup-res", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-batch-sub-dup-res", ns->name);
 		ns->batch_sub_dup_res_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-batch-sub-repl-ping", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-batch-sub-repl-ping", ns->name);
 		ns->batch_sub_repl_ping_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-batch-sub-read-local", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-batch-sub-read-local", ns->name);
 		ns->batch_sub_read_local_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-batch-sub-write-master", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-batch-sub-write-master", ns->name);
 		ns->batch_sub_write_master_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-batch-sub-udf-master", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-batch-sub-udf-master", ns->name);
 		ns->batch_sub_udf_master_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-batch-sub-repl-write", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-batch-sub-repl-write", ns->name);
 		ns->batch_sub_repl_write_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-batch-sub-response", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-batch-sub-response", ns->name);
 		ns->batch_sub_response_hist = histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-udf-sub-start", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-udf-sub-start", ns->name);
 		ns->udf_sub_start_hist =  histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-udf-sub-restart", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-udf-sub-restart", ns->name);
 		ns->udf_sub_restart_hist =  histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-udf-sub-dup-res", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-udf-sub-dup-res", ns->name);
 		ns->udf_sub_dup_res_hist =  histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-udf-sub-master", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-udf-sub-master", ns->name);
 		ns->udf_sub_master_hist =  histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-udf-sub-repl-write", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-udf-sub-repl-write", ns->name);
 		ns->udf_sub_repl_write_hist =  histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-udf-sub-response", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-udf-sub-response", ns->name);
 		ns->udf_sub_response_hist =  histogram_create(hist_name, scale);
 
-		sprintf(hist_name, "{%s}-ops-sub-start", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-ops-sub-start", ns->name);
 		ns->ops_sub_start_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-ops-sub-restart", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-ops-sub-restart", ns->name);
 		ns->ops_sub_restart_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-ops-sub-dup-res", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-ops-sub-dup-res", ns->name);
 		ns->ops_sub_dup_res_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-ops-sub-master", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-ops-sub-master", ns->name);
 		ns->ops_sub_master_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-ops-sub-repl-write", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-ops-sub-repl-write", ns->name);
 		ns->ops_sub_repl_write_hist = histogram_create(hist_name, scale);
-		sprintf(hist_name, "{%s}-ops-sub-response", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-ops-sub-response", ns->name);
 		ns->ops_sub_response_hist = histogram_create(hist_name, scale);
 
 		// 'nsup' histograms.
 
-		sprintf(hist_name, "{%s}-object-size-log2", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-object-size-log2", ns->name);
 		ns->obj_size_log_hist = histogram_create(hist_name, HIST_SIZE);
-		sprintf(hist_name, "{%s}-object-size-linear", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-object-size-linear", ns->name);
 		ns->obj_size_lin_hist = linear_hist_create(hist_name, LINEAR_HIST_SIZE, 0, ns->max_record_size, OBJ_SIZE_HIST_NUM_BUCKETS);
 
-		sprintf(hist_name, "{%s}-evict", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-evict", ns->name);
 		ns->evict_hist = linear_hist_create(hist_name, LINEAR_HIST_SECONDS, 0, 0, ns->evict_hist_buckets);
 
-		sprintf(hist_name, "{%s}-ttl", ns->name);
+		snprintf(hist_name, sizeof(hist_name), "{%s}-ttl", ns->name);
 		ns->ttl_hist = linear_hist_create(hist_name, LINEAR_HIST_SECONDS, 0, 0, TTL_HIST_NUM_BUCKETS);
 	}
 

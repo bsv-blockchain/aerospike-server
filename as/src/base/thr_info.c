@@ -2018,7 +2018,7 @@ cmd_latencies(const char* name, const char* params, cf_dyn_buf* db)
 
 	cf_debug(AS_INFO, "%s command received: params %s", name, params);
 
-	char value_str[100];
+	char value_str[100] = { 0 };
 	int  value_str_len = sizeof(value_str);
 	info_param_result rv = as_info_parameter_get(params, "hist", value_str,
 			&value_str_len);
@@ -2079,7 +2079,22 @@ cmd_latencies(const char* name, const char* params, cf_dyn_buf* db)
 
 			char* ns_name = value_str + 1;
 			char* ns_name_end = strchr(ns_name, '}');
-			as_namespace* ns = as_namespace_get_bybuf((uint8_t*)ns_name, ns_name_end - ns_name);
+
+			if (ns_name_end == NULL || ns_name_end <= ns_name) {
+				cf_info(AS_INFO, "%s command: unrecognized histogram: %s", name, value_str);
+				as_info_respond_error(db, AS_ERR_PARAMETER, "bad hist name");
+				return;
+			}
+
+			size_t ns_name_len = (size_t)(ns_name_end - ns_name);
+
+			if (ns_name_len >= AS_ID_NAMESPACE_SZ) {
+				cf_info(AS_INFO, "%s command: unrecognized histogram: %s", name, value_str);
+				as_info_respond_error(db, AS_ERR_PARAMETER, "bad hist name");
+				return;
+			}
+
+			as_namespace* ns = as_namespace_get_bybuf((uint8_t*)ns_name, ns_name_len);
 
 			if (ns == NULL) {
 				cf_info(AS_INFO, "%s command: unrecognized histogram: %s", name, value_str);
