@@ -71,7 +71,14 @@ utxo_bytes_equal(as_bytes* a, as_bytes* b)
         return false;
     }
 
-    return memcmp(as_bytes_get(a), as_bytes_get(b), size_a) == 0;
+    const uint8_t* data_a = as_bytes_get(a);
+    const uint8_t* data_b = as_bytes_get(b);
+
+    if (data_a == NULL || data_b == NULL) {
+        return false;
+    }
+
+    return memcmp(data_a, data_b, size_a) == 0;
 }
 
 bool
@@ -87,6 +94,9 @@ utxo_is_frozen(as_bytes* spending_data)
     }
 
     const uint8_t* data = as_bytes_get(spending_data);
+    if (data == NULL) {
+        return false;
+    }
     for (uint32_t i = 0; i < SPENDING_DATA_SIZE; i++) {
         if (data[i] != FROZEN_BYTE) {
             return false;
@@ -116,7 +126,12 @@ utxo_create_with_spending_data(as_bytes* utxo_hash, as_bytes* spending_data)
     }
 
     // Copy utxo hash
-    as_bytes_set(new_utxo, 0, as_bytes_get(utxo_hash), UTXO_HASH_SIZE);
+    const uint8_t* hash_data = as_bytes_get(utxo_hash);
+    if (hash_data == NULL) {
+        as_bytes_destroy(new_utxo);
+        return NULL;
+    }
+    as_bytes_set(new_utxo, 0, hash_data, UTXO_HASH_SIZE);
 
     // Copy spending data if provided
     if (spending_data != NULL) {
@@ -124,7 +139,12 @@ utxo_create_with_spending_data(as_bytes* utxo_hash, as_bytes* spending_data)
             as_bytes_destroy(new_utxo);
             return NULL;
         }
-        as_bytes_set(new_utxo, UTXO_HASH_SIZE, as_bytes_get(spending_data), SPENDING_DATA_SIZE);
+        const uint8_t* spending_ptr = as_bytes_get(spending_data);
+        if (spending_ptr == NULL) {
+            as_bytes_destroy(new_utxo);
+            return NULL;
+        }
+        as_bytes_set(new_utxo, UTXO_HASH_SIZE, spending_ptr, SPENDING_DATA_SIZE);
     }
 
     return new_utxo;
@@ -139,6 +159,9 @@ utxo_get_and_validate(
     as_bytes** out_spending_data,
     as_map** out_error_response)
 {
+    if (out_utxo == NULL || out_spending_data == NULL || out_error_response == NULL) {
+        return -1;
+    }
     *out_utxo = NULL;
     *out_spending_data = NULL;
     *out_error_response = NULL;
@@ -146,6 +169,19 @@ utxo_get_and_validate(
     if (utxos == NULL || expected_hash == NULL) {
         *out_error_response = utxo_create_error_response(
             ERROR_CODE_INVALID_PARAMETER, "Invalid parameters");
+        return -1;
+    }
+
+    if (offset < 0) {
+        *out_error_response = utxo_create_error_response(
+            ERROR_CODE_UTXO_NOT_FOUND, ERR_UTXO_NOT_FOUND);
+        return -1;
+    }
+
+    uint32_t utxos_sz = as_list_size(utxos);
+    if ((uint64_t)offset >= (uint64_t)utxos_sz) {
+        *out_error_response = utxo_create_error_response(
+            ERROR_CODE_UTXO_NOT_FOUND, ERR_UTXO_NOT_FOUND);
         return -1;
     }
 
@@ -231,6 +267,9 @@ utxo_spending_data_to_hex(as_bytes* spending_data)
     // Output: 64 chars (32 bytes reversed) + 8 chars (4 bytes LE) + null
     char hex[73];
     const uint8_t* data = as_bytes_get(spending_data);
+    if (data == NULL) {
+        return NULL;
+    }
 
     // First 32 bytes reversed (txID)
     int pos = 0;
@@ -270,6 +309,9 @@ utxo_spending_data_to_txid_hex(as_bytes* spending_data)
     // Output: 64 chars (32 bytes reversed) + null
     char hex[65];
     const uint8_t* data = as_bytes_get(spending_data);
+    if (data == NULL) {
+        return NULL;
+    }
 
     // First 32 bytes reversed (txID)
     int pos = 0;
