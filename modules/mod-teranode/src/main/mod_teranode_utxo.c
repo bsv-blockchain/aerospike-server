@@ -24,8 +24,10 @@
 
 // Helper to get boolean from list
 static inline bool get_list_bool(as_list* list, uint32_t index) {
+    if (list == NULL) return false;
     as_val* val = as_list_get(list, index);
     if (val == NULL) return false;
+    if (as_val_type(val) != AS_BOOLEAN) return false;
     as_boolean* b = as_boolean_fromval(val);
     if (b == NULL) return false;
     return as_boolean_get(b);
@@ -33,8 +35,10 @@ static inline bool get_list_bool(as_list* list, uint32_t index) {
 
 // Helper to get integer from list
 static inline int64_t get_list_int64(as_list* list, uint32_t index) {
+    if (list == NULL) return 0;
     as_val* val = as_list_get(list, index);
     if (val == NULL) return 0;
+    if (as_val_type(val) != AS_INTEGER) return 0;
     as_integer* i = as_integer_fromval(val);
     if (i == NULL) return 0;
     return as_integer_get(i);
@@ -42,8 +46,10 @@ static inline int64_t get_list_int64(as_list* list, uint32_t index) {
 
 // Helper to get bytes from list
 static inline as_bytes* get_list_bytes(as_list* list, uint32_t index) {
+    if (list == NULL) return NULL;
     as_val* val = as_list_get(list, index);
     if (val == NULL) return NULL;
+    if (as_val_type(val) != AS_BYTES) return NULL;
     return as_bytes_fromval(val);
 }
 
@@ -114,6 +120,10 @@ utxo_create_with_spending_data(as_bytes* utxo_hash, as_bytes* spending_data)
 
     // Copy spending data if provided
     if (spending_data != NULL) {
+        if (as_bytes_size(spending_data) != SPENDING_DATA_SIZE) {
+            as_bytes_destroy(new_utxo);
+            return NULL;
+        }
         as_bytes_set(new_utxo, UTXO_HASH_SIZE, as_bytes_get(spending_data), SPENDING_DATA_SIZE);
     }
 
@@ -139,6 +149,13 @@ utxo_get_and_validate(
         return -1;
     }
 
+    uint32_t expected_size = as_bytes_size(expected_hash);
+    if (expected_size != UTXO_HASH_SIZE) {
+        *out_error_response = utxo_create_error_response(
+            ERROR_CODE_UTXO_INVALID_SIZE, ERR_UTXO_INVALID_SIZE);
+        return -1;
+    }
+
     // Lua arrays are 1-based, but as_list is 0-based
     as_val* val = as_list_get(utxos, (uint32_t)offset);
     if (val == NULL) {
@@ -147,7 +164,16 @@ utxo_get_and_validate(
         return -1;
     }
 
-    as_bytes* utxo = as_bytes_fromval(val);
+    if (as_val_type(val) != AS_BYTES) {
+        *out_error_response = utxo_create_error_response(
+            ERROR_CODE_UTXO_INVALID_SIZE, ERR_UTXO_INVALID_SIZE);
+        return -1;
+    }
+
+    as_bytes* utxo = NULL;
+    if (as_val_type(val) == AS_BYTES) {
+        utxo = as_bytes_fromval(val);
+    }
     if (utxo == NULL) {
         *out_error_response = utxo_create_error_response(
             ERROR_CODE_UTXO_INVALID_SIZE, ERR_UTXO_INVALID_SIZE);
@@ -165,6 +191,12 @@ utxo_get_and_validate(
     const uint8_t* utxo_data = as_bytes_get(utxo);
     const uint8_t* expected_data = as_bytes_get(expected_hash);
 
+    if (utxo_data == NULL || expected_data == NULL) {
+        *out_error_response = utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Failed to get UTXO data");
+        return -1;
+    }
+
     if (memcmp(utxo_data, expected_data, UTXO_HASH_SIZE) != 0) {
         *out_error_response = utxo_create_error_response(
             ERROR_CODE_UTXO_HASH_MISMATCH, ERR_UTXO_HASH_MISMATCH);
@@ -177,6 +209,11 @@ utxo_get_and_validate(
     if (utxo_size == FULL_UTXO_SIZE) {
         // Create a new bytes object for spending data
         as_bytes* spending = as_bytes_new(SPENDING_DATA_SIZE);
+        if (spending == NULL) {
+            *out_error_response = utxo_create_error_response(
+                ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+            return -1;
+        }
         as_bytes_set(spending, 0, utxo_data + UTXO_HASH_SIZE, SPENDING_DATA_SIZE);
         *out_spending_data = spending;
     }
@@ -210,7 +247,16 @@ utxo_spending_data_to_hex(as_bytes* spending_data)
 
     hex[72] = '\0';
     // Use strdup to copy string to heap, true flag means as_string will free it
-    return as_string_new(strdup(hex), true);
+    char* hex_copy = strdup(hex);
+    if (hex_copy == NULL) {
+        return NULL;
+    }
+    as_string* s = as_string_new(hex_copy, true);
+    if (s == NULL) {
+        free(hex_copy);
+        return NULL;
+    }
+    return s;
 }
 
 // Convert spending data to just txid hex (32 bytes reversed) - for deletedChildren check
@@ -234,26 +280,64 @@ utxo_spending_data_to_txid_hex(as_bytes* spending_data)
 
     hex[64] = '\0';
     // Use strdup to copy string to heap, true flag means as_string will free it
-    return as_string_new(strdup(hex), true);
+    char* hex_copy = strdup(hex);
+    if (hex_copy == NULL) {
+        return NULL;
+    }
+    as_string* s = as_string_new(hex_copy, true);
+    if (s == NULL) {
+        free(hex_copy);
+        return NULL;
+    }
+    return s;
 }
 
 as_map*
 utxo_create_error_response(const char* error_code, const char* message)
 {
     as_hashmap* response = as_hashmap_new(4);
+    if (response == NULL) {
+        return NULL;
+    }
 
-    as_hashmap_set(response,
-        (as_val*)as_string_new((char*)FIELD_STATUS, false),
-        (as_val*)as_string_new((char*)STATUS_ERROR, false));
+    as_string* k_status = as_string_new((char*)FIELD_STATUS, false);
+    as_string* v_status = as_string_new((char*)STATUS_ERROR, false);
+    if (k_status == NULL || v_status == NULL) {
+        if (k_status) as_string_destroy(k_status);
+        if (v_status) as_string_destroy(v_status);
+        as_hashmap_destroy(response);
+        return NULL;
+    }
+    as_hashmap_set(response, (as_val*)k_status, (as_val*)v_status);
 
-    as_hashmap_set(response,
-        (as_val*)as_string_new((char*)FIELD_ERROR_CODE, false),
-        (as_val*)as_string_new((char*)error_code, false));
+    as_string* k_code = as_string_new((char*)FIELD_ERROR_CODE, false);
+    as_string* v_code = as_string_new((char*)error_code, false);
+    if (k_code == NULL || v_code == NULL) {
+        if (k_code) as_string_destroy(k_code);
+        if (v_code) as_string_destroy(v_code);
+        as_hashmap_destroy(response);
+        return NULL;
+    }
+    as_hashmap_set(response, (as_val*)k_code, (as_val*)v_code);
 
-    // Always strdup message since caller might pass stack-allocated buffer
-    as_hashmap_set(response,
-        (as_val*)as_string_new((char*)FIELD_MESSAGE, false),
-        (as_val*)as_string_new(strdup(message), true));
+    char* message_copy = strdup(message);
+    if (message_copy == NULL) {
+        as_hashmap_destroy(response);
+        return NULL;
+    }
+    as_string* k_msg = as_string_new((char*)FIELD_MESSAGE, false);
+    as_string* v_msg = as_string_new(message_copy, true);
+    if (k_msg == NULL || v_msg == NULL) {
+        if (k_msg) as_string_destroy(k_msg);
+        if (v_msg == NULL) {
+            free(message_copy);
+        } else {
+            as_string_destroy(v_msg);
+        }
+        as_hashmap_destroy(response);
+        return NULL;
+    }
+    as_hashmap_set(response, (as_val*)k_msg, (as_val*)v_msg);
 
     return (as_map*)response;
 }
@@ -262,10 +346,19 @@ as_map*
 utxo_create_ok_response(void)
 {
     as_hashmap* response = as_hashmap_new(2);
+    if (response == NULL) {
+        return NULL;
+    }
 
-    as_hashmap_set(response,
-        (as_val*)as_string_new((char*)FIELD_STATUS, false),
-        (as_val*)as_string_new((char*)STATUS_OK, false));
+    as_string* k_status = as_string_new((char*)FIELD_STATUS, false);
+    as_string* v_status = as_string_new((char*)STATUS_OK, false);
+    if (k_status == NULL || v_status == NULL) {
+        if (k_status) as_string_destroy(k_status);
+        if (v_status) as_string_destroy(v_status);
+        as_hashmap_destroy(response);
+        return NULL;
+    }
+    as_hashmap_set(response, (as_val*)k_status, (as_val*)v_status);
 
     return (as_map*)response;
 }
@@ -317,9 +410,18 @@ utxo_set_delete_at_height_impl(
     if (conflicting_val != NULL && as_val_type(conflicting_val) == AS_BOOLEAN) {
         if (as_boolean_get(as_boolean_fromval(conflicting_val))) {
             if (existing_dah_val == NULL || as_val_type(existing_dah_val) == AS_NIL) {
+                // Extract total_extra_recs BEFORE as_rec_set to avoid use-after-free
+                bool should_signal = false;
+                int64_t total_extra_recs = 0;
+                if (has_external && total_extra_recs_val != NULL && as_val_type(total_extra_recs_val) == AS_INTEGER) {
+                    total_extra_recs = as_integer_get(as_integer_fromval(total_extra_recs_val));
+                    should_signal = true;
+                }
+
                 as_rec_set(rec, BIN_DELETE_AT_HEIGHT, (as_val*)as_integer_new(new_delete_height));
-                if (has_external && total_extra_recs_val != NULL) {
-                    *out_child_count = as_integer_get(as_integer_fromval(total_extra_recs_val));
+
+                if (should_signal) {
+                    *out_child_count = total_extra_recs;
                     return SIGNAL_DELETE_AT_HEIGHT_SET;
                 }
             }
@@ -356,6 +458,9 @@ utxo_set_delete_at_height_impl(
     }
 
     // Master record: check all conditions for deletion
+    if (as_val_type(total_extra_recs_val) != AS_INTEGER) {
+        return "";
+    }
     int64_t total_extra_recs = as_integer_get(as_integer_fromval(total_extra_recs_val));
     *out_child_count = total_extra_recs;
 
@@ -421,23 +526,61 @@ teranode_spend(as_rec* rec, as_list* args)
     int64_t current_block_height = get_list_int64(args, 5);
     int64_t block_height_retention = get_list_int64(args, 6);
 
+    // Validate required arguments
+    if (utxo_hash == NULL || spending_data == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Missing utxo_hash or spending_data");
+    }
+
     // Build single spend item for spendMulti
     as_hashmap* spend_item = as_hashmap_new(4);
-    as_hashmap_set(spend_item,
-        (as_val*)as_string_new((char*)"offset", false),
-        (as_val*)as_integer_new(offset));
-    as_hashmap_set(spend_item,
-        (as_val*)as_string_new((char*)"utxoHash", false),
-        as_val_reserve((as_val*)utxo_hash));
-    as_hashmap_set(spend_item,
-        (as_val*)as_string_new((char*)"spendingData", false),
-        as_val_reserve((as_val*)spending_data));
+    if (spend_item == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
+    // Safely add fields to spend_item with allocation checks
+    as_string* k_offset = as_string_new((char*)"offset", false);
+    as_integer* v_offset = as_integer_new(offset);
+    if (k_offset == NULL || v_offset == NULL) {
+        if (k_offset) as_string_destroy(k_offset);
+        if (v_offset) as_integer_destroy(v_offset);
+        as_hashmap_destroy(spend_item);
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
+    as_hashmap_set(spend_item, (as_val*)k_offset, (as_val*)v_offset);
+
+    as_string* k_utxo_hash = as_string_new((char*)"utxoHash", false);
+    if (k_utxo_hash == NULL) {
+        as_hashmap_destroy(spend_item);
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
+    as_hashmap_set(spend_item, (as_val*)k_utxo_hash, as_val_reserve((as_val*)utxo_hash));
+
+    as_string* k_spending = as_string_new((char*)"spendingData", false);
+    if (k_spending == NULL) {
+        as_hashmap_destroy(spend_item);
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
+    as_hashmap_set(spend_item, (as_val*)k_spending, as_val_reserve((as_val*)spending_data));
 
     as_arraylist* spends = as_arraylist_new(1, 0);
+    if (spends == NULL) {
+        as_hashmap_destroy(spend_item);
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
     as_arraylist_append(spends, (as_val*)spend_item);
 
     // Build args for spendMulti
     as_arraylist* multi_args = as_arraylist_new(5, 0);
+    if (multi_args == NULL) {
+        as_arraylist_destroy(spends);
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
     as_arraylist_append(multi_args, (as_val*)spends);
     as_arraylist_append(multi_args, (as_val*)as_boolean_new(ignore_conflicting));
     as_arraylist_append(multi_args, (as_val*)as_boolean_new(ignore_locked));
@@ -458,9 +601,19 @@ teranode_spend_multi(as_rec* rec, as_list* args)
     }
 
     as_hashmap* response = as_hashmap_new(8);
+    if (response == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
 
     // Extract arguments
-    as_list* spends = as_list_fromval(as_list_get(args, 0));
+    as_val* spends_val = as_list_get(args, 0);
+    if (spends_val == NULL || as_val_type(spends_val) != AS_LIST) {
+        as_val_destroy((as_val*)response);
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Invalid spends list");
+    }
+    as_list* spends = as_list_fromval(spends_val);
     bool ignore_conflicting = get_list_bool(args, 1);
     bool ignore_locked = get_list_bool(args, 2);
     int64_t current_block_height = get_list_int64(args, 3);
@@ -518,48 +671,73 @@ teranode_spend_multi(as_rec* rec, as_list* args)
     }
     as_list* utxos = as_list_fromval(utxos_val);
 
-    // Get block IDs for response
-    as_val* block_ids_val = as_rec_get(rec, BIN_BLOCK_IDS);
-
-    // Get deleted children map
-    as_val* deleted_children_val = as_rec_get(rec, BIN_DELETED_CHILDREN);
-    as_map* deleted_children = NULL;
-    if (deleted_children_val != NULL && as_val_type(deleted_children_val) == AS_MAP) {
-        deleted_children = as_map_fromval(deleted_children_val);
-    }
-
-    // Get spendable_in map
-    as_val* spendable_in_val = as_rec_get(rec, BIN_UTXO_SPENDABLE_IN);
-    as_map* spendable_in = NULL;
-    if (spendable_in_val != NULL && as_val_type(spendable_in_val) == AS_MAP) {
-        spendable_in = as_map_fromval(spendable_in_val);
-    }
+    // Note: deleted_children, spendable_in, and utxos are fetched inside the loop
+    // because as_rec_set calls may invalidate record values
 
     // Process each spend
     as_hashmap* errors = as_hashmap_new(8);
+    if (errors == NULL) {
+        as_val_destroy((as_val*)response);
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
     uint32_t spends_size = as_list_size(spends);
 
     for (uint32_t i = 0; i < spends_size; i++) {
+        // Re-fetch record values at each iteration since as_rec_set may invalidate them
+        utxos_val = as_rec_get(rec, BIN_UTXOS);
+        if (utxos_val == NULL || as_val_type(utxos_val) != AS_LIST) {
+            // This shouldn't happen, but handle it gracefully
+            break;
+        }
+        utxos = as_list_fromval(utxos_val);
+
+        as_val* deleted_children_val = as_rec_get(rec, BIN_DELETED_CHILDREN);
+        as_map* deleted_children = NULL;
+        if (deleted_children_val != NULL && as_val_type(deleted_children_val) == AS_MAP) {
+            deleted_children = as_map_fromval(deleted_children_val);
+        }
+
+        as_val* spendable_in_val = as_rec_get(rec, BIN_UTXO_SPENDABLE_IN);
+        as_map* spendable_in = NULL;
+        if (spendable_in_val != NULL && as_val_type(spendable_in_val) == AS_MAP) {
+            spendable_in = as_map_fromval(spendable_in_val);
+        }
+
         as_map* spend_item = as_map_fromval(as_list_get(spends, i));
         if (spend_item == NULL) continue;
 
         as_string* k_offset = as_string_new((char*)"offset", false);
         as_val* v_offset = as_map_get(spend_item, (as_val*)k_offset);
+        if (v_offset == NULL || as_val_type(v_offset) != AS_INTEGER) {
+            as_val_destroy((as_val*)k_offset);
+            continue;
+        }
         int64_t offset = as_integer_get(as_integer_fromval(v_offset));
         as_val_destroy((as_val*)k_offset);
 
         as_string* k_utxo = as_string_new((char*)"utxoHash", false);
-        as_bytes* utxo_hash = as_bytes_fromval(as_map_get(spend_item, (as_val*)k_utxo));
+        as_val* v_utxo = as_map_get(spend_item, (as_val*)k_utxo);
+        if (v_utxo == NULL || as_val_type(v_utxo) != AS_BYTES) {
+            as_val_destroy((as_val*)k_utxo);
+            continue;
+        }
+        as_bytes* utxo_hash = as_bytes_fromval(v_utxo);
         as_val_destroy((as_val*)k_utxo);
 
         as_string* k_sp = as_string_new((char*)"spendingData", false);
-        as_bytes* spending_data = as_bytes_fromval(as_map_get(spend_item, (as_val*)k_sp));
+        as_val* v_sp = as_map_get(spend_item, (as_val*)k_sp);
+        if (v_sp == NULL || as_val_type(v_sp) != AS_BYTES) {
+            as_val_destroy((as_val*)k_sp);
+            continue;
+        }
+        as_bytes* spending_data = as_bytes_fromval(v_sp);
         as_val_destroy((as_val*)k_sp);
 
         as_string* k_idx = as_string_new((char*)"idx", false);
         as_val* idx_val = as_map_get(spend_item, (as_val*)k_idx);
         as_val_destroy((as_val*)k_idx);
-        int64_t idx = (idx_val != NULL) ? as_integer_get(as_integer_fromval(idx_val)) : i;
+        int64_t idx = (idx_val != NULL && as_val_type(idx_val) == AS_INTEGER) ? as_integer_get(as_integer_fromval(idx_val)) : i;
 
         // Validate UTXO
         as_bytes* utxo = NULL;
@@ -584,13 +762,47 @@ teranode_spend_multi(as_rec* rec, as_list* args)
                     char msg[256];
                     snprintf(msg, sizeof(msg), "%s%lld", MSG_FROZEN_UNTIL, (long long)spendable_height);
                     as_hashmap* err = as_hashmap_new(2);
-                    as_hashmap_set(err,
-                        (as_val*)as_string_new((char*)FIELD_ERROR_CODE, false),
-                        (as_val*)as_string_new((char*)ERROR_CODE_FROZEN_UNTIL, false));
-                    as_hashmap_set(err,
-                        (as_val*)as_string_new((char*)FIELD_MESSAGE, false),
-                        (as_val*)as_string_new(strdup(msg), true));
-                    as_hashmap_set(errors, (as_val*)as_integer_new(idx), (as_val*)err);
+                    if (err != NULL) {
+                        as_string* k_code = as_string_new((char*)FIELD_ERROR_CODE, false);
+                        as_string* v_code = as_string_new((char*)ERROR_CODE_FROZEN_UNTIL, false);
+                        if (k_code == NULL || v_code == NULL) {
+                            if (k_code) as_string_destroy(k_code);
+                            if (v_code) as_string_destroy(v_code);
+                            as_hashmap_destroy(err);
+                        } else {
+                            as_hashmap_set(err, (as_val*)k_code, (as_val*)v_code);
+
+                            // Duplicate message safely; fall back to a static message on OOM
+                            char* dyn = strdup(msg);
+                            as_val* msg_val = NULL;
+                            if (dyn != NULL) {
+                                as_string* s = as_string_new(dyn, true);
+                                if (s != NULL) {
+                                    msg_val = (as_val*)s;
+                                } else {
+                                    free(dyn);
+                                }
+                            }
+                            if (msg_val == NULL) {
+                                msg_val = (as_val*)as_string_new((char*)MSG_FROZEN, false);
+                            }
+
+                            as_string* k_msg = as_string_new((char*)FIELD_MESSAGE, false);
+                            if (k_msg != NULL && msg_val != NULL) {
+                                as_hashmap_set(err, (as_val*)k_msg, msg_val);
+                            } else {
+                                if (k_msg) as_string_destroy(k_msg);
+                                if (msg_val) as_val_destroy(msg_val);
+                            }
+
+                            as_integer* idx_key = as_integer_new(idx);
+                            if (idx_key != NULL) {
+                                as_hashmap_set(errors, (as_val*)idx_key, (as_val*)err);
+                            } else {
+                                as_hashmap_destroy(err);
+                            }
+                        }
+                    }
 
                     if (existing_spending_data) as_bytes_destroy(existing_spending_data);
                     continue;
@@ -610,16 +822,39 @@ teranode_spend_multi(as_rec* rec, as_list* args)
                         if (deleted_val != NULL && as_val_type(deleted_val) != AS_NIL) {
                             // Child tx was deleted - this is an invalid spend
                             as_hashmap* err = as_hashmap_new(3);
-                            as_hashmap_set(err,
-                                (as_val*)as_string_new((char*)FIELD_ERROR_CODE, false),
-                                (as_val*)as_string_new((char*)ERROR_CODE_INVALID_SPEND, false));
-                            as_hashmap_set(err,
-                                (as_val*)as_string_new((char*)FIELD_MESSAGE, false),
-                                (as_val*)as_string_new((char*)MSG_INVALID_SPEND, false));
-                            as_hashmap_set(err,
-                                (as_val*)as_string_new((char*)FIELD_SPENDING_DATA, false),
-                                (as_val*)utxo_spending_data_to_hex(existing_spending_data));
-                            as_hashmap_set(errors, (as_val*)as_integer_new(idx), (as_val*)err);
+                            if (err != NULL) {
+                                as_string* k_code = as_string_new((char*)FIELD_ERROR_CODE, false);
+                                as_string* v_code = as_string_new((char*)ERROR_CODE_INVALID_SPEND, false);
+                                as_string* k_msg = as_string_new((char*)FIELD_MESSAGE, false);
+                                as_string* v_msg = as_string_new((char*)MSG_INVALID_SPEND, false);
+                                if (k_code == NULL || v_code == NULL || k_msg == NULL || v_msg == NULL) {
+                                    if (k_code) as_string_destroy(k_code);
+                                    if (v_code) as_string_destroy(v_code);
+                                    if (k_msg) as_string_destroy(k_msg);
+                                    if (v_msg) as_string_destroy(v_msg);
+                                    as_hashmap_destroy(err);
+                                } else {
+                                    as_hashmap_set(err, (as_val*)k_code, (as_val*)v_code);
+                                    as_hashmap_set(err, (as_val*)k_msg, (as_val*)v_msg);
+
+                                    as_string* hexstr = utxo_spending_data_to_hex(existing_spending_data);
+                                    if (hexstr != NULL) {
+                                        as_string* k_sd = as_string_new((char*)FIELD_SPENDING_DATA, false);
+                                        if (k_sd != NULL) {
+                                            as_hashmap_set(err, (as_val*)k_sd, (as_val*)hexstr);
+                                        } else {
+                                            as_string_destroy(hexstr);
+                                        }
+                                    }
+
+                                    as_integer* idx_key = as_integer_new(idx);
+                                    if (idx_key != NULL) {
+                                        as_hashmap_set(errors, (as_val*)idx_key, (as_val*)err);
+                                    } else {
+                                        as_hashmap_destroy(err);
+                                    }
+                                }
+                            }
                             as_string_destroy(child_txid);
                             as_bytes_destroy(existing_spending_data);
                             continue;
@@ -631,28 +866,66 @@ teranode_spend_multi(as_rec* rec, as_list* args)
                 continue;
             } else if (utxo_is_frozen(existing_spending_data)) {
                 as_hashmap* err = as_hashmap_new(2);
-                as_hashmap_set(err,
-                    (as_val*)as_string_new((char*)FIELD_ERROR_CODE, false),
-                    (as_val*)as_string_new((char*)ERROR_CODE_FROZEN, false));
-                as_hashmap_set(err,
-                    (as_val*)as_string_new((char*)FIELD_MESSAGE, false),
-                    (as_val*)as_string_new((char*)MSG_FROZEN, false));
-                as_hashmap_set(errors, (as_val*)as_integer_new(idx), (as_val*)err);
+                if (err != NULL) {
+                    as_string* k_code = as_string_new((char*)FIELD_ERROR_CODE, false);
+                    as_string* v_code = as_string_new((char*)ERROR_CODE_FROZEN, false);
+                    as_string* k_msg = as_string_new((char*)FIELD_MESSAGE, false);
+                    as_string* v_msg = as_string_new((char*)MSG_FROZEN, false);
+                    if (k_code == NULL || v_code == NULL || k_msg == NULL || v_msg == NULL) {
+                        if (k_code) as_string_destroy(k_code);
+                        if (v_code) as_string_destroy(v_code);
+                        if (k_msg) as_string_destroy(k_msg);
+                        if (v_msg) as_string_destroy(v_msg);
+                        as_hashmap_destroy(err);
+                    } else {
+                        as_hashmap_set(err, (as_val*)k_code, (as_val*)v_code);
+                        as_hashmap_set(err, (as_val*)k_msg, (as_val*)v_msg);
+                        as_integer* idx_key = as_integer_new(idx);
+                        if (idx_key != NULL) {
+                            as_hashmap_set(errors, (as_val*)idx_key, (as_val*)err);
+                        } else {
+                            as_hashmap_destroy(err);
+                        }
+                    }
+                }
                 as_bytes_destroy(existing_spending_data);
                 continue;
             } else {
                 // Spent by different transaction
                 as_hashmap* err = as_hashmap_new(3);
-                as_hashmap_set(err,
-                    (as_val*)as_string_new((char*)FIELD_ERROR_CODE, false),
-                    (as_val*)as_string_new((char*)ERROR_CODE_SPENT, false));
-                as_hashmap_set(err,
-                    (as_val*)as_string_new((char*)FIELD_MESSAGE, false),
-                    (as_val*)as_string_new((char*)MSG_SPENT, false));
-                as_hashmap_set(err,
-                    (as_val*)as_string_new((char*)FIELD_SPENDING_DATA, false),
-                    (as_val*)utxo_spending_data_to_hex(existing_spending_data));
-                as_hashmap_set(errors, (as_val*)as_integer_new(idx), (as_val*)err);
+                if (err != NULL) {
+                    as_string* k_code = as_string_new((char*)FIELD_ERROR_CODE, false);
+                    as_string* v_code = as_string_new((char*)ERROR_CODE_SPENT, false);
+                    as_string* k_msg = as_string_new((char*)FIELD_MESSAGE, false);
+                    as_string* v_msg = as_string_new((char*)MSG_SPENT, false);
+                    if (k_code == NULL || v_code == NULL || k_msg == NULL || v_msg == NULL) {
+                        if (k_code) as_string_destroy(k_code);
+                        if (v_code) as_string_destroy(v_code);
+                        if (k_msg) as_string_destroy(k_msg);
+                        if (v_msg) as_string_destroy(v_msg);
+                        as_hashmap_destroy(err);
+                    } else {
+                        as_hashmap_set(err, (as_val*)k_code, (as_val*)v_code);
+                        as_hashmap_set(err, (as_val*)k_msg, (as_val*)v_msg);
+
+                        as_string* hexstr = utxo_spending_data_to_hex(existing_spending_data);
+                        if (hexstr != NULL) {
+                            as_string* k_sd = as_string_new((char*)FIELD_SPENDING_DATA, false);
+                            if (k_sd != NULL) {
+                                as_hashmap_set(err, (as_val*)k_sd, (as_val*)hexstr);
+                            } else {
+                                as_string_destroy(hexstr);
+                            }
+                        }
+
+                        as_integer* idx_key = as_integer_new(idx);
+                        if (idx_key != NULL) {
+                            as_hashmap_set(errors, (as_val*)idx_key, (as_val*)err);
+                        } else {
+                            as_hashmap_destroy(err);
+                        }
+                    }
+                }
                 as_bytes_destroy(existing_spending_data);
                 continue;
             }
@@ -660,6 +933,20 @@ teranode_spend_multi(as_rec* rec, as_list* args)
 
         // Create new UTXO with spending data
         as_bytes* new_utxo = utxo_create_with_spending_data(utxo_hash, spending_data);
+        if (new_utxo == NULL) {
+            as_hashmap* err = as_hashmap_new(2);
+            if (err != NULL) {
+                as_hashmap_set(err,
+                    (as_val*)as_string_new((char*)FIELD_ERROR_CODE, false),
+                    (as_val*)as_string_new((char*)ERROR_CODE_INVALID_PARAMETER, false));
+                as_hashmap_set(err,
+                    (as_val*)as_string_new((char*)FIELD_MESSAGE, false),
+                    (as_val*)as_string_new((char*)"Memory allocation failed", false));
+                as_hashmap_set(errors, (as_val*)as_integer_new(idx), (as_val*)err);
+            }
+            if (existing_spending_data) as_bytes_destroy(existing_spending_data);
+            continue;
+        }
         as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
 
         // Increment spent count
@@ -674,8 +961,12 @@ teranode_spend_multi(as_rec* rec, as_list* args)
     }
 
     // Mark utxos bin as dirty to persist changes
-    // Like Lua's "rec[BIN_UTXOS] = utxos", we need to re-set the bin after modification
-    as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
+    // Re-fetch utxos since as_rec_set calls may have invalidated it
+    utxos_val = as_rec_get(rec, BIN_UTXOS);
+    if (utxos_val != NULL && as_val_type(utxos_val) == AS_LIST) {
+        utxos = as_list_fromval(utxos_val);
+        as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
+    }
 
     // Call setDeleteAtHeight
     int64_t child_count = 0;
@@ -733,6 +1024,12 @@ teranode_unspend(as_rec* rec, as_list* args)
     int64_t current_block_height = get_list_int64(args, 2);
     int64_t block_height_retention = get_list_int64(args, 3);
 
+    // Validate required arguments
+    if (utxo_hash == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Missing utxo_hash");
+    }
+
     // Get utxos bin
     as_val* utxos_val = as_rec_get(rec, BIN_UTXOS);
     if (utxos_val == NULL || as_val_type(utxos_val) != AS_LIST) {
@@ -758,6 +1055,11 @@ teranode_unspend(as_rec* rec, as_list* args)
 
         // Create unspent UTXO
         as_bytes* new_utxo = utxo_create_with_spending_data(utxo_hash, NULL);
+        if (new_utxo == NULL) {
+            if (existing_spending_data) as_bytes_destroy(existing_spending_data);
+            return (as_val*)utxo_create_error_response(
+                ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+        }
         as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
 
         // Mark utxos bin as dirty to persist changes
@@ -780,6 +1082,10 @@ teranode_unspend(as_rec* rec, as_list* args)
 
     // Build response
     as_hashmap* response = (as_hashmap*)utxo_create_ok_response();
+    if (response == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
 
     if (signal != NULL && strlen(signal) > 0) {
         as_hashmap_set(response,
@@ -813,33 +1119,66 @@ teranode_set_mined(as_rec* rec, as_list* args)
     bool unset_mined = get_list_bool(args, 6);
 
     // Get or create lists for block tracking
-    // When creating new lists, we immediately call as_rec_set to add them to the record.
-    // This ensures the record knows about the new bin. After modifications, we call
-    // as_rec_set again with as_val_reserve to mark the bin as dirty for persistence.
+    // Track whether each list is new (created here) vs existing (from record)
+    // For new lists: set on record ONCE after modifications, without as_val_reserve
+    // For existing lists: use as_val_reserve when re-setting to mark dirty
     as_val* block_ids_val = as_rec_get(rec, BIN_BLOCK_IDS);
     as_list* block_ids = NULL;
+    bool block_ids_is_new = false;
     if (block_ids_val == NULL || as_val_type(block_ids_val) == AS_NIL) {
         block_ids = (as_list*)as_arraylist_new(10, 10);
-        as_rec_set(rec, BIN_BLOCK_IDS, (as_val*)block_ids);
+        if (block_ids == NULL) {
+            return (as_val*)utxo_create_error_response(
+                ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+        }
+        block_ids_is_new = true;
     } else {
+        if (as_val_type(block_ids_val) != AS_LIST) {
+            return (as_val*)utxo_create_error_response(
+                ERROR_CODE_INVALID_PARAMETER, "Invalid block_ids bin type");
+        }
         block_ids = as_list_fromval(block_ids_val);
     }
 
     as_val* block_heights_val = as_rec_get(rec, BIN_BLOCK_HEIGHTS);
     as_list* block_heights = NULL;
+    bool block_heights_is_new = false;
     if (block_heights_val == NULL || as_val_type(block_heights_val) == AS_NIL) {
         block_heights = (as_list*)as_arraylist_new(10, 10);
-        as_rec_set(rec, BIN_BLOCK_HEIGHTS, (as_val*)block_heights);
+        if (block_heights == NULL) {
+            if (block_ids_is_new) as_list_destroy(block_ids);
+            return (as_val*)utxo_create_error_response(
+                ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+        }
+        block_heights_is_new = true;
     } else {
+        if (as_val_type(block_heights_val) != AS_LIST) {
+            if (block_ids_is_new) as_list_destroy(block_ids);
+            return (as_val*)utxo_create_error_response(
+                ERROR_CODE_INVALID_PARAMETER, "Invalid block_heights bin type");
+        }
         block_heights = as_list_fromval(block_heights_val);
     }
 
     as_val* subtree_idxs_val = as_rec_get(rec, BIN_SUBTREE_IDXS);
     as_list* subtree_idxs = NULL;
+    bool subtree_idxs_is_new = false;
     if (subtree_idxs_val == NULL || as_val_type(subtree_idxs_val) == AS_NIL) {
         subtree_idxs = (as_list*)as_arraylist_new(10, 10);
-        as_rec_set(rec, BIN_SUBTREE_IDXS, (as_val*)subtree_idxs);
+        if (subtree_idxs == NULL) {
+            if (block_ids_is_new) as_list_destroy(block_ids);
+            if (block_heights_is_new) as_list_destroy(block_heights);
+            return (as_val*)utxo_create_error_response(
+                ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+        }
+        subtree_idxs_is_new = true;
     } else {
+        if (as_val_type(subtree_idxs_val) != AS_LIST) {
+            if (block_ids_is_new) as_list_destroy(block_ids);
+            if (block_heights_is_new) as_list_destroy(block_heights);
+            return (as_val*)utxo_create_error_response(
+                ERROR_CODE_INVALID_PARAMETER, "Invalid subtree_idxs bin type");
+        }
         subtree_idxs = as_list_fromval(subtree_idxs_val);
     }
 
@@ -849,7 +1188,9 @@ teranode_set_mined(as_rec* rec, as_list* args)
         int32_t found_idx = -1;
 
         for (uint32_t i = 0; i < block_count; i++) {
-            as_integer* existing_int = as_integer_fromval(as_list_get(block_ids, i));
+            as_val* val = as_list_get(block_ids, i);
+            if (val == NULL || as_val_type(val) != AS_INTEGER) continue;
+            as_integer* existing_int = as_integer_fromval(val);
             if (existing_int && as_integer_get(existing_int) == block_id) {
                 found_idx = (int32_t)i;
                 break;
@@ -860,12 +1201,24 @@ teranode_set_mined(as_rec* rec, as_list* args)
             as_list_remove(block_ids, (uint32_t)found_idx);
             as_list_remove(block_heights, (uint32_t)found_idx);
             as_list_remove(subtree_idxs, (uint32_t)found_idx);
+        }
 
-            // Set bins on record to persist changes
-            // For existing lists, we need as_val_reserve to prevent double-free
-            // since the record already owns the list
+        // Set bins on record to persist changes
+        // For new lists: don't use as_val_reserve (record takes ownership)
+        // For existing lists: use as_val_reserve to mark dirty without double-free
+        if (block_ids_is_new) {
+            as_rec_set(rec, BIN_BLOCK_IDS, (as_val*)block_ids);
+        } else if (found_idx >= 0) {
             as_rec_set(rec, BIN_BLOCK_IDS, as_val_reserve((as_val*)block_ids));
+        }
+        if (block_heights_is_new) {
+            as_rec_set(rec, BIN_BLOCK_HEIGHTS, (as_val*)block_heights);
+        } else if (found_idx >= 0) {
             as_rec_set(rec, BIN_BLOCK_HEIGHTS, as_val_reserve((as_val*)block_heights));
+        }
+        if (subtree_idxs_is_new) {
+            as_rec_set(rec, BIN_SUBTREE_IDXS, (as_val*)subtree_idxs);
+        } else if (found_idx >= 0) {
             as_rec_set(rec, BIN_SUBTREE_IDXS, as_val_reserve((as_val*)subtree_idxs));
         }
     } else {
@@ -874,7 +1227,9 @@ teranode_set_mined(as_rec* rec, as_list* args)
         bool block_exists = false;
 
         for (uint32_t i = 0; i < block_count; i++) {
-            as_integer* existing_int = as_integer_fromval(as_list_get(block_ids, i));
+            as_val* val = as_list_get(block_ids, i);
+            if (val == NULL || as_val_type(val) != AS_INTEGER) continue;
+            as_integer* existing_int = as_integer_fromval(val);
             if (existing_int && as_integer_get(existing_int) == block_id) {
                 block_exists = true;
                 break;
@@ -885,18 +1240,35 @@ teranode_set_mined(as_rec* rec, as_list* args)
             as_list_append(block_ids, (as_val*)as_integer_new(block_id));
             as_list_append(block_heights, (as_val*)as_integer_new(block_height));
             as_list_append(subtree_idxs, (as_val*)as_integer_new(subtree_idx));
+        }
 
-            // Set bins on record to persist changes
-            // After modification, call as_rec_set with as_val_reserve to mark as dirty
+        // Set bins on record to persist changes
+        // For new lists: don't use as_val_reserve (record takes ownership)
+        // For existing lists: use as_val_reserve to mark dirty without double-free
+        if (block_ids_is_new) {
+            as_rec_set(rec, BIN_BLOCK_IDS, (as_val*)block_ids);
+        } else if (!block_exists) {
             as_rec_set(rec, BIN_BLOCK_IDS, as_val_reserve((as_val*)block_ids));
+        }
+        if (block_heights_is_new) {
+            as_rec_set(rec, BIN_BLOCK_HEIGHTS, (as_val*)block_heights);
+        } else if (!block_exists) {
             as_rec_set(rec, BIN_BLOCK_HEIGHTS, as_val_reserve((as_val*)block_heights));
+        }
+        if (subtree_idxs_is_new) {
+            as_rec_set(rec, BIN_SUBTREE_IDXS, (as_val*)subtree_idxs);
+        } else if (!block_exists) {
             as_rec_set(rec, BIN_SUBTREE_IDXS, as_val_reserve((as_val*)subtree_idxs));
         }
     }
 
     // Handle unminedSince based on block count
-    // Use block_ids directly since it now reflects the current state
-    uint32_t has_blocks = block_ids ? as_list_size(block_ids) : 0;
+    // Re-fetch block_ids since as_rec_set may have invalidated the pointer
+    as_val* current_block_ids_val = as_rec_get(rec, BIN_BLOCK_IDS);
+    uint32_t has_blocks = 0;
+    if (current_block_ids_val != NULL && as_val_type(current_block_ids_val) == AS_LIST) {
+        has_blocks = as_list_size(as_list_fromval(current_block_ids_val));
+    }
     if (has_blocks > 0) {
         if (on_longest_chain) {
             as_rec_set(rec, BIN_UNMINED_SINCE, (as_val*)&as_nil);
@@ -923,13 +1295,19 @@ teranode_set_mined(as_rec* rec, as_list* args)
 
     // Re-fetch block_ids from record since as_rec_set calls above may have invalidated the pointer
     as_val* response_block_ids_val = as_rec_get(rec, BIN_BLOCK_IDS);
-    as_list* response_block_ids = as_list_fromval(response_block_ids_val);
 
     // Build response
     as_hashmap* response = (as_hashmap*)utxo_create_ok_response();
-    as_hashmap_set(response,
-        (as_val*)as_string_new((char*)FIELD_BLOCK_IDS, false),
-        as_val_reserve((as_val*)response_block_ids));
+    if (response == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
+
+    if (response_block_ids_val != NULL && as_val_type(response_block_ids_val) == AS_LIST) {
+        as_hashmap_set(response,
+            (as_val*)as_string_new((char*)FIELD_BLOCK_IDS, false),
+            as_val_reserve(response_block_ids_val));
+    }
 
     if (signal != NULL && strlen(signal) > 0) {
         as_hashmap_set(response,
@@ -956,6 +1334,12 @@ teranode_freeze(as_rec* rec, as_list* args)
     // Extract arguments
     int64_t offset = get_list_int64(args, 0);
     as_bytes* utxo_hash = get_list_bytes(args, 1);
+
+    // Validate required arguments
+    if (utxo_hash == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Missing utxo_hash");
+    }
 
     // Get utxos bin
     as_val* utxos_val = as_rec_get(rec, BIN_UTXOS);
@@ -999,10 +1383,19 @@ teranode_freeze(as_rec* rec, as_list* args)
     memset(frozen_buf, FROZEN_BYTE, SPENDING_DATA_SIZE);
 
     as_bytes* frozen_data = as_bytes_new(SPENDING_DATA_SIZE);
+    if (frozen_data == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
     as_bytes_set(frozen_data, 0, frozen_buf, SPENDING_DATA_SIZE);
 
     // Create new UTXO with frozen data
     as_bytes* new_utxo = utxo_create_with_spending_data(utxo_hash, frozen_data);
+    if (new_utxo == NULL) {
+        as_bytes_destroy(frozen_data);
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
     as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
 
     // Mark utxos bin as dirty to persist changes
@@ -1010,7 +1403,12 @@ teranode_freeze(as_rec* rec, as_list* args)
 
     as_bytes_destroy(frozen_data);
 
-    return (as_val*)utxo_create_ok_response();
+    as_map* ok_response = utxo_create_ok_response();
+    if (ok_response == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
+    return (as_val*)ok_response;
 }
 
 as_val*
@@ -1024,6 +1422,12 @@ teranode_unfreeze(as_rec* rec, as_list* args)
     // Extract arguments
     int64_t offset = get_list_int64(args, 0);
     as_bytes* utxo_hash = get_list_bytes(args, 1);
+
+    // Validate required arguments
+    if (utxo_hash == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Missing utxo_hash");
+    }
 
     // Get utxos bin
     as_val* utxos_val = as_rec_get(rec, BIN_UTXOS);
@@ -1050,6 +1454,11 @@ teranode_unfreeze(as_rec* rec, as_list* args)
 
     // Create unspent UTXO (remove spending data)
     as_bytes* new_utxo = utxo_create_with_spending_data(utxo_hash, NULL);
+    if (new_utxo == NULL) {
+        as_bytes_destroy(existing_spending_data);
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
     as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
 
     // Mark utxos bin as dirty to persist changes
@@ -1057,7 +1466,12 @@ teranode_unfreeze(as_rec* rec, as_list* args)
 
     as_bytes_destroy(existing_spending_data);
 
-    return (as_val*)utxo_create_ok_response();
+    as_map* ok_response = utxo_create_ok_response();
+    if (ok_response == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
+    return (as_val*)ok_response;
 }
 
 as_val*
@@ -1074,6 +1488,12 @@ teranode_reassign(as_rec* rec, as_list* args)
     as_bytes* new_utxo_hash = get_list_bytes(args, 2);
     int64_t block_height = get_list_int64(args, 3);
     int64_t spendable_after = get_list_int64(args, 4);
+
+    // Validate required arguments
+    if (utxo_hash == NULL || new_utxo_hash == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Missing utxo_hash or new_utxo_hash");
+    }
 
     // Get utxos bin
     as_val* utxos_val = as_rec_get(rec, BIN_UTXOS);
@@ -1100,35 +1520,70 @@ teranode_reassign(as_rec* rec, as_list* args)
 
     // Create new UTXO with new hash (unspent)
     as_bytes* new_utxo = utxo_create_with_spending_data(new_utxo_hash, NULL);
+    if (new_utxo == NULL) {
+        as_bytes_destroy(existing_spending_data);
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
     as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
 
     // Mark utxos bin as dirty to persist changes
     as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
 
     // Initialize reassignments list if needed
-    // When creating new lists/maps, we immediately call as_rec_set to add them to the record
-    // After that, modifications are in-place and we never call as_rec_set again
+    // Track whether we created the list (vs retrieved from record) for proper ref counting
     as_val* reassignments_val = as_rec_get(rec, BIN_REASSIGNMENTS);
     as_list* reassignments = NULL;
+    bool reassignments_is_new = false;
     if (reassignments_val == NULL || as_val_type(reassignments_val) == AS_NIL) {
         reassignments = (as_list*)as_arraylist_new(10, 10);
-        as_rec_set(rec, BIN_REASSIGNMENTS, (as_val*)reassignments);
+        if (reassignments == NULL) {
+            as_bytes_destroy(existing_spending_data);
+            return (as_val*)utxo_create_error_response(
+                ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+        }
+        reassignments_is_new = true;
     } else {
+        if (as_val_type(reassignments_val) != AS_LIST) {
+            as_bytes_destroy(existing_spending_data);
+            return (as_val*)utxo_create_error_response(
+                ERROR_CODE_INVALID_PARAMETER, "Invalid reassignments list");
+        }
         reassignments = as_list_fromval(reassignments_val);
     }
 
     // Initialize utxoSpendableIn map if needed
     as_val* spendable_in_val = as_rec_get(rec, BIN_UTXO_SPENDABLE_IN);
     as_map* spendable_in = NULL;
+    bool spendable_in_is_new = false;
     if (spendable_in_val == NULL || as_val_type(spendable_in_val) == AS_NIL) {
         spendable_in = (as_map*)as_hashmap_new(10);
-        as_rec_set(rec, BIN_UTXO_SPENDABLE_IN, (as_val*)spendable_in);
+        if (spendable_in == NULL) {
+            if (reassignments_is_new) as_list_destroy(reassignments);
+            as_bytes_destroy(existing_spending_data);
+            return (as_val*)utxo_create_error_response(
+                ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+        }
+        spendable_in_is_new = true;
     } else {
+        if (as_val_type(spendable_in_val) != AS_MAP) {
+            if (reassignments_is_new) as_list_destroy(reassignments);
+            as_bytes_destroy(existing_spending_data);
+            return (as_val*)utxo_create_error_response(
+                ERROR_CODE_INVALID_PARAMETER, "Invalid spendable_in map");
+        }
         spendable_in = as_map_fromval(spendable_in_val);
     }
 
     // Record reassignment details
     as_hashmap* reassignment_entry = as_hashmap_new(4);
+    if (reassignment_entry == NULL) {
+        if (reassignments_is_new) as_list_destroy(reassignments);
+        if (spendable_in_is_new) as_map_destroy(spendable_in);
+        as_bytes_destroy(existing_spending_data);
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
     as_hashmap_set(reassignment_entry,
         (as_val*)as_string_new((char*)"offset", false),
         (as_val*)as_integer_new(offset));
@@ -1143,14 +1598,25 @@ teranode_reassign(as_rec* rec, as_list* args)
         (as_val*)as_integer_new(block_height));
 
     as_list_append(reassignments, (as_val*)reassignment_entry);
-    as_rec_set(rec, BIN_REASSIGNMENTS, as_val_reserve((as_val*)reassignments));
-
+    // For new lists, don't use as_val_reserve (record takes ownership)
+    // For existing lists, use as_val_reserve to mark dirty without double-free
+    if (reassignments_is_new) {
+        as_rec_set(rec, BIN_REASSIGNMENTS, (as_val*)reassignments);
+    } else {
+        as_rec_set(rec, BIN_REASSIGNMENTS, as_val_reserve((as_val*)reassignments));
+    }
 
     // Set spendable height
     as_map_set(spendable_in,
         (as_val*)as_integer_new(offset),
         (as_val*)as_integer_new(block_height + spendable_after));
-    as_rec_set(rec, BIN_UTXO_SPENDABLE_IN, as_val_reserve((as_val*)spendable_in));
+    // For new maps, don't use as_val_reserve (record takes ownership)
+    // For existing maps, use as_val_reserve to mark dirty without double-free
+    if (spendable_in_is_new) {
+        as_rec_set(rec, BIN_UTXO_SPENDABLE_IN, (as_val*)spendable_in);
+    } else {
+        as_rec_set(rec, BIN_UTXO_SPENDABLE_IN, as_val_reserve((as_val*)spendable_in));
+    }
 
 
     // Increment recordUtxos to prevent deletion
@@ -1163,7 +1629,12 @@ teranode_reassign(as_rec* rec, as_list* args)
 
     as_bytes_destroy(existing_spending_data);
 
-    return (as_val*)utxo_create_ok_response();
+    as_map* ok_response = utxo_create_ok_response();
+    if (ok_response == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
+    return (as_val*)ok_response;
 }
 
 as_val*
@@ -1188,6 +1659,10 @@ teranode_set_conflicting(as_rec* rec, as_list* args)
 
     // Build response
     as_hashmap* response = (as_hashmap*)utxo_create_ok_response();
+    if (response == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
 
     if (signal != NULL && strlen(signal) > 0) {
         as_hashmap_set(response,
@@ -1222,6 +1697,10 @@ teranode_preserve_until(as_rec* rec, as_list* args)
 
     // Build response
     as_hashmap* response = (as_hashmap*)utxo_create_ok_response();
+    if (response == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
 
     // Check if we need to signal external file handling
     as_val* external_val = as_rec_get(rec, BIN_EXTERNAL);
@@ -1265,6 +1744,10 @@ teranode_set_locked(as_rec* rec, as_list* args)
 
     // Build response
     as_hashmap* response = (as_hashmap*)utxo_create_ok_response();
+    if (response == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
     as_hashmap_set(response,
         (as_val*)as_string_new((char*)FIELD_CHILD_COUNT, false),
         (as_val*)as_integer_new(total_extra_recs));
@@ -1287,7 +1770,7 @@ teranode_increment_spent_extra_recs(as_rec* rec, as_list* args)
 
     // Check totalExtraRecs exists
     as_val* total_extra_recs_val = as_rec_get(rec, BIN_TOTAL_EXTRA_RECS);
-    if (total_extra_recs_val == NULL || as_val_type(total_extra_recs_val) == AS_NIL) {
+    if (total_extra_recs_val == NULL || as_val_type(total_extra_recs_val) != AS_INTEGER) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, ERR_TOTAL_EXTRA_RECS);
     }
     int64_t total_extra_recs = as_integer_get(as_integer_fromval(total_extra_recs_val));
@@ -1320,6 +1803,10 @@ teranode_increment_spent_extra_recs(as_rec* rec, as_list* args)
 
     // Build response
     as_hashmap* response = (as_hashmap*)utxo_create_ok_response();
+    if (response == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
 
     if (signal != NULL && strlen(signal) > 0) {
         as_hashmap_set(response,
@@ -1345,6 +1832,10 @@ teranode_set_delete_at_height(as_rec* rec, as_list* args)
     const char* signal = utxo_set_delete_at_height_impl(rec, current_block_height, block_height_retention, &child_count);
 
     as_hashmap* response = (as_hashmap*)utxo_create_ok_response();
+    if (response == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
 
     if (signal != NULL && strlen(signal) > 0) {
         as_hashmap_set(response,
