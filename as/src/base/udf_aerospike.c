@@ -463,8 +463,8 @@ execute_set_bin(udf_record* urecord, const char* name, const as_val* val)
 	}
 
 	if (eb != NULL && as_masking_apply(rd->mask_ctx, NULL, eb)) {
-		return as_masking_log_violation(urecord->tr, "udf",
-				"would overwrite masked bin", name, strlen(name));
+		return as_masking_log_violation(urecord->tr, "udf apply",
+				"masking: blocked operation on masked bin", name, strlen(name));
 	}
 
 	as_bin* b = as_bin_get_or_create(rd, name);

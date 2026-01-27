@@ -613,8 +613,8 @@ drop_master(as_transaction* tr, as_index_ref* r_ref, rw_request* rw)
 				if (as_bin_is_live(b) && as_masking_apply(rd.mask_ctx, NULL, b)) {
 					as_storage_record_close(&rd);
 					as_record_done(r_ref, ns);
-					tr->result_code = as_masking_log_violation(tr, "drop record",
-							"would delete masked bin", b->name, strlen(b->name));
+					tr->result_code = as_masking_log_violation(tr, "delete",
+							"masking: blocked deleting masked bin", b->name, strlen(b->name));
 					return TRANS_DONE;
 				}
 			}

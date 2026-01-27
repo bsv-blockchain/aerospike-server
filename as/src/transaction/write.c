@@ -1203,7 +1203,7 @@ write_master_apply(as_transaction* tr, as_index_ref* r_ref, as_storage_rd* rd,
 		for (uint16_t i = 0; i < rd->n_bins; i++) {
 			as_bin* b = &rd->bins[i];
 			if (as_bin_is_live(b) && as_masking_apply(rd->mask_ctx, NULL, b)) {
-				return as_masking_log_violation(tr, "replace record", "would delete masked bin", b->name, strlen(b->name));
+				return as_masking_log_violation(tr, "replace", "masking: blocked replacing masked bin", b->name, strlen(b->name));
 			}
 		}
 	}
@@ -1452,7 +1452,7 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 			// AS_PARTICLE_TYPE_NULL means delete the bin.
 			if (op->particle_type == AS_PARTICLE_TYPE_NULL) {
 				if (as_masking_apply(rd->mask_ctx, NULL, as_bin_get_w_len(rd, op->name, op->name_sz))) {
-				  return as_masking_log_violation(tr, "bin delete", "would delete masked bin", op->name, op->name_sz);
+				  return as_masking_log_violation(tr, "delete", "masking: blocked deleting masked bin", op->name, op->name_sz);
 				}
 				else {
 					delete_bin(rd, op, msg_lut);
@@ -1463,7 +1463,7 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 				as_bin* b = as_bin_get_or_create_w_len(rd, op->name, op->name_sz);
 
 				if (as_masking_apply(rd->mask_ctx, NULL, b)) {
-					return as_masking_log_violation(tr, "bin write", "would overwrite masked bin", op->name, op->name_sz);
+					return as_masking_log_violation(tr, "write", "masking: blocked writing masked bin", op->name, op->name_sz);
 				}
 
 				write_resolved_bin(rd, op, msg_lut, b);
@@ -1489,7 +1489,7 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 			as_bin* b = as_bin_get_or_create_w_len(rd, op->name, op->name_sz);
 
 			if (as_masking_apply(rd->mask_ctx, NULL, b)) {
-				return as_masking_log_violation(tr, "bin modify","would overwrite masked bin", op->name, op->name_sz);
+				return as_masking_log_violation(tr, "modify","masking: blocked modifying masked bin", op->name, op->name_sz);
 			}
 
 			if ((result = as_bin_particle_modify_from_client(b, particles_llb, op)) < 0) {
@@ -1514,7 +1514,7 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 
 					if (as_bin_is_live(b) && as_masking_apply(rd->mask_ctx,
 							NULL, b)) {
-						return as_masking_log_violation(tr, "delete all", "would delete masked bin", b->name, strlen(b->name));
+						return as_masking_log_violation(tr, "delete", "masking: blocked delete_all on masked bin", b->name, strlen(b->name));
 					}
 				}
 			}
@@ -1694,7 +1694,7 @@ write_master_bin_ops_loop(as_transaction* tr, as_storage_rd* rd,
 			as_bin* b = as_bin_get_or_create_w_len(rd, op->name, op->name_sz);
 
 			if (as_masking_apply(rd->mask_ctx, NULL, b)) {
-				return as_masking_log_violation(tr, "exp write", "would overwrite masked bin", op->name, op->name_sz);
+				return as_masking_log_violation(tr, "write", "masking: blocked writing expression value to masked bin", op->name, op->name_sz);
 			}
 
 			bool created_bin = as_bin_is_unused(b);
