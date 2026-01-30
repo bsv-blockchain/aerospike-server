@@ -26,6 +26,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "nlohmann/json.hpp"
 
 extern "C" {
@@ -34,10 +36,23 @@ extern "C" {
 
 
 //==========================================================
-// Public API.
+// Typedefs & constants.
 //
 
+// Unit suffix type enumeration - indicates how to parse unit suffixes.
+enum class UnitType {
+	NONE,
+	TIME_DURATION,  // s/m/h/d suffixes (seconds, minutes, hours, days)
+	SIZE_U32,       // k/m/g with optional 'i' for IEC (32-bit max)
+	SIZE_U64        // k/m/g/t/p with optional 'i' for IEC (64-bit max)
+};
+
 using json = nlohmann::json;
+
+
+//==========================================================
+// Public API.
+//
 
 namespace cfg_handlers {
 

@@ -30,6 +30,9 @@ int cf_str_atoi(const char *s, int *value);
 int cf_str_atoi_u32(const char *s, uint32_t *value);
 int cf_str_atoi_u64(const char *s, uint64_t *value);
 int cf_str_atoi_seconds(const char *s, uint32_t *value);
+int cf_str_atoi_iec(const char *s, uint64_t *value);
+int cf_str_atoi_si(const char *s, uint64_t *value);
+int cf_str_atoi_size(const char *s, uint64_t *value);
 
 int cf_strtoul_x64(const char *s, uint64_t *value);
 int cf_strtoul_u32(const char *s, uint32_t *value);

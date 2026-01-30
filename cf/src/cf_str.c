@@ -32,6 +32,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 // return 0 on success, -1 on fail
@@ -109,6 +110,21 @@ int cf_str_atoi_u32(const char *s, unsigned int *value)
 	return(0);
 }
 
+// cf_str_atoi_size() supports both SI and IEC suffixes.
+// SI are powers of 10, IEC powers of 2.
+int cf_str_atoi_size(const char *s, uint64_t *value)
+{
+	size_t length = strlen(s);
+	// If the string ends with 'i', use IEC suffixes.
+	// IEC suffixes have the form "XKi", "XMi", "XGi", "XTi", "XPi"
+	// so they should be at least 3 characters long.
+	if (length > 2 && (s[length - 1] == 'i' || s[length - 1] == 'I')) {
+		return cf_str_atoi_iec(s, value);
+	}
+	// Otherwise, use SI suffixes.
+	return cf_str_atoi_si(s, value);
+}
+
 int cf_str_atoi_u64(const char *s, uint64_t *value)
 {
 	uint64_t i = 0;
@@ -142,6 +158,102 @@ int cf_str_atoi_u64(const char *s, uint64_t *value)
 		case 'P':
 		case 'p':
 			i *= (1024L * 1024L * 1024L * 1024L * 1024L);
+			s++;
+			break;
+		default:
+			break;
+	}
+	if (*s != 0) {
+		return(-1); // reached a non-num before EOL
+	}
+	*value = i;
+	return(0);
+}
+
+int cf_str_atoi_iec(const char *s, uint64_t *value)
+{
+	uint64_t i = 0;
+
+	while (*s >= '0' && *s <= '9') {
+		i *= 10;
+		i += *s - '0';
+		s++;
+	}
+	switch (*s) {
+		case 'k':
+		case 'K':
+			i *= 1024L;
+			s++;
+			break;
+		case 'M':
+		case 'm':
+			i *= (1024L * 1024L);
+			s++;
+			break;
+		case 'G':
+		case 'g':
+			i *= (1024L * 1024L * 1024L);
+			s++;
+			break;
+		case 'T':
+		case 't':
+			i *= (1024L * 1024L * 1024L * 1024L);
+			s++;
+			break;
+		case 'P':
+		case 'p':
+			i *= (1024L * 1024L * 1024L * 1024L * 1024L);
+			s++;
+			break;
+		default:
+			break;
+	}
+	// Tolerate a missing 'i' suffix so that parsing plain numbers is supported.
+	if (*s == 'i' || *s == 'I') {
+		s++; // skip the 'i'
+	}
+
+	if (*s != 0) {
+		return(-1); // reached a non-num before EOL
+	}
+
+	*value = i;
+	return(0);
+}
+
+int cf_str_atoi_si(const char *s, uint64_t *value)
+{
+	uint64_t i = 0;
+
+	while (*s >= '0' && *s <= '9') {
+		i *= 10;
+		i += *s - '0';
+		s++;
+	}
+	switch (*s) {
+		case 'k':
+		case 'K':
+			i *= 1000L;
+			s++;
+			break;
+		case 'M':
+		case 'm':
+			i *= (1000L * 1000L);
+			s++;
+			break;
+		case 'G':
+		case 'g':
+			i *= (1000L * 1000L * 1000L);
+			s++;
+			break;
+		case 'T':
+		case 't':
+			i *= (1000L * 1000L * 1000L * 1000L);
+			s++;
+			break;
+		case 'P':
+		case 'p':
+			i *= (1000L * 1000L * 1000L * 1000L * 1000L);
 			s++;
 			break;
 		default:

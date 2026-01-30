@@ -209,6 +209,14 @@ void cf_log_get_all_levels(uint32_t id, cf_dyn_buf* db);
 bool cf_log_check_level(cf_log_context context, cf_log_level level);
 void cf_log_rotate(void);
 
+// Test accessor functions for verifying logging configuration.
+uint32_t cf_log_get_n_sinks(void);
+const char* cf_log_get_sink_path(uint32_t id);
+const char* cf_log_get_sink_tag(uint32_t id);
+int cf_log_get_sink_facility(uint32_t id);
+cf_log_level cf_log_get_sink_level(uint32_t id, cf_log_context context);
+void cf_log_reset_sinks(void);
+
 
 //==========================================================
 // Public API - write to log.

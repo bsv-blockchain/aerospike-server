@@ -572,6 +572,85 @@ cf_log_rotate(void)
 	}
 }
 
+//==========================================================
+// Test accessor functions - for verifying logging configuration.
+//
+
+uint32_t
+cf_log_get_n_sinks(void)
+{
+	return g_n_sinks;
+}
+
+const char*
+cf_log_get_sink_path(uint32_t id)
+{
+	if (id >= g_n_sinks) {
+		return NULL;
+	}
+
+	return g_sinks[id].path;
+}
+
+const char*
+cf_log_get_sink_tag(uint32_t id)
+{
+	if (id >= g_n_sinks) {
+		return NULL;
+	}
+
+	return g_sinks[id].tag;
+}
+
+int
+cf_log_get_sink_facility(uint32_t id)
+{
+	if (id >= g_n_sinks) {
+		return -1;
+	}
+
+	return g_sinks[id].facility;
+}
+
+cf_log_level
+cf_log_get_sink_level(uint32_t id, cf_log_context context)
+{
+	if (id >= g_n_sinks || context >= CF_LOG_N_CONTEXTS) {
+		return CF_CRITICAL;
+	}
+
+	return g_sinks[id].levels[context];
+}
+
+void
+cf_log_reset_sinks(void)
+{
+	// Reset sinks for testing - frees allocated memory and resets count.
+	for (uint32_t i = 0; i < g_n_sinks; i++) {
+		cf_log_sink* sink = &g_sinks[i];
+
+		if (sink->path != NULL) {
+			cf_free((void*)sink->path);
+			sink->path = NULL;
+		}
+
+		if (sink->tag != NULL) {
+			cf_free((void*)sink->tag);
+			sink->tag = NULL;
+		}
+
+		sink->fd = -1;
+		sink->facility = -1;
+
+		for (cf_log_context ctx = 0; ctx < CF_LOG_N_CONTEXTS; ctx++) {
+			sink->levels[ctx] = CF_CRITICAL;
+		}
+	}
+
+	g_n_sinks = 0;
+	g_sinks_activated = false;
+}
+
 
 //==========================================================
 // Public API - write to log.

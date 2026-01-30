@@ -26,6 +26,7 @@
 
 #include "base/cfg_tree_handlers.hpp"
 
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
@@ -73,38 +74,70 @@ namespace cfg_handlers
 	// Tag types to disambiguate constructors
 	struct EnterpriseOnly {};
 	struct Deprecated { std::string msg; };
-	
+
 	struct FieldDescriptor {
-		std::string json_path;      // JSON pointer path like "/service/batch-index-threads"
-		size_t offset;              // offsetof(target_struct, field_name)
-		FieldHandler handler;       // optional custom handler
+		std::string json_path;  // JSON pointer path like "/service/batch-index-threads"
+		size_t offset;          // offsetof(target_struct, field_name)
+		FieldHandler handler;   // optional custom handler
 		bool enterprise_only;
 		std::string deprecation_warning;
-		
-		// Default constructor
-		FieldDescriptor(const std::string& path, size_t off, FieldHandler h)
-			: json_path(path), offset(off), 
-			handler(h), enterprise_only(false),
-			deprecation_warning("") {}
+		UnitType unit_type;  // Unit type for this field (NONE if not applicable)
 
-		// Enterprise-only constructor
-		FieldDescriptor(const std::string& path, size_t off, FieldHandler h, EnterpriseOnly)
-			: json_path(path), offset(off), 
-			handler(h), enterprise_only(true),
-			deprecation_warning("") {}
-		
-		// Deprecated constructor
-		FieldDescriptor(const std::string& path, size_t off, FieldHandler h, Deprecated depr)
-			: json_path(path), offset(off), 
+		// Basic constructor (no units)
+		FieldDescriptor(const std::string& path, size_t off, FieldHandler h)
+			: json_path(path), offset(off),
 			handler(h), enterprise_only(false),
-			deprecation_warning(std::move(depr.msg)) {}
+			deprecation_warning(""), unit_type(UnitType::NONE) {}
+
+		// Constructor with unit type
+		FieldDescriptor(const std::string& path, size_t off, FieldHandler h,
+				UnitType unit)
+			: json_path(path), offset(off),
+			handler(h), enterprise_only(false),
+			deprecation_warning(""), unit_type(unit) {}
+
+		// Enterprise-only constructor (no units)
+		FieldDescriptor(const std::string& path, size_t off, FieldHandler h,
+				EnterpriseOnly)
+			: json_path(path), offset(off),
+			handler(h), enterprise_only(true),
+			deprecation_warning(""), unit_type(UnitType::NONE) {}
+
+		// Enterprise-only with unit type
+		FieldDescriptor(const std::string& path, size_t off, FieldHandler h,
+				EnterpriseOnly, UnitType unit)
+			: json_path(path), offset(off),
+			handler(h), enterprise_only(true),
+			deprecation_warning(""), unit_type(unit) {}
+
+		// Deprecated constructor (no units)
+		FieldDescriptor(const std::string& path, size_t off, FieldHandler h,
+				Deprecated depr)
+			: json_path(path), offset(off),
+			handler(h), enterprise_only(false),
+			deprecation_warning(std::move(depr.msg)), unit_type(UnitType::NONE) {}
+
+		// Deprecated with unit type
+		FieldDescriptor(const std::string& path, size_t off, FieldHandler h,
+				Deprecated depr, UnitType unit)
+			: json_path(path), offset(off),
+			handler(h), enterprise_only(false),
+			deprecation_warning(std::move(depr.msg)), unit_type(unit) {}
 	};
 
 	// Edition detection
 	static bool is_community_edition();
 
+	// Helper functions for generic field application
+	static bool get_json_value(const std::string& path,
+			const nlohmann::json& source,
+			nlohmann::json& result);
+
 	// Handler forward declarations
 	static void apply_field(void* target, const nlohmann::json& source, const FieldDescriptor& desc);
+	static bool try_expand_unit_value(const FieldDescriptor& desc,
+			const nlohmann::json& in,
+			uint64_t& out);
 
 	// Type-specific field appliers
 	static void apply_uint16_field(void* target, const FieldDescriptor& desc, const nlohmann::json& value);
@@ -122,6 +155,7 @@ namespace cfg_handlers
 	static void handle_feature_key_file(void* target, const FieldDescriptor& desc, const nlohmann::json& value);
 	static void handle_feature_key_files(void* target, const FieldDescriptor& desc, const nlohmann::json& value);
 	static void handle_group(void* target, const FieldDescriptor& desc, const nlohmann::json& value);
+	static void handle_info_max_ms(void* target, const FieldDescriptor& desc, const nlohmann::json& value);
 	static void handle_log_local_time(void* target, const FieldDescriptor& desc, const nlohmann::json& value);
 	static void handle_log_milliseconds(void* target, const FieldDescriptor& desc, const nlohmann::json& value);
 	static void handle_node_id(void* target, const FieldDescriptor& desc, const nlohmann::json& value);
@@ -131,7 +165,6 @@ namespace cfg_handlers
 	static void handle_secret_uds_path(void* target, const FieldDescriptor& desc, const nlohmann::json& value);
 	static void handle_tls_refresh_period(void* target, const FieldDescriptor& desc, const nlohmann::json& value);
 	static void handle_user(void* target, const FieldDescriptor& desc, const nlohmann::json& value);
-
 
 	// mod-lua field handlers
 	static void handle_mod_lua(void* target, const FieldDescriptor& desc, const nlohmann::json& value);
@@ -214,13 +247,14 @@ namespace cfg_handlers
 	static void handle_logging_syslog_tag(void* target, const FieldDescriptor& desc, const nlohmann::json& value);
 	static void handle_logging_context_level(void* target, const FieldDescriptor& desc, const nlohmann::json& value);
 
-	// set field handlers
-	static void handle_set_name(void* set, const FieldDescriptor& desc, const nlohmann::json& value);
-
-	// Helper functions that need to be accessible from cfg_tree.cc
-	static void apply_xdr_dc(int index, const nlohmann::json& dc_json, as_config* config);
-	static void apply_xdr_dc_namespace(int index, const nlohmann::json& dc_ns_json, void* dc_cfg_ptr);
+	// Helper functions for applying specific fields
+	static void apply_xdr_dc(const std::string& name,
+			const nlohmann::json& dc_json, as_config* config);
+	static void apply_xdr_dc_namespace(const std::string& name,
+			const nlohmann::json& dc_ns_json, void* dc_cfg_ptr);
 	static void apply_logging_sink(int index, const nlohmann::json& sink_json);
+	static void apply_namespace_set(const std::string& name,
+			const nlohmann::json& set_json, as_namespace* namespace_struct);
 
 	//==========================================================
 	// Field descriptor tables.
@@ -237,15 +271,14 @@ namespace cfg_handlers
 		{"/logging", NO_OFFSET, handle_logging},
 	};
 
-	
 	// Main service field descriptors /service
 	static const std::vector<FieldDescriptor> SERVICE_FIELD_DESCRIPTORS = {
 		{"/advertise-ipv6", NO_OFFSET, handle_advertise_ipv6},
 		{"/auto-pin", offsetof(as_config, auto_pin), handle_auto_pin},
 		{"/batch-index-threads", offsetof(as_config, n_batch_index_threads), apply_uint32_field},
-		{"/batch-max-buffers-per-queue", offsetof(as_config, batch_max_buffers_per_queue), apply_uint32_field},
-		{"/batch-max-requests", offsetof(as_config, batch_max_requests), apply_uint32_field},
-		{"/batch-max-unused-buffers", offsetof(as_config, batch_max_unused_buffers), apply_uint32_field},
+		{"/batch-max-buffers-per-queue", offsetof(as_config, batch_max_buffers_per_queue), apply_uint32_field, UnitType::SIZE_U32},
+		{"/batch-max-requests", offsetof(as_config, batch_max_requests), apply_uint32_field, UnitType::SIZE_U32},
+		{"/batch-max-unused-buffers", offsetof(as_config, batch_max_unused_buffers), apply_uint32_field, UnitType::SIZE_U32},
 		{"/cluster-name", NO_OFFSET, handle_cluster_name},
 		{"/debug-allocations", offsetof(as_config, debug_allocations), apply_bool_field},
 		{"/disable-udf-execution", offsetof(as_config, udf_execution_disabled), apply_bool_field},
@@ -257,13 +290,13 @@ namespace cfg_handlers
 		{"/feature-key-files", NO_OFFSET, handle_feature_key_files, EnterpriseOnly{}}, // enterprise-only
 		{"/group", NO_OFFSET, handle_group, Deprecated{"service/group is deprecated."}},
 		{"/indent-allocations", offsetof(as_config, indent_allocations), apply_bool_field},
-		{"/info-max-ns", offsetof(as_config, info_max_ns), apply_uint64_field},
+		{"/info-max-ms", NO_OFFSET, handle_info_max_ms, UnitType::SIZE_U64},
 		{"/info-threads", offsetof(as_config, n_info_threads), apply_uint32_field},
 		{"/keep-caps-ssd-health", offsetof(as_config, keep_caps_ssd_health), apply_bool_field},
 		{"/log-local-time", NO_OFFSET, handle_log_local_time},
 		{"/log-milliseconds", NO_OFFSET, handle_log_milliseconds},
 		{"/microsecond-histograms", offsetof(as_config, microsecond_histograms), apply_bool_field},
-		{"/migrate-fill-delay", offsetof(as_config, migrate_fill_delay), apply_uint32_field, EnterpriseOnly{}}, // enterprise-only
+		{"/migrate-fill-delay", offsetof(as_config, migrate_fill_delay), apply_uint32_field, EnterpriseOnly{}, UnitType::TIME_DURATION}, // enterprise-only
 		{"/migrate-max-num-incoming", offsetof(as_config, migrate_max_num_incoming), apply_uint32_field},
 		{"/migrate-threads", offsetof(as_config, n_migrate_threads), apply_uint32_field},
 		{"/min-cluster-size", offsetof(as_config, clustering_config.cluster_size_min), apply_uint32_field},
@@ -273,8 +306,8 @@ namespace cfg_handlers
 		{"/pidfile", offsetof(as_config, pidfile), apply_cstring_field, Deprecated{"service/pidfile is deprecated."}},
 		{"/poison-allocations", offsetof(as_config, poison_allocations), apply_bool_field},
 		{"/proto-fd-idle-ms", offsetof(as_config, proto_fd_idle_ms), apply_uint32_field, Deprecated{"service/proto-fd-idle-ms is deprecated."}},
-		{"/proto-fd-max", offsetof(as_config, n_proto_fd_max), apply_uint32_field},
-		{"/quarantine-allocations", offsetof(as_config, quarantine_allocations), apply_bool_field},
+		{"/proto-fd-max", offsetof(as_config, n_proto_fd_max), apply_uint32_field, UnitType::SIZE_U32},
+		{"/quarantine-allocations", offsetof(as_config, quarantine_allocations), apply_uint32_field, UnitType::SIZE_U32},
 		{"/query-max-done", offsetof(as_config, query_max_done), apply_uint32_field},
 		{"/query-threads-limit", offsetof(as_config, n_query_threads_limit), apply_uint32_field},
 		{"/run-as-daemon", offsetof(as_config, run_as_daemon), apply_bool_field},
@@ -283,11 +316,12 @@ namespace cfg_handlers
 		{"/secret-uds-path", NO_OFFSET, handle_secret_uds_path},
 		{"/service-threads", offsetof(as_config, n_service_threads), apply_uint32_field},
 		{"/sindex-builder-threads", offsetof(as_config, sindex_builder_threads), apply_uint32_field},
-		{"/sindex-gc-period", offsetof(as_config, sindex_gc_period), apply_uint32_field},
+		{"/sindex-gc-period", offsetof(as_config, sindex_gc_period), apply_uint32_field, UnitType::TIME_DURATION},
 		{"/stay-quiesced", offsetof(as_config, stay_quiesced), apply_bool_field, EnterpriseOnly{}}, // enterprise-only
-		{"/ticker-interval", offsetof(as_config, ticker_interval), apply_uint32_field},
-		{"/tls-refresh-period", NO_OFFSET, handle_tls_refresh_period, EnterpriseOnly{}}, // enterprise-only
-		{"/transaction-max-ns", offsetof(as_config, transaction_max_ns), apply_uint64_field},
+		{"/ticker-interval", offsetof(as_config, ticker_interval), apply_uint32_field, UnitType::TIME_DURATION},
+		{"/tls-refresh-period", NO_OFFSET, handle_tls_refresh_period, EnterpriseOnly{}, UnitType::TIME_DURATION}, // enterprise-only
+		// TODO: this needs to be multiplied by 1000000
+		{"/transaction-max-ms", offsetof(as_config, transaction_max_ns), apply_uint64_field, UnitType::SIZE_U64},
 		{"/transaction-retry-ms", offsetof(as_config, transaction_retry_ms), apply_uint32_field},
 		{"/user", NO_OFFSET, handle_user, Deprecated{"service/user is deprecated."}},
 		{"/work-directory", offsetof(as_config, work_directory), apply_cstring_field},
@@ -406,7 +440,7 @@ namespace cfg_handlers
 		{"/conflict-resolution-policy", offsetof(as_namespace, conflict_resolution_policy), handle_namespace_conflict_resolution_policy},
 		{"/conflict-resolve-writes", offsetof(as_namespace, conflict_resolve_writes), apply_bool_field, EnterpriseOnly{}}, // enterprise-only
 		{"/default-read-touch-ttl-pct", offsetof(as_namespace, default_read_touch_ttl_pct), apply_uint32_field},
-		{"/default-ttl", offsetof(as_namespace, default_ttl), apply_uint32_field},
+		{"/default-ttl", offsetof(as_namespace, default_ttl), apply_uint32_field, UnitType::TIME_DURATION},
 		{"/disable-cold-start-eviction", offsetof(as_namespace, cold_start_eviction_disabled), apply_bool_field},
 		{"/disable-mrt-writes", offsetof(as_namespace, mrt_writes_disabled), apply_bool_field, EnterpriseOnly{}}, // enterprise-only
 		{"/disable-write-dup-res", offsetof(as_namespace, write_dup_res_disabled), apply_bool_field},
@@ -423,17 +457,17 @@ namespace cfg_handlers
 		{"/evict-indexes-memory-pct", offsetof(as_namespace, evict_indexes_memory_pct), apply_uint32_field},
 		{"/evict-tenths-pct", offsetof(as_namespace, evict_tenths_pct), apply_uint32_field},
 		{"/ignore-migrate-fill-delay", offsetof(as_namespace, ignore_migrate_fill_delay), apply_bool_field, EnterpriseOnly{}}, // enterprise-only
-		{"/index-stage-size", offsetof(as_namespace, index_stage_size), apply_uint64_field},
-		{"/indexes-memory-budget", offsetof(as_namespace, indexes_memory_budget), apply_uint64_field},
+		{"/index-stage-size", offsetof(as_namespace, index_stage_size), apply_uint64_field, UnitType::SIZE_U64},
+		{"/indexes-memory-budget", offsetof(as_namespace, indexes_memory_budget), apply_uint64_field, UnitType::SIZE_U64},
 		{"/inline-short-queries", offsetof(as_namespace, inline_short_queries), apply_bool_field},
-		{"/max-record-size", offsetof(as_namespace, max_record_size), apply_uint32_field},
+		{"/max-record-size", offsetof(as_namespace, max_record_size), apply_uint32_field, UnitType::SIZE_U32},
 		{"/migrate-order", offsetof(as_namespace, migrate_order), apply_uint32_field},
 		{"/migrate-retransmit-ms", offsetof(as_namespace, migrate_retransmit_ms), apply_uint32_field},
 		{"/migrate-skip-unreadable", offsetof(as_namespace, migrate_skip_unreadable), apply_bool_field},
 		{"/migrate-sleep", offsetof(as_namespace, migrate_sleep), apply_uint32_field},
-		{"/mrt-duration", offsetof(as_namespace, mrt_duration), apply_uint32_field, EnterpriseOnly{}}, // enterprise-only
-		{"/nsup-hist-period", offsetof(as_namespace, nsup_hist_period), apply_uint32_field},
-		{"/nsup-period", offsetof(as_namespace, nsup_period), apply_uint32_field},
+		{"/mrt-duration", offsetof(as_namespace, mrt_duration), apply_uint32_field, EnterpriseOnly{}, UnitType::TIME_DURATION}, // enterprise-only
+		{"/nsup-hist-period", offsetof(as_namespace, nsup_hist_period), apply_uint32_field, UnitType::TIME_DURATION},
+		{"/nsup-period", offsetof(as_namespace, nsup_period), apply_uint32_field, UnitType::TIME_DURATION},
 		{"/nsup-threads", offsetof(as_namespace, n_nsup_threads), apply_uint32_field},
 		{"/partition-tree-sprigs", offsetof(as_namespace, tree_shared.n_sprigs), apply_uint32_field},
 		{"/prefer-uniform-balance", offsetof(as_namespace, cfg_prefer_uniform_balance), apply_bool_field, EnterpriseOnly{}}, // enterprise-only
@@ -442,18 +476,18 @@ namespace cfg_handlers
 		{"/reject-non-xdr-writes", offsetof(as_namespace, reject_non_xdr_writes), apply_bool_field},
 		{"/reject-xdr-writes", offsetof(as_namespace, reject_xdr_writes), apply_bool_field},
 		{"/replication-factor", offsetof(as_namespace, replication_factor), apply_uint32_field},
-		{"/sindex-stage-size", offsetof(as_namespace, sindex_stage_size), apply_uint64_field},
+		{"/sindex-stage-size", offsetof(as_namespace, sindex_stage_size), apply_uint64_field, UnitType::SIZE_U64},
 		{"/single-query-threads", offsetof(as_namespace, n_single_query_threads), apply_uint32_field},
 		{"/stop-writes-sys-memory-pct", offsetof(as_namespace, stop_writes_sys_memory_pct), apply_uint32_field},
 		{"/strong-consistency", offsetof(as_namespace, cp), apply_bool_field, EnterpriseOnly{}}, // enterprise-only
 		{"/strong-consistency-allow-expunge", offsetof(as_namespace, cp_allow_drops), apply_bool_field, EnterpriseOnly{}}, // enterprise-only
-		{"/tomb-raider-eligible-age", offsetof(as_namespace, tomb_raider_eligible_age), apply_uint32_field, EnterpriseOnly{}}, // enterprise-only
-		{"/tomb-raider-period", offsetof(as_namespace, tomb_raider_period), apply_uint32_field, EnterpriseOnly{}}, // enterprise-only
+		{"/tomb-raider-eligible-age", offsetof(as_namespace, tomb_raider_eligible_age), apply_uint32_field, EnterpriseOnly{}, UnitType::TIME_DURATION}, // enterprise-only
+		{"/tomb-raider-period", offsetof(as_namespace, tomb_raider_period), apply_uint32_field, EnterpriseOnly{}, UnitType::TIME_DURATION}, // enterprise-only
 		{"/transaction-pending-limit", offsetof(as_namespace, transaction_pending_limit), apply_uint32_field},
 		{"/truncate-threads", offsetof(as_namespace, n_truncate_threads), apply_uint32_field},
 		{"/write-commit-level-override", offsetof(as_namespace, write_commit_level), handle_namespace_write_commit_level_override},
-		{"/xdr-bin-tombstone-ttl", NO_OFFSET, handle_namespace_xdr_bin_tombstone_ttl},
-		{"/xdr-tomb-raider-period", offsetof(as_namespace, xdr_tomb_raider_period), apply_uint32_field},
+		{"/xdr-bin-tombstone-ttl", NO_OFFSET, handle_namespace_xdr_bin_tombstone_ttl, UnitType::TIME_DURATION},
+		{"/xdr-tomb-raider-period", offsetof(as_namespace, xdr_tomb_raider_period), apply_uint32_field, UnitType::TIME_DURATION},
 		{"/xdr-tomb-raider-threads", offsetof(as_namespace, n_xdr_tomb_raider_threads), apply_uint32_field},
 		{"/geo2dsphere-within/strict", offsetof(as_namespace, geo2dsphere_within_strict), apply_bool_field},
 		{"/geo2dsphere-within/min-level", offsetof(as_namespace, geo2dsphere_within_min_level), apply_uint16_field},
@@ -464,11 +498,11 @@ namespace cfg_handlers
 		{"/index-type/type", NO_OFFSET, handle_namespace_index_type},
 		{"/index-type/evict-mounts-pct", offsetof(as_namespace, pi_evict_mounts_pct), apply_uint32_field},
 		{"/index-type/mounts", NO_OFFSET, handle_namespace_index_mounts},
-		{"/index-type/mounts-budget", offsetof(as_namespace, pi_mounts_budget), apply_uint32_field},
+		{"/index-type/mounts-budget", offsetof(as_namespace, pi_mounts_budget), apply_uint64_field, UnitType::SIZE_U64},
 		{"/sets", NO_OFFSET, handle_namespace_sets},
 		{"/sindex-type/type", NO_OFFSET, handle_namespace_sindex_type},
 		{"/sindex-type/mounts", NO_OFFSET, handle_namespace_sindex_mounts},
-		{"/sindex-type/mounts-budget", offsetof(as_namespace, si_mounts_budget), apply_uint64_field},
+		{"/sindex-type/mounts-budget", offsetof(as_namespace, si_mounts_budget), apply_uint64_field, UnitType::SIZE_U64},
 		{"/sindex-type/evict-mounts-pct", offsetof(as_namespace, si_evict_mounts_pct), apply_uint32_field},
 		{"/storage-engine/type", NO_OFFSET, handle_namespace_storage_engine_type},
 		{"/storage-engine/cache-replica-writes", offsetof(as_namespace, storage_cache_replica_writes), apply_bool_field},
@@ -477,7 +511,7 @@ namespace cfg_handlers
 		{"/storage-engine/compression", NO_OFFSET, handle_namespace_storage_engine_compression, EnterpriseOnly{}}, // enterprise-only
 		{"/storage-engine/compression-acceleration", offsetof(as_namespace, storage_compression_acceleration), apply_uint32_field, EnterpriseOnly{}}, // enterprise-only
 		{"/storage-engine/compression-level", offsetof(as_namespace, storage_compression_level), apply_uint32_field, EnterpriseOnly{}}, // enterprise-only
-		{"/storage-engine/data-size", offsetof(as_namespace, storage_data_size), apply_uint64_field},
+		{"/storage-engine/data-size", offsetof(as_namespace, storage_data_size), apply_uint64_field, UnitType::SIZE_U64},
 		{"/storage-engine/defrag-lwm-pct", offsetof(as_namespace, storage_defrag_lwm_pct), apply_uint32_field},
 		{"/storage-engine/defrag-queue-min", offsetof(as_namespace, storage_defrag_queue_min), apply_uint32_field},
 		{"/storage-engine/defrag-sleep", offsetof(as_namespace, storage_defrag_sleep), apply_uint32_field},
@@ -491,11 +525,11 @@ namespace cfg_handlers
 		{"/storage-engine/encryption-old-key-file", offsetof(as_namespace, storage_encryption_old_key_file), apply_cstring_field, EnterpriseOnly{}}, // enterprise-only
 		{"/storage-engine/evict-used-pct", offsetof(as_namespace, storage_evict_used_pct), apply_uint32_field},
 		{"/storage-engine/files", NO_OFFSET, handle_namespace_storage_engine_files},
-		{"/storage-engine/filesize", offsetof(as_namespace, storage_filesize), apply_uint64_field},
+		{"/storage-engine/filesize", offsetof(as_namespace, storage_filesize), apply_uint64_field, UnitType::SIZE_U64},
 		{"/storage-engine/flush-max-ms", NO_OFFSET, handle_namespace_storage_engine_flush_max_ms},
-		{"/storage-engine/flush-size", offsetof(as_namespace, storage_flush_size), apply_uint32_field},
-		{"/storage-engine/max-write-cache", offsetof(as_namespace, storage_max_write_cache), apply_uint64_field},
-		{"/storage-engine/post-write-cache", offsetof(as_namespace, storage_post_write_cache), apply_uint64_field},
+		{"/storage-engine/flush-size", offsetof(as_namespace, storage_flush_size), apply_uint32_field, UnitType::SIZE_U32},
+		{"/storage-engine/max-write-cache", offsetof(as_namespace, storage_max_write_cache), apply_uint64_field, UnitType::SIZE_U64},
+		{"/storage-engine/post-write-cache", offsetof(as_namespace, storage_post_write_cache), apply_uint64_field, UnitType::SIZE_U64},
 		{"/storage-engine/read-page-cache", offsetof(as_namespace, storage_read_page_cache), apply_bool_field},
 		{"/storage-engine/serialize-tomb-raider", offsetof(as_namespace, storage_serialize_tomb_raider), apply_bool_field, EnterpriseOnly{}}, // enterprise-only
 		{"/storage-engine/sindex-startup-device-scan", offsetof(as_namespace, storage_sindex_startup_device_scan), apply_bool_field},
@@ -506,13 +540,12 @@ namespace cfg_handlers
 
 	// Set field descriptors /namespaces/sets
 	static const std::vector<FieldDescriptor> NAMESPACE_SET_FIELD_DESCRIPTORS = {
-		{"/name", NO_OFFSET, handle_set_name},
 		{"/default-read-touch-ttl-pct", offsetof(as_set, default_read_touch_ttl_pct), apply_pct_w_minus_1_field},
-		{"/default-ttl", offsetof(as_set, default_ttl), apply_uint32_field},
+		{"/default-ttl", offsetof(as_set, default_ttl), apply_uint32_field, UnitType::TIME_DURATION},
 		{"/disable-eviction", offsetof(as_set, eviction_disabled), apply_bool_field},
 		{"/enable-index", offsetof(as_set, index_enabled), apply_bool_field},
-		{"/stop-writes-count", offsetof(as_set, stop_writes_count), apply_uint64_field},
-		{"/stop-writes-size", offsetof(as_set, stop_writes_size), apply_uint64_field},
+		{"/stop-writes-count", offsetof(as_set, stop_writes_count), apply_uint64_field, UnitType::SIZE_U64},
+		{"/stop-writes-size", offsetof(as_set, stop_writes_size), apply_uint64_field, UnitType::SIZE_U64},
 	};
 
 	// XDR DC field descriptors /xdr/dc
@@ -550,7 +583,7 @@ namespace cfg_handlers
 		{"/ship-nsup-deletes", offsetof(as_xdr_dc_ns_cfg, ship_nsup_deletes), apply_bool_field},
 		{"/ship-only-specified-sets", offsetof(as_xdr_dc_ns_cfg, ship_only_specified_sets), apply_bool_field},
 		{"/ship-sets", NO_OFFSET, handle_xdr_dc_ns_ship_sets},
-		{"/ship-versions-interval", NO_OFFSET, handle_xdr_dc_ns_ship_versions_interval},
+		{"/ship-versions-interval", NO_OFFSET, handle_xdr_dc_ns_ship_versions_interval, UnitType::TIME_DURATION},
 		{"/ship-versions-policy", NO_OFFSET, handle_xdr_dc_ns_ship_versions_policy},
 		{"/transaction-queue-limit", offsetof(as_xdr_dc_ns_cfg, transaction_queue_limit), apply_uint32_field},
 		{"/write-policy", NO_OFFSET, handle_xdr_dc_ns_write_policy},
@@ -560,8 +593,8 @@ namespace cfg_handlers
 	static const std::vector<FieldDescriptor> SECURITY_FIELD_DESCRIPTORS = {
 		{"/default-password-file", offsetof(as_sec_config, default_password_file), apply_cstring_field},
 		{"/enable-quotas", offsetof(as_sec_config, quotas_enabled), apply_bool_field},
-		{"/privilege-refresh-period", offsetof(as_sec_config, privilege_refresh_period), apply_uint32_field},
-		{"/session-ttl", offsetof(as_sec_config, session_ttl), apply_uint32_field},
+		{"/privilege-refresh-period", offsetof(as_sec_config, privilege_refresh_period), apply_uint32_field, UnitType::TIME_DURATION},
+		{"/session-ttl", offsetof(as_sec_config, session_ttl), apply_uint32_field, UnitType::TIME_DURATION},
 		{"/tps-weight", offsetof(as_sec_config, tps_weight), apply_uint32_field},
 		{"/ldap", NO_OFFSET, handle_security_ldap},
 		{"/log", NO_OFFSET, handle_security_log},
@@ -571,7 +604,7 @@ namespace cfg_handlers
 	static const std::vector<FieldDescriptor> SECURITY_LDAP_FIELD_DESCRIPTORS = {
 		{"/disable-tls", offsetof(as_sec_config, ldap_tls_disabled), apply_bool_field},
 		{"/login-threads", offsetof(as_sec_config, n_ldap_login_threads), apply_uint32_field},
-		{"/polling-period", offsetof(as_sec_config, ldap_polling_period), apply_uint32_field},
+		{"/polling-period", offsetof(as_sec_config, ldap_polling_period), apply_uint32_field, UnitType::TIME_DURATION},
 		{"/query-base-dn", offsetof(as_sec_config, ldap_query_base_dn), apply_cstring_field},
 		{"/query-user-dn", offsetof(as_sec_config, ldap_query_user_dn), apply_cstring_field},
 		{"/query-user-password-file", offsetof(as_sec_config, ldap_query_user_password_file), apply_cstring_field},
@@ -597,75 +630,79 @@ namespace cfg_handlers
 	};
 
 	// Logging field descriptors /logging
+	// Note: path, tag, facility are at top level; contexts are nested under /contexts
+	// IMPORTANT: /contexts/any must come FIRST so it sets all contexts,
+	// then individual contexts can override it.
 	static const std::vector<FieldDescriptor> LOGGING_FIELD_DESCRIPTORS = {
 		{"/path", NO_OFFSET, handle_logging_syslog_path},
 		{"/tag", NO_OFFSET, handle_logging_syslog_tag},
 		{"/facility", NO_OFFSET, handle_logging_facility},
-		{"/misc", NO_OFFSET, handle_logging_context_level},
-		{"/alloc", NO_OFFSET, handle_logging_context_level},
-		{"/arenax", NO_OFFSET, handle_logging_context_level},
-		{"/hardware", NO_OFFSET, handle_logging_context_level},
-		{"/msg", NO_OFFSET, handle_logging_context_level},
-		{"/os", NO_OFFSET, handle_logging_context_level},
-		{"/secrets", NO_OFFSET, handle_logging_context_level},
-		{"/socket", NO_OFFSET, handle_logging_context_level},
-		{"/tls", NO_OFFSET, handle_logging_context_level},
-		{"/vault", NO_OFFSET, handle_logging_context_level},
-		{"/vmapx", NO_OFFSET, handle_logging_context_level},
-		{"/xmem", NO_OFFSET, handle_logging_context_level},
-		{"/aggr", NO_OFFSET, handle_logging_context_level},
-		{"/appeal", NO_OFFSET, handle_logging_context_level},
-		{"/as", NO_OFFSET, handle_logging_context_level},
-		{"/audit", NO_OFFSET, handle_logging_context_level},
-		{"/batch", NO_OFFSET, handle_logging_context_level},
-		{"/batch-sub", NO_OFFSET, handle_logging_context_level},
-		{"/bin", NO_OFFSET, handle_logging_context_level},
-		{"/config", NO_OFFSET, handle_logging_context_level},
-		{"/clustering", NO_OFFSET, handle_logging_context_level},
-		{"/drv-mem", NO_OFFSET, handle_logging_context_level},
-		{"/drv_pmem", NO_OFFSET, handle_logging_context_level},
-		{"/drv_ssd", NO_OFFSET, handle_logging_context_level},
-		{"/exchange", NO_OFFSET, handle_logging_context_level},
-		{"/exp", NO_OFFSET, handle_logging_context_level},
-		{"/fabric", NO_OFFSET, handle_logging_context_level},
-		{"/flat", NO_OFFSET, handle_logging_context_level},
-		{"/geo", NO_OFFSET, handle_logging_context_level},
-		{"/hb", NO_OFFSET, handle_logging_context_level},
-		{"/health", NO_OFFSET, handle_logging_context_level},
-		{"/hlc", NO_OFFSET, handle_logging_context_level},
-		{"/index", NO_OFFSET, handle_logging_context_level},
-		{"/info", NO_OFFSET, handle_logging_context_level},
-		{"/info-command", NO_OFFSET, handle_logging_context_level},
-		{"/info-port", NO_OFFSET, handle_logging_context_level},
-		{"/key-busy", NO_OFFSET, handle_logging_context_level},
-		{"/migrate", NO_OFFSET, handle_logging_context_level},
-		{"/mrt-audit", NO_OFFSET, handle_logging_context_level},
-		{"/mrt-monitor", NO_OFFSET, handle_logging_context_level},
-		{"/namespace", NO_OFFSET, handle_logging_context_level},
-		{"/nsup", NO_OFFSET, handle_logging_context_level},
-		{"/particle", NO_OFFSET, handle_logging_context_level},
-		{"/partition", NO_OFFSET, handle_logging_context_level},
-		{"/proto", NO_OFFSET, handle_logging_context_level},
-		{"/proxy", NO_OFFSET, handle_logging_context_level},
-		{"/proxy-divert", NO_OFFSET, handle_logging_context_level},
-		{"/query", NO_OFFSET, handle_logging_context_level},
-		{"/record", NO_OFFSET, handle_logging_context_level},
-		{"/roster", NO_OFFSET, handle_logging_context_level},
-		{"/rw", NO_OFFSET, handle_logging_context_level},
-		{"/rw-client", NO_OFFSET, handle_logging_context_level},
-		{"/security", NO_OFFSET, handle_logging_context_level},
-		{"/service", NO_OFFSET, handle_logging_context_level},
-		{"/service-list", NO_OFFSET, handle_logging_context_level},
-		{"/sindex", NO_OFFSET, handle_logging_context_level},
-		{"/skew", NO_OFFSET, handle_logging_context_level},
-		{"/smd", NO_OFFSET, handle_logging_context_level},
-		{"/storage", NO_OFFSET, handle_logging_context_level},
-		{"/truncate", NO_OFFSET, handle_logging_context_level},
-		{"/tsvc", NO_OFFSET, handle_logging_context_level},
-		{"/udf", NO_OFFSET, handle_logging_context_level},
-		{"/xdr", NO_OFFSET, handle_logging_context_level},
-		{"/xdr-client", NO_OFFSET, handle_logging_context_level},
-		{"/any", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/any", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/misc", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/alloc", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/arenax", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/hardware", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/msg", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/os", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/secrets", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/socket", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/tls", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/vault", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/vmapx", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/xmem", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/aggr", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/appeal", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/as", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/audit", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/batch", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/batch-sub", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/bin", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/config", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/clustering", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/drv-mem", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/drv_pmem", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/drv_ssd", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/exchange", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/exp", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/fabric", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/flat", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/geo", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/hb", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/health", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/hlc", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/index", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/info", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/info-command", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/info-port", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/key-busy", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/migrate", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/mrt-audit", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/mrt-monitor", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/namespace", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/nsup", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/particle", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/partition", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/proto", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/proxy", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/proxy-divert", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/query", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/record", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/roster", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/rw", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/rw-client", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/security", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/service", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/service-list", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/sindex", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/skew", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/smd", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/storage", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/truncate", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/tsvc", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/udf", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/xdr", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/xdr-client", NO_OFFSET, handle_logging_context_level},
+		{"/contexts/masking", NO_OFFSET, handle_logging_context_level},
 	};
 
 
@@ -712,34 +749,120 @@ namespace cfg_handlers
 			const FieldDescriptor& desc)
 	{
 		nlohmann::json value;
-		
+
 		// Skip if field is not present (optional fields)
 		if (! get_json_value(desc.json_path, source, value)) {
 			// Field not found - this is okay for optional fields
 			return;
 		}
-		
+
 		// Check if this is an enterprise-only field in community edition
 		if (desc.enterprise_only && is_community_edition()) {
 			throw config_error(desc.json_path, "is enterprise-only");
 		}
-		
+
 		if (! desc.deprecation_warning.empty()) {
 			as_info_warn_deprecated(desc.deprecation_warning.c_str());
 		}
-		
+
+		// If this field supports units (e.g. seconds, mibibytes, etc),
+		// accept the new schema's object form:
+		//   { "value": <int>, "unit": "<suffix>" }
+		// and expand it to the base-unit integer the existing handlers expect.
+		if (desc.unit_type != UnitType::NONE) {
+			uint64_t expanded;
+			if (try_expand_unit_value(desc, value, expanded)) {
+				value = expanded;
+			}
+		}
+
 		desc.handler(target, desc, value);
 	}
-	
+
+	// Unit expansion for schema object form: {value, unit}
+	//
+	// Returns true if 'in' was recognized as a unit-bearing representation and
+	// successfully expanded into 'out'. Throws config_error on malformed unit
+	// objects/strings for unit-capable fields.
+	//
+	static bool
+	try_expand_unit_value(const FieldDescriptor& desc, const nlohmann::json& in,
+			uint64_t& out)
+	{
+		if (desc.unit_type == UnitType::NONE) {
+			return false;
+		}
+
+		// value might be a unit-bearing object: {"value": <int>, "unit": "<suffix>"}.
+		if (in.is_object()) {
+			if (! in.contains("value") || ! in.contains("unit")) {
+				// Not our object form - let the specific handler validate.
+				return false;
+			}
+
+			const nlohmann::json& v = in.at("value");
+			const nlohmann::json& u = in.at("unit");
+
+			if (! (v.is_number_integer() || v.is_number_unsigned())) {
+				throw config_error(desc.json_path, "unit object 'value' must be an integer");
+			}
+			if (! u.is_string()) {
+				throw config_error(desc.json_path, "unit object 'unit' must be a string");
+			}
+
+			// Treat negative integers as invalid (schema minimums are almost always non-negative).
+			int64_t v_i = v.get<int64_t>();
+			if (v_i < 0) {
+				throw config_error(desc.json_path, "unit object 'value' must be non-negative");
+			}
+
+			std::string suffix = u.get<std::string>();
+			if (suffix.empty()) {
+				throw config_error(desc.json_path, "unit object 'unit' must be non-empty");
+			}
+
+			std::string combined = std::to_string(static_cast<uint64_t>(v_i)) + suffix;
+
+			switch (desc.unit_type) {
+				case UnitType::TIME_DURATION: {
+					uint32_t seconds;
+					if (cf_str_atoi_seconds(combined.c_str(), &seconds) != 0) {
+						throw config_error(desc.json_path,
+								"invalid time unit object (expected e.g. {value: 1, unit: s|m|h|d})");
+					}
+					out = seconds;
+					return true;
+				}
+				case UnitType::SIZE_U32:
+				case UnitType::SIZE_U64: {
+					uint64_t size;
+					if (cf_str_atoi_size(combined.c_str(), &size) != 0) {
+						throw config_error(desc.json_path,
+								"invalid size unit object (expected e.g. {value: 1, unit: k|m|g|t|p|ki|mi|gi|ti|pi})");
+					}
+					out = size;
+					return true;
+				}
+				case UnitType::NONE:
+				default:
+					return false;
+			}
+		}
+
+		return false;
+	}
+
 	static void
 	apply_uint16_field(void* target, const FieldDescriptor& desc,
 			const nlohmann::json& value)
 	{
-		if (! value.is_number_unsigned() && ! value.is_number_integer()) {
+		uint64_t val;
+		if (value.is_number_unsigned() || value.is_number_integer()) {
+			val = value.get<uint64_t>();
+		}
+		else {
 			throw config_error(desc.json_path, "must be a positive integer");
 		}
-
-		uint64_t val = value.get<uint64_t>();
 
 		if (val > std::numeric_limits<uint16_t>::max()) {
 			throw config_error(desc.json_path, "value too large for uint16_t");
@@ -774,11 +897,13 @@ namespace cfg_handlers
 	apply_uint32_field(void* target, const FieldDescriptor& desc,
 			const nlohmann::json& value)
 	{
-		if (! value.is_number_unsigned() && ! value.is_number_integer()) {
+		uint64_t val;
+		if (value.is_number_unsigned() || value.is_number_integer()) {
+			val = value.get<uint64_t>();
+		}
+		else {
 			throw config_error(desc.json_path, "must be a positive integer");
 		}
-
-		uint64_t val = value.get<uint64_t>();
 
 		if (val > std::numeric_limits<uint32_t>::max()) {
 			throw config_error(desc.json_path, "value too large for uint32_t");
@@ -793,13 +918,17 @@ namespace cfg_handlers
 	apply_uint64_field(void* target, const FieldDescriptor& desc,
 			const nlohmann::json& value)
 	{
-		if (! value.is_number_unsigned() && ! value.is_number_integer()) {
+		uint64_t val;
+		if (value.is_number_unsigned() || value.is_number_integer()) {
+			val = value.get<uint64_t>();
+		}
+		else {
 			throw config_error(desc.json_path, "must be a positive integer");
 		}
 
 		uint64_t* field_ptr = reinterpret_cast<uint64_t*>(
 				static_cast<char*>(target) + desc.offset);
-		*field_ptr = value.get<uint64_t>();
+		*field_ptr = val;
 	}
 
 	static void
@@ -825,8 +954,8 @@ namespace cfg_handlers
 
 		std::string str_val = value.get<std::string>();
 
-		// For C strings, we need to allocate memory and copy the string
-		// This assumes the target field is a char* that should be allocated
+		// For C strings, we need to allocate memory and copy the string.
+		// This assumes the target field is a char* that should be allocated.
 		char** field_ptr = reinterpret_cast<char**>(
 				static_cast<char*>(target) + desc.offset);
 
@@ -835,7 +964,7 @@ namespace cfg_handlers
 			cf_free(*field_ptr);
 		}
 
-		// Allocate and copy new string
+		// Allocate and copy new string.
 		*field_ptr = cf_strdup(str_val.c_str());
 	}
 
@@ -868,14 +997,14 @@ namespace cfg_handlers
 
 		if (str_val.length() >= sizeof(config->mod_lua.user_path)) {
 			throw config_error("/mod-lua/user-path",
-					"string too long (max " + 
+					"string too long (max " +
 					std::to_string(sizeof(config->mod_lua.user_path) - 1) +
 					" characters)");
 		}
 
 		strcpy(config->mod_lua.user_path, str_val.c_str());
 	}
-	
+
 	//------------------------------------------------
 	// Service Handlers.
 	//
@@ -920,12 +1049,16 @@ namespace cfg_handlers
 	handle_tls_refresh_period(void* target, const FieldDescriptor& desc,
 			const nlohmann::json& value)
 	{
-		if (! value.is_number_unsigned() && ! value.is_number_integer()) {
+		uint32_t resolved_val;
+		if (value.is_number_unsigned() || value.is_number_integer()) {
+			resolved_val = value.get<uint32_t>();
+		}
+		else {
 			throw config_error("/service/tls-refresh-period",
 					"must be a positive integer");
 		}
 
-		tls_set_refresh_period(value.get<uint32_t>());
+		tls_set_refresh_period(resolved_val);
 	}
 
 	static void
@@ -1059,7 +1192,30 @@ namespace cfg_handlers
 		config->gid = grp->gr_gid;
 		endgrent();
 	}
-	
+
+	static void
+	handle_info_max_ms(void* target, const FieldDescriptor& desc,
+			const nlohmann::json& value)
+	{
+		uint64_t info_max_ms;
+		if (value.is_number_unsigned() || value.is_number_integer()) {
+			info_max_ms = value.get<uint64_t>();
+		}
+		else {
+			throw config_error("/service/info-max-ms",
+					"must be a positive integer or an object with 'value' and 'unit' properties");
+		}
+
+		if (info_max_ms > MAX_INFO_MAX_MS) {
+			throw config_error("/service/info-max-ms",
+					"value must be less than " +
+					std::to_string(MAX_INFO_MAX_MS) +
+					" milliseconds");
+		}
+
+		as_config* config = static_cast<as_config*>(target);
+		config->info_max_ns = info_max_ms * 1000000;
+	}
 
 	static void
 	handle_feature_key_files(void* target, const FieldDescriptor& desc,
@@ -1165,53 +1321,39 @@ namespace cfg_handlers
 	}
 
 	static void
-	apply_network_tls_context(int index, const nlohmann::json& tls_json,
+	apply_network_tls_context(std::string name, const nlohmann::json& tls_json,
 			as_config* config)
 	{
 		if (! tls_json.is_object()) {
-			throw config_error("/network/tls/" + std::to_string(index),
+			throw config_error("/network/tls/" + name,
 					"must be an object");
 		}
 
-		if (! tls_json.contains("name") || ! tls_json["name"].is_string()) {
-			throw config_error("/network/tls/" + std::to_string(index),
-					"TLS context must have a 'name' field");
-		}
-
-		auto tls_name = tls_json.at("name").get<std::string>();
-
-		if (tls_name.empty()) {
-			throw config_error("/network/tls/" + std::to_string(index),
+		if (name.empty()) {
+			throw config_error("/network/tls/" + name,
 					"name must be a non-empty string");
 		}
 
-		auto tls_spec = cfg_create_tls_spec(config, tls_name.c_str());
+		auto tls_spec = cfg_create_tls_spec(config, name.c_str());
 
 		for (const auto& desc : NETWORK_TLS_FIELD_DESCRIPTORS) {
 			apply_field(tls_spec, tls_json, desc);
 		}
 	}
-	
+
 	//------------------------------------------------
 	// Namespace Handlers.
 	//
 
 	static void
-	apply_namespace(int index, const nlohmann::json& namespace_json)
+	apply_namespace(std::string name, const nlohmann::json& namespace_json)
 	{
 		if (! namespace_json.is_object()) {
-			throw config_error("/namespaces/" + std::to_string(index),
+			throw config_error("/namespaces/" + name,
 					"must be an object");
 		}
 
-		auto namespace_name = namespace_json.at("name").get<std::string>();
-
-		if (namespace_name.empty()) {
-			throw config_error("/namespaces/" + std::to_string(index),
-					"name must be a non-empty string");
-		}
-
-		auto namespace_struct = as_namespace_create(namespace_name.c_str());
+		auto namespace_struct = as_namespace_create(name.c_str());
 
 		for (const auto& desc : NAMESPACE_FIELD_DESCRIPTORS) {
 			apply_field(namespace_struct, namespace_json, desc);
@@ -1222,15 +1364,15 @@ namespace cfg_handlers
 	handle_namespaces(void* target, const FieldDescriptor& desc,
 			const nlohmann::json& value)
 	{
-		if (! value.is_array()) {
-			throw config_error("/namespaces", "must be an array");
+		if (! value.is_object()) {
+			throw config_error("/namespaces", "must be an object");
 		}
 
 		// rely on config being initialized to 0
 		// config->n_namespaces = 0;
 
-		for (int i = 0; i < value.size(); ++i) {
-			apply_namespace(i, value[i]);
+		for (auto& el: value.items()) {
+			apply_namespace(el.key(), el.value());
 		}
 	}
 
@@ -1269,12 +1411,14 @@ namespace cfg_handlers
 	{
 		as_namespace* namespace_struct = static_cast<as_namespace*>(ns);
 
-		if (! value.is_number_unsigned() && ! value.is_number_integer()) {
+		uint32_t ttl;
+		if (value.is_number_unsigned() || value.is_number_integer()) {
+			ttl = value.get<uint32_t>();
+		}
+		else {
 			throw config_error("/namespaces/xdr-bin-tombstone-ttl",
 					"must be a positive integer");
 		}
-
-		uint32_t ttl = value.get<uint32_t>();
 
 		if (ttl > MAX_ALLOWED_TTL) {
 			throw config_error("/namespaces/xdr-bin-tombstone-ttl",
@@ -1461,7 +1605,7 @@ namespace cfg_handlers
 	//
 
 	static void
-	apply_namespace_set(int index, const nlohmann::json& set_json,
+	apply_namespace_set(const std::string& name, const nlohmann::json& set_json,
 			as_namespace* namespace_struct)
 	{
 		if (! set_json.is_object()) {
@@ -1474,6 +1618,19 @@ namespace cfg_handlers
 
 		as_set* set_struct = cfg_add_set(namespace_struct);
 
+		if (name.empty()) {
+			throw config_error("namespaces/sets/",
+					"name must be a non-empty string");
+		}
+
+		if (name.size() > AS_SET_NAME_MAX_SIZE) {
+			throw config_error("namespaces/sets/" + name,
+					"name must be less than " +
+					std::to_string(AS_SET_NAME_MAX_SIZE) + " characters");
+		}
+
+		strcpy(set_struct->name, name.c_str());
+
 		for (const auto& desc : NAMESPACE_SET_FIELD_DESCRIPTORS) {
 			apply_field(set_struct, set_json, desc);
 		}
@@ -1485,42 +1642,16 @@ namespace cfg_handlers
 	{
 		as_namespace* namespace_struct = static_cast<as_namespace*>(ns);
 
-		if (! value.is_array()) {
-			throw config_error("/namespaces/sets", "must be an array");
+		if (! value.is_object()) {
+			throw config_error("/namespaces/sets", "must be an object");
 		}
 
-		// NOTE: this functionrelies on namespace_struct->sets_cfg_count
+		// NOTE: this function relies on namespace_struct->sets_cfg_count
 		// and namespace_struct->sets_cfg_array being initialized to 0 and NULL
 
-		for (int i = 0; i < value.size(); ++i) {
-			apply_namespace_set(i, value[i], namespace_struct);
+		for (auto& el: value.items()) {
+			apply_namespace_set(el.key(), el.value(), namespace_struct);
 		}
-	}
-
-	static void
-	handle_set_name(void* set, const FieldDescriptor& desc,
-			const nlohmann::json& value)
-	{
-		as_set* set_struct = static_cast<as_set*>(set);
-
-		if (! value.is_string()) {
-			throw config_error("namespaces/sets/name", "must be a string");
-		}
-
-		std::string name = value.get<std::string>();
-
-		if (name.empty()) {
-			throw config_error("namespaces/sets/name",
-					"must be a non-empty string");
-		}
-
-		if (name.size() > AS_SET_NAME_MAX_SIZE) {
-			throw config_error("namespaces/sets/name",
-					"must be less than " +
-					std::to_string(AS_SET_NAME_MAX_SIZE) + " characters");
-		}
-
-		strcpy(set_struct->name, name.c_str());
 	}
 
 	//------------------------------------------------
@@ -1704,7 +1835,7 @@ namespace cfg_handlers
 		// Convert from milliseconds to microseconds as stored in the struct.
 		namespace_struct->storage_flush_max_us = value.get<uint64_t>() * 1000;
 	}
-	
+
 	//------------------------------------------------
 	// Network Handlers.
 	//
@@ -1757,8 +1888,8 @@ namespace cfg_handlers
 						"entries must be a string");
 			}
 
-			const char* address_str = address.get<std::string>().c_str();
-			cfg_add_addr_bind(address_str, &config->admin);
+			std::string address_str = address.get<std::string>();
+			cfg_add_addr_bind(address_str.c_str(), &config->admin);
 		}
 	}
 
@@ -1779,9 +1910,8 @@ namespace cfg_handlers
 						"entries must be a string");
 			}
 
-			const char* address_str = address.get<std::string>().c_str();
-
-			cfg_add_addr_bind(address_str, &config->tls_admin);
+			std::string address_str = address.get<std::string>();
+			cfg_add_addr_bind(address_str.c_str(), &config->tls_admin);
 		}
 	}
 
@@ -1793,8 +1923,8 @@ namespace cfg_handlers
 
 		if (value.is_string()) {
 			// add_tls_peer_name copies its input so no need to strdup here.
-			const char* address_str = value.get<std::string>().c_str();
-			add_tls_peer_name(address_str, &config->tls_admin);
+			std::string address_str = value.get<std::string>();
+			add_tls_peer_name(address_str.c_str(), &config->tls_admin);
 		}
 		else if (value.is_array()) {
 			for (const auto& address : value) {
@@ -1804,8 +1934,8 @@ namespace cfg_handlers
 				}
 
 				// add_tls_peer_name copies its input so no need to strdup here.
-				const char* address_str = address.get<std::string>().c_str();
-				add_tls_peer_name(address_str, &config->tls_admin);
+				std::string address_str = address.get<std::string>();
+				add_tls_peer_name(address_str.c_str(), &config->tls_admin);
 			}
 		}
 		else {
@@ -1897,8 +2027,8 @@ namespace cfg_handlers
 						"entries must be a string");
 			}
 
-			const char* address_str = address.get<std::string>().c_str();
-			cfg_add_addr_bind(address_str, &config->hb_serv_spec);
+			std::string address_str = address.get<std::string>();
+			cfg_add_addr_bind(address_str.c_str(), &config->hb_serv_spec);
 		}
 	}
 
@@ -1958,8 +2088,8 @@ namespace cfg_handlers
 			}
 
 			// cfg_add_addr_alt copies its input so no need to strdup here
-			const char* address_str = address.get<std::string>().c_str();
-			add_addr(address_str, &config->hb_multicast_groups);
+			std::string address_str = address.get<std::string>();
+			add_addr(address_str.c_str(), &config->hb_multicast_groups);
 		}
 	}
 
@@ -1980,8 +2110,8 @@ namespace cfg_handlers
 						"entries must be a string");
 			}
 
-			const char* address_str = address.get<std::string>().c_str();
-			cfg_add_addr_bind(address_str, &config->hb_tls_serv_spec);
+			std::string address_str = address.get<std::string>();
+			cfg_add_addr_bind(address_str.c_str(), &config->hb_tls_serv_spec);
 		}
 	}
 
@@ -2025,7 +2155,7 @@ namespace cfg_handlers
 		}
 	}
 
-	//------------------------------------------------	
+	//------------------------------------------------
 	// Network Service Handlers.
 	//
 
@@ -2058,8 +2188,8 @@ namespace cfg_handlers
 			}
 
 			// cfg_add_addr_std copies its input so no need to strdup here
-			const char* address_str = address.get<std::string>().c_str();
-			cfg_add_addr_std(address_str, &config->service);
+			std::string address_str = address.get<std::string>();
+			cfg_add_addr_std(address_str.c_str(), &config->service);
 		}
 	}
 
@@ -2080,8 +2210,8 @@ namespace cfg_handlers
 						"entries must be a string");
 			}
 
-			const char* address_str = address.get<std::string>().c_str();
-			cfg_add_addr_bind(address_str, &config->service);
+			std::string address_str = address.get<std::string>();
+			cfg_add_addr_bind(address_str.c_str(), &config->service);
 		}
 	}
 
@@ -2104,11 +2234,11 @@ namespace cfg_handlers
 			}
 
 			// cfg_add_addr_alt copies its input so no need to strdup here.
-			const char* address_str = address.get<std::string>().c_str();
-			cfg_add_addr_alt(address_str, &config->service);
+			std::string address_str = address.get<std::string>();
+			cfg_add_addr_alt(address_str.c_str(), &config->service);
 		}
 	}
-	
+
 	static void
 	handle_network_service_tls_access_addresses(void* target,
 				const FieldDescriptor& desc, const nlohmann::json& value) {
@@ -2118,7 +2248,7 @@ namespace cfg_handlers
 			throw config_error("/network/service/tls-access-addresses",
 					"must be an array");
 		}
-	
+
 		for (const auto& address : value) {
 			if (! address.is_string()) {
 				throw config_error("/network/service/tls-access-addresses",
@@ -2126,11 +2256,11 @@ namespace cfg_handlers
 			}
 
 			// cfg_add_addr_std copies its input so no need to strdup here.
-			const char* address_str = address.get<std::string>().c_str();
-			cfg_add_addr_std(address_str, &config->tls_service);
+			std::string address_str = address.get<std::string>();
+			cfg_add_addr_std(address_str.c_str(), &config->tls_service);
 		}
 	}
-	
+
 	static void
 	handle_network_service_tls_addresses(void* target,
 				const FieldDescriptor& desc, const nlohmann::json& value) {
@@ -2140,7 +2270,7 @@ namespace cfg_handlers
 			throw config_error("/network/service/tls-addresses",
 					"must be an array");
 		}
-	
+
 		for (const auto& address : value) {
 			if (! address.is_string()) {
 				throw config_error("/network/service/tls-addresses",
@@ -2148,11 +2278,11 @@ namespace cfg_handlers
 			}
 
 			// cfg_add_addr_bind copies its input so no need to strdup here.
-			const char* address_str = address.get<std::string>().c_str();
-			cfg_add_addr_bind(address_str, &config->tls_service);
+			std::string address_str = address.get<std::string>();
+			cfg_add_addr_bind(address_str.c_str(), &config->tls_service);
 		}
 	}
-	
+
 	void
 	handle_network_service_tls_alternate_access_addresses(void* target,
 				const FieldDescriptor& desc, const nlohmann::json& value) {
@@ -2163,7 +2293,7 @@ namespace cfg_handlers
 				"/network/service/tls-alternate-access-addresses",
 				"must be an array of strings");
 		}
-	
+
 		for (const auto& address : value) {
 			if (! address.is_string()) {
 				throw config_error(
@@ -2172,21 +2302,21 @@ namespace cfg_handlers
 			}
 
 			// cfg_add_addr_alt copies its input so no need to strdup here.
-			const char* address_str = address.get<std::string>().c_str();
-			cfg_add_addr_alt(address_str, &config->tls_service);
+			std::string address_str = address.get<std::string>();
+			cfg_add_addr_alt(address_str.c_str(), &config->tls_service);
 		}
 	}
-	
+
 	static void
 	handle_network_service_tls_authenticate_client(void* target,
 				const FieldDescriptor& desc, const nlohmann::json& value)
 	{
 		as_config* config = static_cast<as_config*>(target);
-		
+
 		if (value.is_string()) {
 			// add_tls_peer_name copies its input so no need to strdup here.
-			const char* address_str = value.get<std::string>().c_str();
-			add_tls_peer_name(address_str, &config->tls_service);
+			std::string address_str = value.get<std::string>();
+			add_tls_peer_name(address_str.c_str(), &config->tls_service);
 		}
 		else if (value.is_array()) {
 			for (const auto& address : value) {
@@ -2197,8 +2327,8 @@ namespace cfg_handlers
 				}
 
 				// add_tls_peer_name copies its input so no need to strdup here.
-				const char* address_str = address.get<std::string>().c_str();
-				add_tls_peer_name(address_str, &config->tls_service);
+				std::string address_str = address.get<std::string>();
+				add_tls_peer_name(address_str.c_str(), &config->tls_service);
 			}
 		}
 		else {
@@ -2228,36 +2358,36 @@ namespace cfg_handlers
 		if (! value.is_array()) {
 			throw config_error("/network/fabric/addresses", "must be an array");
 		}
-	
+
 		for (const auto& address : value) {
 			if (! address.is_string()) {
 				throw config_error("/network/fabric/addresses",
 						"entries must be a string");
 			}
 
-			const char* address_str = address.get<std::string>().c_str();
-			cfg_add_addr_bind(address_str, &config->fabric);
+			std::string address_str = address.get<std::string>();
+			cfg_add_addr_bind(address_str.c_str(), &config->fabric);
 		}
 	}
-	
+
 	static void
 	handle_network_fabric_tls_addresses(void* target,
 				const FieldDescriptor& desc, const nlohmann::json& value) {
 		as_config* config = static_cast<as_config*>(target);
-		
+
 		if (! value.is_array()) {
 			throw config_error("/network/fabric/tls-addresses",
 				"must be an array");
 		}
-	
+
 		for (const auto& address : value) {
 			if (! address.is_string()) {
 				throw config_error("/network/fabric/tls-addresses",
 					"entries must be a string");
 			}
 
-			const char* address_str = address.get<std::string>().c_str();
-			cfg_add_addr_bind(address_str, &config->tls_fabric);
+			std::string address_str = address.get<std::string>();
+			cfg_add_addr_bind(address_str.c_str(), &config->tls_fabric);
 		}
 	}
 
@@ -2271,13 +2401,13 @@ namespace cfg_handlers
 	{
 		as_config* config = static_cast<as_config*>(target);
 
-		if (! value.is_array()) {
+		if (! value.is_object()) {
 			throw config_error("/network/tls",
-					"must be an array of TLS contexts");
+					"must be an object containing TLS context");
 		}
 
-		for (int i = 0; i < value.size(); ++i) {
-			apply_network_tls_context(i, value[i], config);
+		for (auto& el: value.items()) {
+			apply_network_tls_context(el.key(), el.value(), config);
 		}
 	}
 
@@ -2286,26 +2416,15 @@ namespace cfg_handlers
 	//
 
 	static void
-	apply_xdr_dc(int index, const nlohmann::json& dc_json, as_config* config)
+	apply_xdr_dc(const std::string& name, const nlohmann::json& dc_json,
+			as_config* config)
 	{
 		if (! dc_json.is_object()) {
-			throw config_error("/xdr/dc/" + std::to_string(index),
+			throw config_error("/xdr/dc/" + name,
 					"dc must be an object");
 		}
 
-		if (! dc_json.contains("name") || ! dc_json["name"].is_string()) {
-			throw config_error("/xdr/dc/" + std::to_string(index),
-					"dc must have a 'name' field");
-		}
-
-		auto dc_name = dc_json.at("name").get<std::string>();
-
-		if (dc_name.empty()) {
-			throw config_error("/xdr/dc/" + std::to_string(index),
-					"dcname must be a non-empty string");
-		}
-
-		auto dc_cfg = as_xdr_startup_create_dc(dc_name.c_str());
+		auto dc_cfg = as_xdr_startup_create_dc(name.c_str());
 
 		for (const auto& desc : XDR_DC_FIELD_DESCRIPTORS) {
 			apply_field(dc_cfg, dc_json, desc);
@@ -2316,6 +2435,10 @@ namespace cfg_handlers
 	handle_xdr(void* target, const FieldDescriptor& desc,
 			const nlohmann::json& source)
 	{
+		if (is_community_edition()) {
+			throw config_error("/xdr", "is enterprise-only");
+		}
+
 		as_config* config = static_cast<as_config*>(target);
 
 		if (! source.is_object()) {
@@ -2344,17 +2467,17 @@ namespace cfg_handlers
 		// Handle DC contexts.
 		nlohmann::json dc_value;
 
-		if (get_json_value("/dc", source, dc_value)) {
-			if (! dc_value.is_array()) {
-				throw config_error("/xdr/dc", "must be an array");
+		if (get_json_value("/dcs", source, dc_value)) {
+			if (! dc_value.is_object()) {
+				throw config_error("/xdr/dcs", "must be an object");
 			}
 
-			for (int i = 0; i < dc_value.size(); ++i) {
-				apply_xdr_dc(i, dc_value[i], config);
+			for (auto& el: dc_value.items()) {
+				apply_xdr_dc(el.key(), el.value(), config);
 			}
 		}
 	}
-	
+
 	//------------------------------------------------
 	// XDR DC Handlers.
 	//
@@ -2413,7 +2536,7 @@ namespace cfg_handlers
 			std::string addr_port_str = address_port.get<std::string>();
 			std::stringstream ss(addr_port_str);
 			std::string host, port_str, tls_name;
-	
+
 			std::getline(ss, host, ':');
 			std::getline(ss, port_str, ':');
 			std::getline(ss, tls_name, ':');
@@ -2457,7 +2580,7 @@ namespace cfg_handlers
 		// Convert milliseconds to microseconds.
 		dc_cfg->period_us = period_ms * 1000;
 	}
-	
+
 	//------------------------------------------------
 	// XDR DC Namespace Handlers.
 	//
@@ -2468,41 +2591,35 @@ namespace cfg_handlers
 	{
 		as_xdr_dc_cfg* dc_cfg = static_cast<as_xdr_dc_cfg*>(target);
 
-		if (! value.is_array()) {
-			throw config_error("/xdr/dc/namespaces", "must be an array");
+		if (! value.is_object()) {
+			throw config_error("/xdr/dc/namespaces", "must be an object");
 		}
 
-		for (int i = 0; i < value.size(); ++i) {
-			apply_xdr_dc_namespace(i, value[i], dc_cfg);
+		for (auto& el: value.items()) {
+			apply_xdr_dc_namespace(el.key(), el.value(), dc_cfg);
 		}
 	}
 
 	static void
-	apply_xdr_dc_namespace(int index, const nlohmann::json& dc_ns_json,
+	apply_xdr_dc_namespace(const std::string& name,
+			const nlohmann::json& dc_ns_json,
 			void* dc_cfg_ptr)
 	{
 		as_xdr_dc_cfg* dc_cfg = static_cast<as_xdr_dc_cfg*>(dc_cfg_ptr);
 
 		if (! dc_ns_json.is_object()) {
-			throw config_error("/xdr/dc/namespaces/" + std::to_string(index),
+			throw config_error("/xdr/dc/namespaces/" + name,
 					"must be an object");
 		}
 
-		if (! dc_ns_json.contains("name") || ! dc_ns_json["name"].is_string()) {
-			throw config_error("/xdr/dc/namespaces/" + std::to_string(index),
-					"namespace must have a 'name' field");
-		}
-
-		auto ns_name = dc_ns_json.at("name").get<std::string>();
-
-		if (ns_name.empty()) {
-			throw config_error("/xdr/dc/namespaces/" + std::to_string(index),
-					"name must be a non-empty string");
+		if (name.empty()) {
+			throw config_error("/xdr/dc/namespaces/" + name,
+					"namespace name must be a non-empty string");
 		}
 
 		// as_dc_create_ns_cfg inside as_xdr_startup_create_dc_ns_cfg strdups
 		// the ns_name, so no need to strdup here.
-		auto dc_ns_cfg = as_xdr_startup_create_dc_ns_cfg(ns_name.c_str());
+		auto dc_ns_cfg = as_xdr_startup_create_dc_ns_cfg(name.c_str());
 		cf_vector_append_ptr(dc_cfg->ns_cfg_v, dc_ns_cfg);
 
 		for (const auto& desc : XDR_DC_NS_FIELD_DESCRIPTORS) {
@@ -2722,12 +2839,14 @@ namespace cfg_handlers
 	{
 		as_xdr_dc_ns_cfg* dc_ns_cfg = static_cast<as_xdr_dc_ns_cfg*>(target);
 
-		if (! value.is_number_unsigned() && ! value.is_number_integer()) {
+		uint32_t interval_seconds;
+		if (value.is_number_unsigned() || value.is_number_integer()) {
+			interval_seconds = value.get<uint32_t>();
+		}
+		else {
 			throw config_error("/xdr/dc/namespaces/ship-versions-interval",
 					"must be a positive integer");
 		}
-
-		uint32_t interval_seconds = value.get<uint32_t>();
 
 		if (interval_seconds < AS_XDR_MIN_SHIP_VERSIONS_INTERVAL ||
 				interval_seconds > AS_XDR_MAX_SHIP_VERSIONS_INTERVAL) {
@@ -2739,9 +2858,17 @@ namespace cfg_handlers
 					" seconds");
 		}
 
-		dc_ns_cfg->ship_versions_interval_ms = interval_seconds * 1000;
+
+		uint64_t interval_ms = interval_seconds * 1000;
+
+		if (interval_ms > std::numeric_limits<uint32_t>::max()) {
+			throw config_error("/xdr/dc/namespaces/ship-versions-interval",
+					"value too large");
+		}
+
+		dc_ns_cfg->ship_versions_interval_ms = static_cast<uint32_t>(interval_ms);
 	}
-	
+
 	//------------------------------------------------
 	// Security Handlers.
 	//
@@ -2750,6 +2877,10 @@ namespace cfg_handlers
 	handle_security(void* target, const FieldDescriptor& desc,
 			const nlohmann::json& value)
 	{
+		if (is_community_edition()) {
+			throw config_error("/security", "is enterprise-only");
+		}
+
 		as_config* config = static_cast<as_config*>(target);
 		as_sec_config* sec_cfg = &config->sec_cfg;
 
@@ -2934,7 +3065,7 @@ namespace cfg_handlers
 			as_security_config_log_user(user_str.c_str());
 		}
 	}
-	
+
 	//------------------------------------------------
 	// Logging Handlers.
 	//
@@ -2960,27 +3091,33 @@ namespace cfg_handlers
 					"must be an object");
 		}
 
-		if (! sink_json.contains("name") || ! sink_json["name"].is_string()) {
+		if (! sink_json.contains("type") || ! sink_json["type"].is_string()) {
 			throw config_error("/logging/" + std::to_string(index),
-					"must have a 'name' field");
+					"must have a 'type' field");
 		}
 
-		std::string name = sink_json["name"].get<std::string>();
+		std::string sink_type = sink_json["type"].get<std::string>();
 		cf_log_sink* sink = NULL;
 
-		// Determine sink type based on name field.
-		if (name == "console" || name == " " || name.empty()) {
-			// Console logging (stderr).
+		if (sink_type == "console") {
 			sink = cf_log_init_sink(NULL, -1, NULL);
 		}
-		else if (name == "syslog") {
-			// Syslog logging with defaults.
-			sink = cf_log_init_sink(DEFAULT_SYSLOG_PATH, LOG_LOCAL0,
-					DEFAULT_SYSLOG_TAG);
+		else if (sink_type == "file") {
+			if (! sink_json.contains("path") || ! sink_json["path"].is_string()) {
+				throw config_error("/logging/" + std::to_string(index),
+						"must have a 'path' field");
+			}
+
+			std::string path = sink_json["path"].get<std::string>();
+
+			sink = cf_log_init_sink(path.c_str(), -1, NULL);
+		}
+		else if (sink_type == "syslog") {
+			sink = cf_log_init_sink(DEFAULT_SYSLOG_PATH, LOG_LOCAL0, DEFAULT_SYSLOG_TAG);
 		}
 		else {
-			// File logging - name is the file path.
-			sink = cf_log_init_sink(name.c_str(), -1, NULL);
+			throw config_error("/logging/" + std::to_string(index),
+					"invalid sink type: " + sink_type);
 		}
 
 		if (sink == NULL) {
@@ -3046,8 +3183,12 @@ namespace cfg_handlers
 		}
 
 		std::string level_str = value.get<std::string>();
-		// Extract context name from the JSON path (remove leading '/').
-		std::string context_name = desc.json_path.substr(1);
+		// Extract context name from the JSON path (e.g., "/contexts/any" -> "any")
+		size_t last_slash = desc.json_path.rfind('/');
+		std::string context_name =
+			(last_slash == std::string::npos)
+				? desc.json_path
+				: desc.json_path.substr(last_slash + 1);
 
 		if (! cf_log_init_level(sink, context_name.c_str(),
 				level_str.c_str())) {

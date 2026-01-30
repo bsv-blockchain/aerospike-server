@@ -28,7 +28,6 @@
 
 #include "nlohmann/json.hpp"
 #include "nlohmann/json-schema.hpp"
-#include "yaml-cpp/yaml.h"
 
 #include <string>
 #include <fstream>
@@ -36,10 +35,6 @@
 #include <limits> // For std::numeric_limits
 #include <algorithm> // For std::transform
 
-// includes from the common C codebase
-extern "C" {
-	#include "os.h"
-}
 
 // TODO: vault.h has the 'namespace' field which conflicts with C++ keyword
 // Need to find a proper solution for this
@@ -239,6 +234,10 @@ read_file(const std::string& path)
 	return ss.str();
 }
 
+//==========================================================
+// YAML to JSON conversion.
+//
+
 // json is move assignable so we can return the json object from the function.
 // without too much overhead (I hope).
 json
@@ -256,7 +255,6 @@ convert_yaml_to_json(const YAML::Node& node)
 		// Quoted values (",') have the tag "!"
 		// per the yaml spec "YAML processors should resolve nodes having the "!" non-specific tag as
 		// "tag:yaml.org,2002:seq", "tag:yaml.org,2002:map" or "tag:yaml.org,2002:str" depending on their kind."
-		// so we can just return the scalar value as a string.
 		if (node.Tag() == "!") {
 			return json(node.Scalar());
 		}
@@ -333,10 +331,10 @@ convert_yaml_to_json(const YAML::Node& node)
 						item.first.Scalar());
 			}
 
-		if (!item.first.IsScalar()) {
-			throw std::runtime_error("Invalid key type: " +
-					std::to_string(item.first.Type()));
-		}
+			if (!item.first.IsScalar()) {
+				throw std::runtime_error("Invalid key type: " +
+						std::to_string(item.first.Type()));
+			}
 
 			json_object[item.first.Scalar()] = convert_yaml_to_json(item.second);
 		}
