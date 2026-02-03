@@ -684,10 +684,21 @@ teranode_spend_multi(as_rec* rec, as_list* args)
     // Check locked
     if (!ignore_locked) {
         as_val* locked_val = as_rec_get(rec, BIN_LOCKED);
-        if (locked_val != NULL && as_val_type(locked_val) == AS_BOOLEAN) {
-            if (as_boolean_get(as_boolean_fromval(locked_val))) {
-                as_val_destroy((as_val*)response);
-                return (as_val*)utxo_create_error_response(ERROR_CODE_LOCKED, MSG_LOCKED);
+        cf_info(AS_UDF, "LOCKED_DEBUG: ignore_locked=%d locked_val=%p", ignore_locked, (void*)locked_val);
+        if (locked_val != NULL) {
+            int val_type = as_val_type(locked_val);
+            cf_info(AS_UDF, "LOCKED_DEBUG: val_type=%d (AS_BOOLEAN=%d)", val_type, AS_BOOLEAN);
+            if (val_type == AS_BOOLEAN) {
+                as_boolean* bool_obj = as_boolean_fromval(locked_val);
+                cf_info(AS_UDF, "LOCKED_DEBUG: bool_obj=%p", (void*)bool_obj);
+                if (bool_obj != NULL) {
+                    bool bool_value = as_boolean_get(bool_obj);
+                    cf_info(AS_UDF, "LOCKED_DEBUG: bool_value=%d - WILL%s RETURN ERROR", bool_value, bool_value ? "" : " NOT");
+                    if (bool_value) {
+                        as_val_destroy((as_val*)response);
+                        return (as_val*)utxo_create_error_response(ERROR_CODE_LOCKED, MSG_LOCKED);
+                    }
+                }
             }
         }
     }

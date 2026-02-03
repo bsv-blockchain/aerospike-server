@@ -22,6 +22,7 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include "base/udf_record.h"
 #include "internal.h"
 
 //==========================================================
@@ -214,17 +215,51 @@ teranode_apply_record(as_module* m, as_udf_context* ctx,
         return -1;
     }
 
+    // Check if the result indicates an error - don't commit changes on error
+    // The result is a map with a "status" field that is either "OK" or "ERROR"
+    bool is_error = false;
+    if (as_val_type(result) == AS_MAP) {
+        as_map* result_map = as_map_fromval(result);
+        if (result_map != NULL) {
+            as_string status_key;
+            as_string_init(&status_key, "status", false);
+            as_val* status_val = as_map_get(result_map, (as_val*)&status_key);
+            if (status_val != NULL && as_val_type(status_val) == AS_STRING) {
+                const char* status_str = as_string_get(as_string_fromval(status_val));
+                if (status_str != NULL && strcmp(status_str, "ERROR") == 0) {
+                    is_error = true;
+                }
+            }
+        }
+    }
+
     // Commit record changes - equivalent to Lua's aerospike:update(rec)
     // This is required to persist any bin modifications made by the function
-    // Only call update if the record exists (has bins) - otherwise there's nothing to update
-    // This matches Lua behavior where aerospike:update(rec) is only called after
-    // confirming aerospike:exists(rec) returns true
-    if (ctx != NULL && ctx->as != NULL && rec != NULL && as_rec_numbins(rec) > 0) {
-        int update_rc = as_aerospike_rec_update(ctx->as, rec);
-        if (update_rc != 0) {
-            LOG_ERROR("mod-teranode: as_aerospike_rec_update failed with rc=%d", update_rc);
-            // Don't fail the whole operation - the function result may still be valid
-            // (e.g., returning an error response about the record state)
+    // Only call update if:
+    // 1. The function did not return an error - don't persist changes on error
+    // 2. The record exists (has bins) - otherwise there's nothing to update
+    // 3. There are dirty (modified) cached values to write
+    if (!is_error && ctx != NULL && ctx->as != NULL && rec != NULL && as_rec_numbins(rec) > 0) {
+        // Check if any cached values are dirty (modified)
+        udf_record* urecord = (udf_record*)as_rec_source(rec);
+        bool has_dirty = false;
+        if (urecord != NULL) {
+            for (uint32_t i = 0; i < urecord->n_updates; i++) {
+                if (urecord->updates[i].dirty) {
+                    has_dirty = true;
+                    break;
+                }
+            }
+        }
+
+        // Only call update if there are dirty changes to persist
+        if (has_dirty) {
+            int update_rc = as_aerospike_rec_update(ctx->as, rec);
+            if (update_rc != 0) {
+                LOG_ERROR("mod-teranode: as_aerospike_rec_update failed with rc=%d", update_rc);
+                // Don't fail the whole operation - the function result may still be valid
+                // (e.g., returning an error response about the record state)
+            }
         }
     }
 
