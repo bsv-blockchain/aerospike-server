@@ -9,19 +9,14 @@ FIPS_SHA=$5
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 FEATURES=""
-BRANCH="$(git branch --show-current)"
-
-if [[ -z "$BRANCH" ]]; then
-    BRANCH="$(git branch -r --contains HEAD | grep -v HEAD |
-        sed -e 's/origin\///' -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
-fi
-
+BRANCH="$(git branch -r --contains HEAD | grep -v HEAD |
+    sed -e 's/origin\///' -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
 BUILD_TYPE=$(<$SCRIPT_DIR/../.STAGE)
 
 if [[ ("$BRANCH" = 'master' || "$BRANCH" =~ 'hotfix/') && "$BUILD_TYPE" = 'release' ]]; then
-    VERSION="$(git describe --long | cut -d'-' -f1)"
+    VERSION="$(git describe --tags --always --long | cut -d'-' -f1)"
 else
-    VERSION="$(git describe --abbrev=9)"
+    VERSION="$(git describe --tags --always --abbrev=9)"
 fi
 
 CE_SHA="$(git rev-parse HEAD)"

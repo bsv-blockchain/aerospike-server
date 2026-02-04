@@ -2,19 +2,14 @@
 
 scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-branch="$(git branch --show-current)"
-
-if [[ -z "$branch" ]]; then
-    branch="$(git branch -r --contains HEAD | grep -v HEAD |
-        sed -e 's/origin\///' -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
-fi
-
+branch="$(git branch -r --contains HEAD | grep -v HEAD |
+    sed -e 's/origin\///' -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
 buildType=$(<$scriptDir/../.STAGE)
 
 if [[ ("$branch" = 'master' || "$branch" =~ 'hotfix/') && "$buildType" = 'release' ]]; then
-    rev="$(git describe --long | cut -d'-' -f1)"
+    rev="$(git describe --tags --always --long | cut -d'-' -f1)"
 else
-    rev="$(git describe --abbrev=9)"
+    rev="$(git describe --tags --always --abbrev=9)"
 fi
 
 subbuild=$(echo $rev | awk -F'-' '{print $2}')
@@ -23,4 +18,10 @@ if [ "$subbuild" != "" ]; then
     rev=$(echo $rev | awk -F'-' '{sb = $2; for (f = 3; f <= NF - 1; f++) {sb = sb"-"$f}; printf("%s-%s\n", $1, sb)}')
 fi
 
-echo $rev
+arg="${1:-}"
+
+if [[ "$arg" = "stage" ]]; then
+    echo "$buildType"
+else
+    echo "$rev"
+fi
