@@ -411,43 +411,6 @@ utxo_spending_data_to_hex(const uint8_t* spending_data)
 }
 
 /**
- * Convert the txID portion (first 32 bytes) of spending data to a
- * 64-character hex string with bytes reversed to big-endian order.
- * Used for looking up child transactions in the deletedChildren map.
- *
- * @param spending_data  Pointer to at least 32 bytes, or NULL.
- * @return Newly allocated as_string, or NULL on failure.
- */
-static as_string*
-utxo_spending_data_to_txid_hex(const uint8_t* spending_data)
-{
-    if (spending_data == NULL) {
-        return NULL;
-    }
-
-    // Allocate directly — 64 + NUL = 65 bytes
-    char* hex = malloc(65);
-    if (hex == NULL) {
-        return NULL;
-    }
-
-    // First 32 bytes reversed (txID)
-    int pos = 0;
-    for (int i = 31; i >= 0; i--) {
-        byte_to_hex(spending_data[i], &hex[pos]);
-        pos += 2;
-    }
-
-    hex[64] = '\0';
-    as_string* s = as_string_new(hex, true);
-    if (s == NULL) {
-        free(hex);
-        return NULL;
-    }
-    return s;
-}
-
-/**
  * Create a standard error response map with status="ERROR", the given
  * error code, and a human-readable message. The message is strdup'd so
  * the caller may pass a stack buffer.
@@ -781,16 +744,22 @@ spend_single_utxo(
                 memcmp(existing_spending_data, new_spending_ptr, SPENDING_DATA_SIZE) == 0) {
             // Already spent with same data - check if child tx was deleted
             if (deleted_children != NULL) {
-                as_string* child_txid = utxo_spending_data_to_txid_hex(existing_spending_data);
-                if (child_txid != NULL) {
-                    as_val* deleted_val = as_map_get(deleted_children, (as_val*)child_txid);
-                    if (deleted_val != NULL && as_val_type(deleted_val) != AS_NIL) {
-                        as_string_destroy(child_txid);
-                        *out_error = utxo_create_error_response(ERROR_CODE_INVALID_SPEND, MSG_INVALID_SPEND);
-                        error_response_add_spending_data(*out_error, existing_spending_data);
-                        return SPEND_ERROR;
-                    }
-                    as_string_destroy(child_txid);
+                char child_txid_hex[65];
+                int pos = 0;
+                for (int i = 31; i >= 0; i--) {
+                    byte_to_hex(existing_spending_data[i], &child_txid_hex[pos]);
+                    pos += 2;
+                }
+                child_txid_hex[64] = '\0';
+
+                as_string child_txid;
+                as_string_init_wlen(&child_txid, child_txid_hex, 64, false);
+                as_val* deleted_val = as_map_get(deleted_children, (as_val*)&child_txid);
+
+                if (deleted_val != NULL && as_val_type(deleted_val) != AS_NIL) {
+                    *out_error = utxo_create_error_response(ERROR_CODE_INVALID_SPEND, MSG_INVALID_SPEND);
+                    error_response_add_spending_data(*out_error, existing_spending_data);
+                    return SPEND_ERROR;
                 }
             }
             return SPEND_SKIP;
@@ -944,8 +913,10 @@ teranode_spend(as_rec* rec, as_list* args, as_aerospike* as)
         as_rec_set(rec, BIN_SPENT_UTXOS, (as_val*)as_integer_new(spent_count + 1));
     }
 
-    // Mark utxos bin as dirty to persist changes
-    as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
+    if (result == SPEND_OK) {
+        // Mark utxos bin as dirty to persist changes
+        as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
+    }
 
     // Call setDeleteAtHeight
     int64_t child_count = 0;
@@ -1166,11 +1137,6 @@ teranode_spend_multi(as_rec* rec, as_list* args, as_aerospike* as)
         }
         as_bytes* spending_data = as_bytes_fromval(v_sp);
 
-        as_string k_idx;
-        as_string_init(&k_idx, (char*)"idx", false);
-        as_val* idx_val = as_map_get(spend_item, (as_val*)&k_idx);
-        int64_t idx = (idx_val != NULL && as_val_type(idx_val) == AS_INTEGER) ? as_integer_get(as_integer_fromval(idx_val)) : i;
-
         as_map* spend_error = NULL;
         spend_result_t sr = spend_single_utxo(utxos, deleted_children,
             spendable_in, offset, utxo_hash, spending_data,
@@ -1179,6 +1145,12 @@ teranode_spend_multi(as_rec* rec, as_list* args, as_aerospike* as)
         if (sr == SPEND_OK) {
             success_count++;
         } else if (sr == SPEND_ERROR && spend_error != NULL) {
+            as_string k_idx;
+            as_string_init(&k_idx, (char*)"idx", false);
+            as_val* idx_val = as_map_get(spend_item, (as_val*)&k_idx);
+            int64_t idx = (idx_val != NULL && as_val_type(idx_val) == AS_INTEGER) ?
+                as_integer_get(as_integer_fromval(idx_val)) : i;
+
             errors_set(&errors,
                 (as_val*)as_integer_new(idx),
                 (as_val*)spend_error);
@@ -1193,10 +1165,10 @@ teranode_spend_multi(as_rec* rec, as_list* args, as_aerospike* as)
             spent_count = as_integer_get(as_integer_fromval(spent_count_val));
         }
         as_rec_set(rec, BIN_SPENT_UTXOS, (as_val*)as_integer_new(spent_count + success_count));
-    }
 
-    // Mark utxos bin as dirty to persist changes
-    as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
+        // Mark utxos bin as dirty to persist changes
+        as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
+    }
 
     // Call setDeleteAtHeight
     int64_t child_count = 0;
@@ -2107,7 +2079,8 @@ teranode_set_conflicting(as_rec* rec, as_list* args, as_aerospike* as)
     int64_t block_height_retention = get_list_int64(args, 2);
 
     // Set conflicting flag
-    as_rec_set(rec, BIN_CONFLICTING, (as_val*)as_boolean_new(set_value));
+    as_rec_set(rec, BIN_CONFLICTING,
+        set_value ? (const as_val*)&as_true : (const as_val*)&as_false);
 
     // Call setDeleteAtHeight
     int64_t child_count = 0;
@@ -2222,7 +2195,8 @@ teranode_set_locked(as_rec* rec, as_list* args, as_aerospike* as)
     }
 
     // Set locked flag
-    as_rec_set(rec, BIN_LOCKED, (as_val*)as_boolean_new(set_value));
+    as_rec_set(rec, BIN_LOCKED,
+        set_value ? (const as_val*)&as_true : (const as_val*)&as_false);
 
     // Remove deleteAtHeight when locking
     if (set_value) {
