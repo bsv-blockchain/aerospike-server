@@ -22,7 +22,6 @@
 #include <string.h>
 #include <stdbool.h>
 
-#include "base/udf_record.h"
 #include "internal.h"
 
 //==========================================================
@@ -30,7 +29,7 @@
 //
 
 // Function pointer type for UTXO functions
-typedef as_val* (*teranode_fn)(as_rec*, as_list*);
+typedef as_val* (*teranode_fn)(as_rec*, as_list*, as_aerospike*);
 
 // Function table entry
 typedef struct fn_entry_s {
@@ -181,10 +180,12 @@ teranode_apply_record(as_module* m, as_udf_context* ctx,
     (void)m;
     (void)filename;
 
+    int rc = -1;
+
     if (function == NULL) {
         LOG_ERROR("mod-teranode: function name is NULL");
         as_result_setfailure(res, (as_val*)as_string_new("function name required", false));
-        return -1;
+        goto done;
     }
 
     // Find function in dispatch table
@@ -201,69 +202,47 @@ teranode_apply_record(as_module* m, as_udf_context* ctx,
         LOG_ERROR("mod-teranode: unknown function '%s'", function);
         char errmsg[256];
         snprintf(errmsg, sizeof(errmsg), "unknown function: %s", function);
-        // Use strdup since errmsg is on stack
-        as_result_setfailure(res, (as_val*)as_string_new(strdup(errmsg), true));
-        return -1;
+        char* msg_copy = strdup(errmsg);
+        if (msg_copy != NULL) {
+            as_string* s = as_string_new(msg_copy, true);
+            if (s != NULL) {
+                as_result_setfailure(res, (as_val*)s);
+            } else {
+                free(msg_copy);
+                as_result_setfailure(res, (as_val*)as_string_new("unknown function", false));
+            }
+        } else {
+            as_result_setfailure(res, (as_val*)as_string_new("unknown function", false));
+        }
+        goto done;
     }
 
-    // Execute the function
-    as_val* result = fn(rec, args);
+    // Execute the function - pass ctx->as so functions can call aerospike:update(rec)
+    // like the Lua script does, committing changes inside each function on success
+    as_aerospike* as_ctx = (ctx != NULL) ? ctx->as : NULL;
+    as_val* result = fn(rec, args, as_ctx);
 
     if (result == NULL) {
         LOG_ERROR("mod-teranode: function '%s' returned NULL", function);
         as_result_setfailure(res, (as_val*)as_string_new("function returned NULL", false));
-        return -1;
-    }
-
-    // Check if the result indicates an error - don't commit changes on error
-    // The result is a map with a "status" field that is either "OK" or "ERROR"
-    bool is_error = false;
-    if (as_val_type(result) == AS_MAP) {
-        as_map* result_map = as_map_fromval(result);
-        if (result_map != NULL) {
-            as_string status_key;
-            as_string_init(&status_key, "status", false);
-            as_val* status_val = as_map_get(result_map, (as_val*)&status_key);
-            if (status_val != NULL && as_val_type(status_val) == AS_STRING) {
-                const char* status_str = as_string_get(as_string_fromval(status_val));
-                if (status_str != NULL && strcmp(status_str, "ERROR") == 0) {
-                    is_error = true;
-                }
-            }
-        }
-    }
-
-    // Commit record changes - equivalent to Lua's aerospike:update(rec)
-    // This is required to persist any bin modifications made by the function
-    // Only call update if:
-    // 1. The function did not return an error - don't persist changes on error
-    // 2. The record exists (has bins) - otherwise there's nothing to update
-    // 3. There are dirty (modified) cached values to write
-    if (!is_error && ctx != NULL && ctx->as != NULL && rec != NULL && as_rec_numbins(rec) > 0) {
-        // Check if any cached values are dirty (modified)
-        udf_record* urecord = (udf_record*)as_rec_source(rec);
-        bool has_dirty = false;
-        if (urecord != NULL) {
-            for (uint32_t i = 0; i < urecord->n_updates; i++) {
-                if (urecord->updates[i].dirty) {
-                    has_dirty = true;
-                    break;
-                }
-            }
-        }
-
-        // Only call update if there are dirty changes to persist
-        if (has_dirty) {
-            int update_rc = as_aerospike_rec_update(ctx->as, rec);
-            if (update_rc != 0) {
-                LOG_ERROR("mod-teranode: as_aerospike_rec_update failed with rc=%d", update_rc);
-                // Don't fail the whole operation - the function result may still be valid
-                // (e.g., returning an error response about the record state)
-            }
-        }
+        goto done;
     }
 
     // Set success result
+    // Note: Record updates are now handled inside each function (like Lua script)
     as_result_setsuccess(res, result);
-    return 0;
+    rc = 0;
+
+done:
+    // Compensate for the unconditional as_val_reserve(urec) in udf.c
+    // (transaction/udf.c:900). That reserve exists for Lua's garbage collector
+    // which calls as_val_destroy via __gc when it collects the record userdata.
+    // Native modules have no GC, so without this the as_rec leaks on every call.
+    //
+    // The proper fix is to make the reserve in udf.c conditional on the module
+    // type. This workaround is safe: it decrements the refcount from 2 to 1 here,
+    // then udf_master_done/failed decrements from 1 to 0 and frees.
+    as_val_destroy((as_val*)rec);
+
+    return rc;
 }

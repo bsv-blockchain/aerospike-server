@@ -74,22 +74,16 @@ TEST(is_frozen_true)
 {
     uint8_t frozen[SPENDING_DATA_SIZE];
     memset(frozen, FROZEN_BYTE, SPENDING_DATA_SIZE);
-    as_bytes* spending_data = as_bytes_new_wrap(frozen, SPENDING_DATA_SIZE, false);
 
-    ASSERT_TRUE(utxo_is_frozen(spending_data));
-
-    as_bytes_destroy(spending_data);
+    ASSERT_TRUE(utxo_is_frozen(frozen));
 }
 
 TEST(is_frozen_false)
 {
     uint8_t not_frozen[SPENDING_DATA_SIZE];
     memset(not_frozen, 0, SPENDING_DATA_SIZE);
-    as_bytes* spending_data = as_bytes_new_wrap(not_frozen, SPENDING_DATA_SIZE, false);
 
-    ASSERT_FALSE(utxo_is_frozen(spending_data));
-
-    as_bytes_destroy(spending_data);
+    ASSERT_FALSE(utxo_is_frozen(not_frozen));
 }
 
 TEST(is_frozen_partial)
@@ -97,27 +91,13 @@ TEST(is_frozen_partial)
     uint8_t partial[SPENDING_DATA_SIZE];
     memset(partial, FROZEN_BYTE, SPENDING_DATA_SIZE);
     partial[10] = 0;  // One byte different
-    as_bytes* spending_data = as_bytes_new_wrap(partial, SPENDING_DATA_SIZE, false);
 
-    ASSERT_FALSE(utxo_is_frozen(spending_data));
-
-    as_bytes_destroy(spending_data);
+    ASSERT_FALSE(utxo_is_frozen(partial));
 }
 
 TEST(is_frozen_null)
 {
     ASSERT_FALSE(utxo_is_frozen(NULL));
-}
-
-TEST(is_frozen_wrong_size)
-{
-    uint8_t data[10];
-    memset(data, FROZEN_BYTE, 10);
-    as_bytes* spending_data = as_bytes_new_wrap(data, 10, false);
-
-    ASSERT_FALSE(utxo_is_frozen(spending_data));
-
-    as_bytes_destroy(spending_data);
 }
 
 TEST(create_utxo_unspent)
@@ -225,8 +205,7 @@ TEST(spending_data_to_hex)
     spending[34] = 0x22;
     spending[35] = 0x23;
 
-    as_bytes* spending_data = as_bytes_new_wrap(spending, SPENDING_DATA_SIZE, false);
-    as_string* hex = utxo_spending_data_to_hex(spending_data);
+    as_string* hex = utxo_spending_data_to_hex(spending);
 
     ASSERT_NOT_NULL(hex);
 
@@ -239,7 +218,6 @@ TEST(spending_data_to_hex)
     // Last 4 bytes should be as-is: 20212223
     ASSERT_TRUE(strncmp(hex_str + 64, "20212223", 8) == 0);
 
-    as_bytes_destroy(spending_data);
     as_string_destroy(hex);
 }
 
@@ -256,7 +234,7 @@ TEST(get_and_validate_success)
 
     // Validate it
     as_bytes* out_utxo = NULL;
-    as_bytes* out_spending = NULL;
+    const uint8_t* out_spending = NULL;
     as_map* error = NULL;
 
     int rc = utxo_get_and_validate((as_list*)utxos, 0, hash, &out_utxo, &out_spending, &error);
@@ -287,7 +265,7 @@ TEST(get_and_validate_hash_mismatch)
     as_bytes* wrong = as_bytes_new_wrap(wrong_hash, UTXO_HASH_SIZE, false);
 
     as_bytes* out_utxo = NULL;
-    as_bytes* out_spending = NULL;
+    const uint8_t* out_spending = NULL;
     as_map* error = NULL;
 
     int rc = utxo_get_and_validate((as_list*)utxos, 0, wrong, &out_utxo, &out_spending, &error);
@@ -313,7 +291,7 @@ TEST(get_and_validate_not_found)
     as_bytes* hash = as_bytes_new_wrap(hash_data, UTXO_HASH_SIZE, false);
 
     as_bytes* out_utxo = NULL;
-    as_bytes* out_spending = NULL;
+    const uint8_t* out_spending = NULL;
     as_map* error = NULL;
 
     // Try to get UTXO at offset 5 (doesn't exist)
@@ -346,7 +324,7 @@ TEST(get_and_validate_with_spending_data)
     as_arraylist_append(utxos, (as_val*)utxo);
 
     as_bytes* out_utxo = NULL;
-    as_bytes* out_spending = NULL;
+    const uint8_t* out_spending = NULL;
     as_map* error = NULL;
 
     int rc = utxo_get_and_validate((as_list*)utxos, 0, hash, &out_utxo, &out_spending, &error);
@@ -355,12 +333,11 @@ TEST(get_and_validate_with_spending_data)
     ASSERT_NOT_NULL(out_utxo);
     ASSERT_NOT_NULL(out_spending);
     ASSERT_NULL(error);
-    ASSERT_EQ(as_bytes_size(out_spending), SPENDING_DATA_SIZE);
-    ASSERT_BYTES_EQ(as_bytes_get(out_spending), spending, SPENDING_DATA_SIZE);
+    ASSERT_BYTES_EQ(out_spending, spending, SPENDING_DATA_SIZE);
 
     as_bytes_destroy(hash);
     as_bytes_destroy(spending_data);
-    as_bytes_destroy(out_spending);
+    // No destroy needed for out_spending - it points into existing UTXO bytes
     as_arraylist_destroy(utxos);
 }
 
@@ -378,7 +355,6 @@ void run_helper_tests(void)
     RUN_TEST(is_frozen_false);
     RUN_TEST(is_frozen_partial);
     RUN_TEST(is_frozen_null);
-    RUN_TEST(is_frozen_wrong_size);
 
     RUN_TEST(create_utxo_unspent);
     RUN_TEST(create_utxo_spent);
