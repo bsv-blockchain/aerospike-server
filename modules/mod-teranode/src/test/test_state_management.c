@@ -18,6 +18,7 @@
 TEST(setMined_add_block)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     int64_t block_id = 12345;
@@ -31,7 +32,7 @@ TEST(setMined_add_block)
     as_arraylist_append(args, (as_val*)as_boolean_new(true));   // onLongestChain
     as_arraylist_append(args, (as_val*)as_boolean_new(false));  // unsetMined
 
-    as_val* result = teranode_set_mined(rec, (as_list*)args);
+    as_val* result = teranode_set_mined(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -61,12 +62,14 @@ TEST(setMined_add_block)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(setMined_remove_block)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     int64_t block_id = 54321;
@@ -81,7 +84,7 @@ TEST(setMined_remove_block)
     as_arraylist_append(args1, (as_val*)as_boolean_new(true));
     as_arraylist_append(args1, (as_val*)as_boolean_new(false));  // unsetMined = false
 
-    as_val* result1 = teranode_set_mined(rec, (as_list*)args1);
+    as_val* result1 = teranode_set_mined(rec, (as_list*)args1, as_ctx);
     as_val_destroy(result1);
 
     // Now remove it
@@ -94,7 +97,7 @@ TEST(setMined_remove_block)
     as_arraylist_append(args2, (as_val*)as_boolean_new(true));
     as_arraylist_append(args2, (as_val*)as_boolean_new(true));   // unsetMined = true
 
-    as_val* result2 = teranode_set_mined(rec, (as_list*)args2);
+    as_val* result2 = teranode_set_mined(rec, (as_list*)args2, as_ctx);
     as_map* result_map = as_map_fromval(result2);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -108,12 +111,14 @@ TEST(setMined_remove_block)
     as_arraylist_destroy(args1);
     as_arraylist_destroy(args2);
     as_val_destroy(result2);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(setMined_clears_locked)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "locked", (as_val*)as_boolean_new(true));
 
@@ -128,7 +133,7 @@ TEST(setMined_clears_locked)
     as_arraylist_append(args, (as_val*)as_boolean_new(true));
     as_arraylist_append(args, (as_val*)as_boolean_new(false));
 
-    as_val* result = teranode_set_mined(rec, (as_list*)args);
+    as_val* result = teranode_set_mined(rec, (as_list*)args, as_ctx);
     as_val_destroy(result);
 
     // Verify locked is now false
@@ -136,12 +141,14 @@ TEST(setMined_clears_locked)
     ASSERT_FALSE(as_boolean_get(as_boolean_fromval(locked_val)));
 
     as_arraylist_destroy(args);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(setMined_clears_creating)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "creating", (as_val*)as_boolean_new(true));
 
@@ -156,7 +163,7 @@ TEST(setMined_clears_creating)
     as_arraylist_append(args, (as_val*)as_boolean_new(true));
     as_arraylist_append(args, (as_val*)as_boolean_new(false));
 
-    as_val* result = teranode_set_mined(rec, (as_list*)args);
+    as_val* result = teranode_set_mined(rec, (as_list*)args, as_ctx);
     as_val_destroy(result);
 
     // Verify creating is nil
@@ -164,6 +171,7 @@ TEST(setMined_clears_creating)
     ASSERT_TRUE(creating_val == NULL || as_val_type(creating_val) == AS_NIL);
 
     as_arraylist_destroy(args);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
@@ -174,6 +182,7 @@ TEST(setMined_clears_creating)
 TEST(setConflicting_set_true)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     as_arraylist* args = as_arraylist_new(3, 0);
@@ -181,7 +190,7 @@ TEST(setConflicting_set_true)
     as_arraylist_append_int64(args, 1000);  // currentBlockHeight
     as_arraylist_append_int64(args, 100);   // blockHeightRetention
 
-    as_val* result = teranode_set_conflicting(rec, (as_list*)args);
+    as_val* result = teranode_set_conflicting(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -193,12 +202,14 @@ TEST(setConflicting_set_true)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(setConflicting_set_false)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "conflicting", (as_val*)as_boolean_new(true));
 
@@ -207,7 +218,7 @@ TEST(setConflicting_set_false)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_set_conflicting(rec, (as_list*)args);
+    as_val* result = teranode_set_conflicting(rec, (as_list*)args, as_ctx);
     as_val_destroy(result);
 
     // Verify conflicting flag is false
@@ -215,6 +226,7 @@ TEST(setConflicting_set_false)
     ASSERT_FALSE(as_boolean_get(as_boolean_fromval(conflicting_val)));
 
     as_arraylist_destroy(args);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
@@ -225,12 +237,13 @@ TEST(setConflicting_set_false)
 TEST(setLocked_lock)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     as_arraylist* args = as_arraylist_new(1, 0);
     as_arraylist_append(args, (as_val*)as_boolean_new(true));
 
-    as_val* result = teranode_set_locked(rec, (as_list*)args);
+    as_val* result = teranode_set_locked(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -242,19 +255,21 @@ TEST(setLocked_lock)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(setLocked_clears_delete_at_height)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "deleteAtHeight", (as_val*)as_integer_new(5000));
 
     as_arraylist* args = as_arraylist_new(1, 0);
     as_arraylist_append(args, (as_val*)as_boolean_new(true));  // Lock it
 
-    as_val* result = teranode_set_locked(rec, (as_list*)args);
+    as_val* result = teranode_set_locked(rec, (as_list*)args, as_ctx);
     as_val_destroy(result);
 
     // Verify deleteAtHeight is cleared
@@ -262,6 +277,7 @@ TEST(setLocked_clears_delete_at_height)
     ASSERT_TRUE(dah_val == NULL || as_val_type(dah_val) == AS_NIL);
 
     as_arraylist_destroy(args);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
@@ -272,13 +288,14 @@ TEST(setLocked_clears_delete_at_height)
 TEST(preserveUntil_success)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "deleteAtHeight", (as_val*)as_integer_new(5000));
 
     as_arraylist* args = as_arraylist_new(1, 0);
     as_arraylist_append_int64(args, 10000);  // preserveUntil = 10000
 
-    as_val* result = teranode_preserve_until(rec, (as_list*)args);
+    as_val* result = teranode_preserve_until(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -294,19 +311,21 @@ TEST(preserveUntil_success)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(preserveUntil_with_external)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "external", (as_val*)as_boolean_new(true));
 
     as_arraylist* args = as_arraylist_new(1, 0);
     as_arraylist_append_int64(args, 10000);
 
-    as_val* result = teranode_preserve_until(rec, (as_list*)args);
+    as_val* result = teranode_preserve_until(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     // Should have PRESERVE signal
@@ -316,6 +335,7 @@ TEST(preserveUntil_with_external)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
@@ -326,6 +346,7 @@ TEST(preserveUntil_with_external)
 TEST(incrementSpentExtraRecs_increment)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "totalExtraRecs", (as_val*)as_integer_new(10));
     as_rec_set(rec, "spentExtraRecs", (as_val*)as_integer_new(3));
@@ -335,7 +356,7 @@ TEST(incrementSpentExtraRecs_increment)
     as_arraylist_append_int64(args, 1000);  // currentBlockHeight
     as_arraylist_append_int64(args, 100);   // blockHeightRetention
 
-    as_val* result = teranode_increment_spent_extra_recs(rec, (as_list*)args);
+    as_val* result = teranode_increment_spent_extra_recs(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -347,12 +368,14 @@ TEST(incrementSpentExtraRecs_increment)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(incrementSpentExtraRecs_decrement)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "totalExtraRecs", (as_val*)as_integer_new(10));
     as_rec_set(rec, "spentExtraRecs", (as_val*)as_integer_new(5));
@@ -362,7 +385,7 @@ TEST(incrementSpentExtraRecs_decrement)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_increment_spent_extra_recs(rec, (as_list*)args);
+    as_val* result = teranode_increment_spent_extra_recs(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -374,12 +397,14 @@ TEST(incrementSpentExtraRecs_decrement)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(incrementSpentExtraRecs_no_total)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     // Don't set totalExtraRecs
 
@@ -388,7 +413,7 @@ TEST(incrementSpentExtraRecs_no_total)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_increment_spent_extra_recs(rec, (as_list*)args);
+    as_val* result = teranode_increment_spent_extra_recs(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -396,12 +421,14 @@ TEST(incrementSpentExtraRecs_no_total)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(incrementSpentExtraRecs_negative_result)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "totalExtraRecs", (as_val*)as_integer_new(10));
     as_rec_set(rec, "spentExtraRecs", (as_val*)as_integer_new(2));
@@ -411,7 +438,7 @@ TEST(incrementSpentExtraRecs_negative_result)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_increment_spent_extra_recs(rec, (as_list*)args);
+    as_val* result = teranode_increment_spent_extra_recs(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -419,12 +446,14 @@ TEST(incrementSpentExtraRecs_negative_result)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(incrementSpentExtraRecs_exceeds_total)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "totalExtraRecs", (as_val*)as_integer_new(10));
     as_rec_set(rec, "spentExtraRecs", (as_val*)as_integer_new(8));
@@ -434,7 +463,7 @@ TEST(incrementSpentExtraRecs_exceeds_total)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_increment_spent_extra_recs(rec, (as_list*)args);
+    as_val* result = teranode_increment_spent_extra_recs(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -442,6 +471,7 @@ TEST(incrementSpentExtraRecs_exceeds_total)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
@@ -452,6 +482,7 @@ TEST(incrementSpentExtraRecs_exceeds_total)
 TEST(setDeleteAtHeight_all_spent_master)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     // Set up as master record with all UTXOs spent
@@ -470,7 +501,7 @@ TEST(setDeleteAtHeight_all_spent_master)
     as_arraylist_append_int64(args, 1000);  // currentBlockHeight
     as_arraylist_append_int64(args, 100);   // blockHeightRetention
 
-    as_val* result = teranode_set_delete_at_height(rec, (as_list*)args);
+    as_val* result = teranode_set_delete_at_height(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -482,12 +513,14 @@ TEST(setDeleteAtHeight_all_spent_master)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(setDeleteAtHeight_preserve_blocks)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "preserveUntil", (as_val*)as_integer_new(5000));
 
@@ -495,7 +528,7 @@ TEST(setDeleteAtHeight_preserve_blocks)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_set_delete_at_height(rec, (as_list*)args);
+    as_val* result = teranode_set_delete_at_height(rec, (as_list*)args, as_ctx);
     as_val_destroy(result);
 
     // Verify deleteAtHeight is NOT set (preserveUntil blocks it)
@@ -503,12 +536,14 @@ TEST(setDeleteAtHeight_preserve_blocks)
     ASSERT_TRUE(dah_val == NULL || as_val_type(dah_val) == AS_NIL);
 
     as_arraylist_destroy(args);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(setDeleteAtHeight_child_record_signal)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     // Child record (no totalExtraRecs)
@@ -519,7 +554,7 @@ TEST(setDeleteAtHeight_child_record_signal)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_set_delete_at_height(rec, (as_list*)args);
+    as_val* result = teranode_set_delete_at_height(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     // Should signal ALLSPENT (transition from NOTALLSPENT)
@@ -529,6 +564,7 @@ TEST(setDeleteAtHeight_child_record_signal)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
@@ -539,6 +575,7 @@ TEST(setDeleteAtHeight_child_record_signal)
 TEST(setMined_tx_not_found)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     // Don't initialize anything
 
     int64_t block_id = 66666;
@@ -552,7 +589,7 @@ TEST(setMined_tx_not_found)
     as_arraylist_append(args, (as_val*)as_boolean_new(true));
     as_arraylist_append(args, (as_val*)as_boolean_new(false));
 
-    as_val* result = teranode_set_mined(rec, (as_list*)args);
+    as_val* result = teranode_set_mined(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -560,12 +597,14 @@ TEST(setMined_tx_not_found)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(setConflicting_tx_not_found)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     // Don't initialize anything
 
     as_arraylist* args = as_arraylist_new(3, 0);
@@ -573,7 +612,7 @@ TEST(setConflicting_tx_not_found)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_set_conflicting(rec, (as_list*)args);
+    as_val* result = teranode_set_conflicting(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -581,18 +620,20 @@ TEST(setConflicting_tx_not_found)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(setLocked_tx_not_found)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     // Don't initialize anything
 
     as_arraylist* args = as_arraylist_new(1, 0);
     as_arraylist_append(args, (as_val*)as_boolean_new(true));
 
-    as_val* result = teranode_set_locked(rec, (as_list*)args);
+    as_val* result = teranode_set_locked(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -600,18 +641,20 @@ TEST(setLocked_tx_not_found)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(preserveUntil_tx_not_found)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     // Don't initialize anything
 
     as_arraylist* args = as_arraylist_new(1, 0);
     as_arraylist_append_int64(args, 10000);
 
-    as_val* result = teranode_preserve_until(rec, (as_list*)args);
+    as_val* result = teranode_preserve_until(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -619,12 +662,14 @@ TEST(preserveUntil_tx_not_found)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(incrementSpentExtraRecs_tx_not_found)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     // Don't initialize anything
 
     as_arraylist* args = as_arraylist_new(3, 0);
@@ -632,7 +677,7 @@ TEST(incrementSpentExtraRecs_tx_not_found)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_increment_spent_extra_recs(rec, (as_list*)args);
+    as_val* result = teranode_increment_spent_extra_recs(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -640,6 +685,7 @@ TEST(incrementSpentExtraRecs_tx_not_found)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
@@ -682,6 +728,7 @@ void run_state_management_tests(void)
 TEST(setMined_ownership_after_args_and_result_destroy)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     int64_t block_id = 55555;
@@ -695,7 +742,7 @@ TEST(setMined_ownership_after_args_and_result_destroy)
     as_arraylist_append(args, (as_val*)as_boolean_new(true));   // onLongestChain
     as_arraylist_append(args, (as_val*)as_boolean_new(false));  // unsetMined = false
 
-    as_val* result = teranode_set_mined(rec, (as_list*)args);
+    as_val* result = teranode_set_mined(rec, (as_list*)args, as_ctx);
     as_val_destroy(result);
     as_arraylist_destroy(args);
 
@@ -707,6 +754,7 @@ TEST(setMined_ownership_after_args_and_result_destroy)
     as_integer* stored = as_integer_fromval(as_list_get(block_ids, 0));
     ASSERT_EQ(as_integer_get(stored), block_id);
 
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 

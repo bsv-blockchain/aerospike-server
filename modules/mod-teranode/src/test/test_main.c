@@ -16,6 +16,7 @@ extern void run_freeze_tests(void);
 extern void run_state_management_tests(void);
 extern void run_additional_spend_tests(void);
 extern void run_additional_state_management_tests(void);
+extern void run_comprehensive_tests(void);
 
 int main(void)
 {
@@ -33,6 +34,7 @@ int main(void)
     run_state_management_tests();
     run_additional_spend_tests();
     run_additional_state_management_tests();
+    run_comprehensive_tests();
 
     TEST_SUMMARY();
 

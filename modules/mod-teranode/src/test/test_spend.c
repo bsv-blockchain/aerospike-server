@@ -19,6 +19,7 @@
 TEST(spend_success)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     // Get the UTXO hash we want to spend
@@ -43,7 +44,7 @@ TEST(spend_success)
     as_arraylist_append_int64(args, 100);   // blockHeightRetention
 
     // Call spend
-    as_val* result = teranode_spend(rec, (as_list*)args);
+    as_val* result = teranode_spend(rec, (as_list*)args, as_ctx);
 
     ASSERT_NOT_NULL(result);
     as_map* result_map = as_map_fromval(result);
@@ -58,12 +59,14 @@ TEST(spend_success)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(spend_utxos_not_found)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     // Create record with some bins but no utxos bin
     as_rec_set(rec, "someOtherBin", (as_val*)as_integer_new(42));
 
@@ -81,7 +84,7 @@ TEST(spend_utxos_not_found)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_spend(rec, (as_list*)args);
+    as_val* result = teranode_spend(rec, (as_list*)args, as_ctx);
     ASSERT_NOT_NULL(result);
     as_map* result_map = as_map_fromval(result);
     ASSERT_NOT_NULL(result_map);
@@ -94,12 +97,14 @@ TEST(spend_utxos_not_found)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(spend_locked)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "locked", (as_val*)as_boolean_new(true));
 
@@ -121,7 +126,7 @@ TEST(spend_locked)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_spend(rec, (as_list*)args);
+    as_val* result = teranode_spend(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -132,12 +137,14 @@ TEST(spend_locked)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(spend_conflicting)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "conflicting", (as_val*)as_boolean_new(true));
 
@@ -159,7 +166,7 @@ TEST(spend_conflicting)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_spend(rec, (as_list*)args);
+    as_val* result = teranode_spend(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -167,12 +174,14 @@ TEST(spend_conflicting)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(spend_creating)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "creating", (as_val*)as_boolean_new(true));
 
@@ -194,7 +203,7 @@ TEST(spend_creating)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_spend(rec, (as_list*)args);
+    as_val* result = teranode_spend(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -202,12 +211,14 @@ TEST(spend_creating)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(spend_ignore_locked)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "locked", (as_val*)as_boolean_new(true));
 
@@ -229,7 +240,7 @@ TEST(spend_ignore_locked)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_spend(rec, (as_list*)args);
+    as_val* result = teranode_spend(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -237,12 +248,14 @@ TEST(spend_ignore_locked)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(spend_coinbase_immature)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
     as_rec_set(rec, "spendingHeight", (as_val*)as_integer_new(2000));  // Can't spend until 2000
 
@@ -264,7 +277,7 @@ TEST(spend_coinbase_immature)
     as_arraylist_append_int64(args, 1000);  // Current height = 1000 (< 2000)
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_spend(rec, (as_list*)args);
+    as_val* result = teranode_spend(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -272,12 +285,14 @@ TEST(spend_coinbase_immature)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(spend_already_spent_same_data)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     as_val* utxos_val = as_rec_get(rec, "utxos");
@@ -299,7 +314,7 @@ TEST(spend_already_spent_same_data)
     as_arraylist_append_int64(args1, 1000);
     as_arraylist_append_int64(args1, 100);
 
-    as_val* result1 = teranode_spend(rec, (as_list*)args1);
+    as_val* result1 = teranode_spend(rec, (as_list*)args1, as_ctx);
     as_map* result_map1 = as_map_fromval(result1);
     as_val* status1 = as_map_get(result_map1, (as_val*)as_string_new((char*)"status", false));
     ASSERT_STR_EQ(as_string_get(as_string_fromval(status1)), "OK");
@@ -314,7 +329,7 @@ TEST(spend_already_spent_same_data)
     as_arraylist_append_int64(args2, 1000);
     as_arraylist_append_int64(args2, 100);
 
-    as_val* result2 = teranode_spend(rec, (as_list*)args2);
+    as_val* result2 = teranode_spend(rec, (as_list*)args2, as_ctx);
     as_map* result_map2 = as_map_fromval(result2);
     as_val* status2 = as_map_get(result_map2, (as_val*)as_string_new((char*)"status", false));
     ASSERT_STR_EQ(as_string_get(as_string_fromval(status2)), "OK");
@@ -323,12 +338,14 @@ TEST(spend_already_spent_same_data)
     as_arraylist_destroy(args2);
     as_val_destroy(result1);
     as_val_destroy(result2);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(spend_already_spent_different_data)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     as_val* utxos_val = as_rec_get(rec, "utxos");
@@ -352,7 +369,7 @@ TEST(spend_already_spent_different_data)
     as_arraylist_append_int64(args1, 1000);
     as_arraylist_append_int64(args1, 100);
 
-    as_val* result1 = teranode_spend(rec, (as_list*)args1);
+    as_val* result1 = teranode_spend(rec, (as_list*)args1, as_ctx);
     as_map* result_map1 = as_map_fromval(result1);
     as_val* status1 = as_map_get(result_map1, (as_val*)as_string_new((char*)"status", false));
     ASSERT_STR_EQ(as_string_get(as_string_fromval(status1)), "OK");
@@ -367,7 +384,7 @@ TEST(spend_already_spent_different_data)
     as_arraylist_append_int64(args2, 1000);
     as_arraylist_append_int64(args2, 100);
 
-    as_val* result2 = teranode_spend(rec, (as_list*)args2);
+    as_val* result2 = teranode_spend(rec, (as_list*)args2, as_ctx);
     as_map* result_map2 = as_map_fromval(result2);
 
     as_val* status2 = as_map_get(result_map2, (as_val*)as_string_new((char*)"status", false));
@@ -381,6 +398,7 @@ TEST(spend_already_spent_different_data)
     as_arraylist_destroy(args2);
     as_val_destroy(result1);
     as_val_destroy(result2);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
@@ -391,6 +409,7 @@ TEST(spend_already_spent_different_data)
 TEST(unspend_success)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     // First spend a UTXO
@@ -412,7 +431,7 @@ TEST(unspend_success)
     as_arraylist_append_int64(spend_args, 1000);
     as_arraylist_append_int64(spend_args, 100);
 
-    as_val* spend_result = teranode_spend(rec, (as_list*)spend_args);
+    as_val* spend_result = teranode_spend(rec, (as_list*)spend_args, as_ctx);
     as_val_destroy(spend_result);
 
     // Now unspend
@@ -422,7 +441,7 @@ TEST(unspend_success)
     as_arraylist_append_int64(unspend_args, 1000);
     as_arraylist_append_int64(unspend_args, 100);
 
-    as_val* result = teranode_unspend(rec, (as_list*)unspend_args);
+    as_val* result = teranode_unspend(rec, (as_list*)unspend_args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -435,12 +454,14 @@ TEST(unspend_success)
     as_arraylist_destroy(spend_args);
     as_arraylist_destroy(unspend_args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(unspend_frozen)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     as_val* utxos_val = as_rec_get(rec, "utxos");
@@ -454,7 +475,7 @@ TEST(unspend_frozen)
     as_arraylist_append_int64(freeze_args, 0);
     as_arraylist_append(freeze_args, (as_val*)as_bytes_new_wrap(hash0, UTXO_HASH_SIZE, false));
 
-    as_val* freeze_result = teranode_freeze(rec, (as_list*)freeze_args);
+    as_val* freeze_result = teranode_freeze(rec, (as_list*)freeze_args, as_ctx);
     as_val_destroy(freeze_result);
 
     // Try to unspend frozen UTXO - should fail
@@ -464,7 +485,7 @@ TEST(unspend_frozen)
     as_arraylist_append_int64(unspend_args, 1000);
     as_arraylist_append_int64(unspend_args, 100);
 
-    as_val* result = teranode_unspend(rec, (as_list*)unspend_args);
+    as_val* result = teranode_unspend(rec, (as_list*)unspend_args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -473,6 +494,7 @@ TEST(unspend_frozen)
     as_arraylist_destroy(freeze_args);
     as_arraylist_destroy(unspend_args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
@@ -484,6 +506,7 @@ TEST(spend_tx_not_found)
 {
     // Empty record (no bins) should return TX_NOT_FOUND
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     // Don't initialize anything - record has no bins
 
     uint8_t hash[UTXO_HASH_SIZE];
@@ -500,7 +523,7 @@ TEST(spend_tx_not_found)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_spend(rec, (as_list*)args);
+    as_val* result = teranode_spend(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -511,12 +534,14 @@ TEST(spend_tx_not_found)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(unspend_tx_not_found)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     // Don't initialize anything
 
     uint8_t hash[UTXO_HASH_SIZE];
@@ -528,7 +553,7 @@ TEST(unspend_tx_not_found)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_unspend(rec, (as_list*)args);
+    as_val* result = teranode_unspend(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -536,6 +561,7 @@ TEST(unspend_tx_not_found)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
@@ -546,6 +572,7 @@ TEST(unspend_tx_not_found)
 TEST(spend_deleted_child_tx)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     as_val* utxos_val = as_rec_get(rec, "utxos");
@@ -568,7 +595,7 @@ TEST(spend_deleted_child_tx)
     as_arraylist_append_int64(args1, 1000);
     as_arraylist_append_int64(args1, 100);
 
-    as_val* result1 = teranode_spend(rec, (as_list*)args1);
+    as_val* result1 = teranode_spend(rec, (as_list*)args1, as_ctx);
     as_map* result_map1 = as_map_fromval(result1);
     as_val* status1 = as_map_get(result_map1, (as_val*)as_string_new((char*)"status", false));
     ASSERT_STR_EQ(as_string_get(as_string_fromval(status1)), "OK");
@@ -598,7 +625,7 @@ TEST(spend_deleted_child_tx)
     as_arraylist_append_int64(args2, 1000);
     as_arraylist_append_int64(args2, 100);
 
-    as_val* result2 = teranode_spend(rec, (as_list*)args2);
+    as_val* result2 = teranode_spend(rec, (as_list*)args2, as_ctx);
     as_map* result_map2 = as_map_fromval(result2);
 
     as_val* status2 = as_map_get(result_map2, (as_val*)as_string_new((char*)"status", false));
@@ -621,6 +648,7 @@ TEST(spend_deleted_child_tx)
     as_arraylist_destroy(args1);
     as_arraylist_destroy(args2);
     as_val_destroy(result2);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
@@ -652,6 +680,7 @@ void run_spend_tests(void)
 TEST(spend_args_destroy_after_call_and_persist)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     // Prepare utxo hash and spending data
@@ -674,7 +703,7 @@ TEST(spend_args_destroy_after_call_and_persist)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_spend(rec, (as_list*)args);
+    as_val* result = teranode_spend(rec, (as_list*)args, as_ctx);
     // Destroy args and result to test ownership safety
     as_arraylist_destroy(args);
     as_val_destroy(result);
@@ -689,6 +718,7 @@ TEST(spend_args_destroy_after_call_and_persist)
     as_val* spent_val = as_rec_get(rec, "spentUtxos");
     ASSERT_EQ(as_integer_get(as_integer_fromval(spent_val)), 1);
 
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 

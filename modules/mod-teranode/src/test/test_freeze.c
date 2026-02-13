@@ -18,6 +18,7 @@
 TEST(freeze_success)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     as_val* utxos_val = as_rec_get(rec, "utxos");
@@ -30,7 +31,7 @@ TEST(freeze_success)
     as_arraylist_append_int64(args, 0);
     as_arraylist_append(args, (as_val*)as_bytes_new_wrap(hash0, UTXO_HASH_SIZE, false));
 
-    as_val* result = teranode_freeze(rec, (as_list*)args);
+    as_val* result = teranode_freeze(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -50,12 +51,14 @@ TEST(freeze_success)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(freeze_already_frozen)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     as_val* utxos_val = as_rec_get(rec, "utxos");
@@ -69,7 +72,7 @@ TEST(freeze_already_frozen)
     as_arraylist_append_int64(args1, 0);
     as_arraylist_append(args1, (as_val*)as_bytes_new_wrap(hash0, UTXO_HASH_SIZE, false));
 
-    as_val* result1 = teranode_freeze(rec, (as_list*)args1);
+    as_val* result1 = teranode_freeze(rec, (as_list*)args1, as_ctx);
     as_val_destroy(result1);
 
     // Try to freeze again - should fail
@@ -77,7 +80,7 @@ TEST(freeze_already_frozen)
     as_arraylist_append_int64(args2, 0);
     as_arraylist_append(args2, (as_val*)as_bytes_new_wrap(hash0, UTXO_HASH_SIZE, false));
 
-    as_val* result2 = teranode_freeze(rec, (as_list*)args2);
+    as_val* result2 = teranode_freeze(rec, (as_list*)args2, as_ctx);
     as_map* result_map = as_map_fromval(result2);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -86,12 +89,14 @@ TEST(freeze_already_frozen)
     as_arraylist_destroy(args1);
     as_arraylist_destroy(args2);
     as_val_destroy(result2);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(freeze_already_spent)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     as_val* utxos_val = as_rec_get(rec, "utxos");
@@ -113,7 +118,7 @@ TEST(freeze_already_spent)
     as_arraylist_append_int64(spend_args, 1000);
     as_arraylist_append_int64(spend_args, 100);
 
-    as_val* spend_result = teranode_spend(rec, (as_list*)spend_args);
+    as_val* spend_result = teranode_spend(rec, (as_list*)spend_args, as_ctx);
     as_val_destroy(spend_result);
 
     // Try to freeze spent UTXO - should fail
@@ -121,7 +126,7 @@ TEST(freeze_already_spent)
     as_arraylist_append_int64(freeze_args, 0);
     as_arraylist_append(freeze_args, (as_val*)as_bytes_new_wrap(hash0, UTXO_HASH_SIZE, false));
 
-    as_val* result = teranode_freeze(rec, (as_list*)freeze_args);
+    as_val* result = teranode_freeze(rec, (as_list*)freeze_args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -130,6 +135,7 @@ TEST(freeze_already_spent)
     as_arraylist_destroy(spend_args);
     as_arraylist_destroy(freeze_args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
@@ -140,6 +146,7 @@ TEST(freeze_already_spent)
 TEST(unfreeze_success)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     as_val* utxos_val = as_rec_get(rec, "utxos");
@@ -153,7 +160,7 @@ TEST(unfreeze_success)
     as_arraylist_append_int64(freeze_args, 0);
     as_arraylist_append(freeze_args, (as_val*)as_bytes_new_wrap(hash0, UTXO_HASH_SIZE, false));
 
-    as_val* freeze_result = teranode_freeze(rec, (as_list*)freeze_args);
+    as_val* freeze_result = teranode_freeze(rec, (as_list*)freeze_args, as_ctx);
     as_val_destroy(freeze_result);
 
     // Now unfreeze
@@ -161,7 +168,7 @@ TEST(unfreeze_success)
     as_arraylist_append_int64(unfreeze_args, 0);
     as_arraylist_append(unfreeze_args, (as_val*)as_bytes_new_wrap(hash0, UTXO_HASH_SIZE, false));
 
-    as_val* result = teranode_unfreeze(rec, (as_list*)unfreeze_args);
+    as_val* result = teranode_unfreeze(rec, (as_list*)unfreeze_args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -176,12 +183,14 @@ TEST(unfreeze_success)
     as_arraylist_destroy(freeze_args);
     as_arraylist_destroy(unfreeze_args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(unfreeze_not_frozen)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     as_val* utxos_val = as_rec_get(rec, "utxos");
@@ -195,7 +204,7 @@ TEST(unfreeze_not_frozen)
     as_arraylist_append_int64(args, 0);
     as_arraylist_append(args, (as_val*)as_bytes_new_wrap(hash0, UTXO_HASH_SIZE, false));
 
-    as_val* result = teranode_unfreeze(rec, (as_list*)args);
+    as_val* result = teranode_unfreeze(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -203,6 +212,7 @@ TEST(unfreeze_not_frozen)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
@@ -213,6 +223,7 @@ TEST(unfreeze_not_frozen)
 TEST(reassign_success)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     as_val* utxos_val = as_rec_get(rec, "utxos");
@@ -226,7 +237,7 @@ TEST(reassign_success)
     as_arraylist_append_int64(freeze_args, 0);
     as_arraylist_append(freeze_args, (as_val*)as_bytes_new_wrap(hash0, UTXO_HASH_SIZE, false));
 
-    as_val* freeze_result = teranode_freeze(rec, (as_list*)freeze_args);
+    as_val* freeze_result = teranode_freeze(rec, (as_list*)freeze_args, as_ctx);
     as_val_destroy(freeze_result);
 
     // Create new hash
@@ -241,7 +252,7 @@ TEST(reassign_success)
     as_arraylist_append_int64(args, 1000);  // blockHeight
     as_arraylist_append_int64(args, 100);   // spendableAfter
 
-    as_val* result = teranode_reassign(rec, (as_list*)args);
+    as_val* result = teranode_reassign(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
@@ -268,12 +279,14 @@ TEST(reassign_success)
     as_arraylist_destroy(freeze_args);
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(reassign_not_frozen)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
 
     as_val* utxos_val = as_rec_get(rec, "utxos");
@@ -293,7 +306,7 @@ TEST(reassign_not_frozen)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_reassign(rec, (as_list*)args);
+    as_val* result = teranode_reassign(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -301,6 +314,7 @@ TEST(reassign_not_frozen)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
@@ -311,6 +325,7 @@ TEST(reassign_not_frozen)
 TEST(freeze_tx_not_found)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     // Don't initialize anything
 
     uint8_t hash[UTXO_HASH_SIZE];
@@ -320,7 +335,7 @@ TEST(freeze_tx_not_found)
     as_arraylist_append_int64(args, 0);
     as_arraylist_append(args, (as_val*)as_bytes_new_wrap(hash, UTXO_HASH_SIZE, false));
 
-    as_val* result = teranode_freeze(rec, (as_list*)args);
+    as_val* result = teranode_freeze(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -328,12 +343,14 @@ TEST(freeze_tx_not_found)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(unfreeze_tx_not_found)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     // Don't initialize anything
 
     uint8_t hash[UTXO_HASH_SIZE];
@@ -343,7 +360,7 @@ TEST(unfreeze_tx_not_found)
     as_arraylist_append_int64(args, 0);
     as_arraylist_append(args, (as_val*)as_bytes_new_wrap(hash, UTXO_HASH_SIZE, false));
 
-    as_val* result = teranode_unfreeze(rec, (as_list*)args);
+    as_val* result = teranode_unfreeze(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -351,12 +368,14 @@ TEST(unfreeze_tx_not_found)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 
 TEST(reassign_tx_not_found)
 {
     as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
     // Don't initialize anything
 
     uint8_t hash[UTXO_HASH_SIZE];
@@ -371,7 +390,7 @@ TEST(reassign_tx_not_found)
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
-    as_val* result = teranode_reassign(rec, (as_list*)args);
+    as_val* result = teranode_reassign(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
     as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
@@ -379,6 +398,7 @@ TEST(reassign_tx_not_found)
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
     mock_rec_destroy(rec);
 }
 

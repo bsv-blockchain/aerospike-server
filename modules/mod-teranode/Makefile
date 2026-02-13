@@ -41,6 +41,7 @@ TEST_SOURCES += src/test/test_helpers.c
 TEST_SOURCES += src/test/test_spend.c
 TEST_SOURCES += src/test/test_freeze.c
 TEST_SOURCES += src/test/test_state_management.c
+TEST_SOURCES += src/test/test_comprehensive.c
 TEST_SOURCES += src/test/mock_record.c
 
 # Object files
