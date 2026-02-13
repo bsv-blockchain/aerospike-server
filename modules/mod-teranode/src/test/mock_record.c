@@ -211,6 +211,61 @@ mock_rec_init_utxos(as_rec* rec, uint32_t num_utxos)
     as_rec_set(rec, "recordUtxos", (as_val*)as_integer_new(num_utxos));
 }
 
+//==========================================================
+// Mock aerospike context.
+//
+
+static int
+mock_as_rec_update(const as_aerospike* a, const as_rec* r)
+{
+    (void)a;
+    (void)r;
+    return 0;
+}
+
+static int
+mock_as_rec_create(const as_aerospike* a, const as_rec* r)
+{
+    (void)a;
+    (void)r;
+    return 0;
+}
+
+static int
+mock_as_rec_remove(const as_aerospike* a, const as_rec* r)
+{
+    (void)a;
+    (void)r;
+    return 0;
+}
+
+static const as_aerospike_hooks mock_aerospike_hooks = {
+    .rec_create  = mock_as_rec_create,
+    .rec_update  = mock_as_rec_update,
+    .rec_remove  = mock_as_rec_remove,
+    .rec_exists  = NULL,
+    .log         = NULL,
+    .get_current_time = NULL,
+};
+
+as_aerospike*
+mock_aerospike_new(void)
+{
+    as_aerospike* as_ctx = (as_aerospike*)malloc(sizeof(as_aerospike));
+    if (as_ctx == NULL) {
+        return NULL;
+    }
+    as_ctx->hooks = &mock_aerospike_hooks;
+    as_ctx->source = NULL;
+    return as_ctx;
+}
+
+void
+mock_aerospike_destroy(as_aerospike* as_ctx)
+{
+    free(as_ctx);
+}
+
 #ifdef __cplusplus
 }
 #endif

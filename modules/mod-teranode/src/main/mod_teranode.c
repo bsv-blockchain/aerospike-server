@@ -31,12 +31,6 @@
 // Function pointer type for UTXO functions
 typedef as_val* (*teranode_fn)(as_rec*, as_list*, as_aerospike*);
 
-// Function table entry
-typedef struct fn_entry_s {
-    const char* name;
-    teranode_fn fn;
-} fn_entry;
-
 //==========================================================
 // Forward declarations.
 //
@@ -59,22 +53,6 @@ static mod_teranode_config g_config;
 // Read-write lock for thread safety
 static pthread_rwlock_t g_lock = PTHREAD_RWLOCK_INITIALIZER;
 
-// Function dispatch table
-static fn_entry g_function_table[] = {
-    { "spend",                  teranode_spend },
-    { "spendMulti",             teranode_spend_multi },
-    { "unspend",                teranode_unspend },
-    { "setMined",               teranode_set_mined },
-    { "freeze",                 teranode_freeze },
-    { "unfreeze",               teranode_unfreeze },
-    { "reassign",               teranode_reassign },
-    { "setConflicting",         teranode_set_conflicting },
-    { "preserveUntil",          teranode_preserve_until },
-    { "setLocked",              teranode_set_locked },
-    { "incrementSpentExtraRecs", teranode_increment_spent_extra_recs },
-    { "setDeleteAtHeight",      teranode_set_delete_at_height },
-    { NULL, NULL }  // Sentinel
-};
 
 // Module hooks
 static const as_module_hooks mod_teranode_hooks = {
@@ -94,19 +72,26 @@ as_module mod_teranode = {
 //==========================================================
 // Public API - Locking.
 //
+// These mirror the mod_lua locking interface. A read lock is acquired
+// during UDF execution; a write lock is acquired when the module
+// configuration is updated.
+//
 
+/** Acquire a shared read lock on the module state. */
 void
 mod_teranode_rdlock(void)
 {
     pthread_rwlock_rdlock(&g_lock);
 }
 
+/** Acquire an exclusive write lock on the module state. */
 void
 mod_teranode_wrlock(void)
 {
     pthread_rwlock_wrlock(&g_lock);
 }
 
+/** Release the module state lock (read or write). */
 void
 mod_teranode_unlock(void)
 {
@@ -169,8 +154,18 @@ teranode_validate(as_module* m, as_aerospike* as,
 }
 
 /**
- * Apply a function to a record.
- * This is the main entry point for UDF execution.
+ * Apply a named function to a record — the main entry point for UDF execution.
+ *
+ * Resolves the function name to a teranode_fn pointer using first-character
+ * dispatch (switch on function[0], then strcmp within each group). This
+ * reduces average strcmp calls from ~6 to ~2 for the 12 registered functions.
+ *
+ * Groups: 's' (spend, spendMulti, setMined, setConflicting, setLocked,
+ * setDeleteAtHeight), 'u' (unspend, unfreeze), 'f' (freeze),
+ * 'i' (incrementSpentExtraRecs), 'p' (preserveUntil), 'r' (reassign).
+ *
+ * After execution, decrements the record refcount to compensate for the
+ * unconditional as_val_reserve in udf.c (see comment at label 'done').
  */
 static int
 teranode_apply_record(as_module* m, as_udf_context* ctx,
@@ -188,14 +183,39 @@ teranode_apply_record(as_module* m, as_udf_context* ctx,
         goto done;
     }
 
-    // Find function in dispatch table
+    // Find function via first-character dispatch.
+    // Reduces average strcmp calls from ~6 to ~2 for 12 entries.
     teranode_fn fn = NULL;
 
-    for (fn_entry* entry = g_function_table; entry->name != NULL; entry++) {
-        if (strcmp(entry->name, function) == 0) {
-            fn = entry->fn;
-            break;
-        }
+    switch (function[0]) {
+    case 's':
+        // spend, spendMulti, setMined, setConflicting, setLocked, setDeleteAtHeight
+        if (strcmp(function, "spend") == 0) fn = teranode_spend;
+        else if (strcmp(function, "spendMulti") == 0) fn = teranode_spend_multi;
+        else if (strcmp(function, "setMined") == 0) fn = teranode_set_mined;
+        else if (strcmp(function, "setConflicting") == 0) fn = teranode_set_conflicting;
+        else if (strcmp(function, "setLocked") == 0) fn = teranode_set_locked;
+        else if (strcmp(function, "setDeleteAtHeight") == 0) fn = teranode_set_delete_at_height;
+        break;
+    case 'u':
+        // unspend, unfreeze
+        if (strcmp(function, "unspend") == 0) fn = teranode_unspend;
+        else if (strcmp(function, "unfreeze") == 0) fn = teranode_unfreeze;
+        break;
+    case 'f':
+        if (strcmp(function, "freeze") == 0) fn = teranode_freeze;
+        break;
+    case 'i':
+        if (strcmp(function, "incrementSpentExtraRecs") == 0) fn = teranode_increment_spent_extra_recs;
+        break;
+    case 'p':
+        if (strcmp(function, "preserveUntil") == 0) fn = teranode_preserve_until;
+        break;
+    case 'r':
+        if (strcmp(function, "reassign") == 0) fn = teranode_reassign;
+        break;
+    default:
+        break;
     }
 
     if (fn == NULL) {
