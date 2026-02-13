@@ -82,23 +82,14 @@ utxo_bytes_equal(as_bytes* a, as_bytes* b)
 }
 
 bool
-utxo_is_frozen(as_bytes* spending_data)
+utxo_is_frozen(const uint8_t* spending_data)
 {
     if (spending_data == NULL) {
         return false;
     }
 
-    uint32_t size = as_bytes_size(spending_data);
-    if (size != SPENDING_DATA_SIZE) {
-        return false;
-    }
-
-    const uint8_t* data = as_bytes_get(spending_data);
-    if (data == NULL) {
-        return false;
-    }
     for (uint32_t i = 0; i < SPENDING_DATA_SIZE; i++) {
-        if (data[i] != FROZEN_BYTE) {
+        if (spending_data[i] != FROZEN_BYTE) {
             return false;
         }
     }
@@ -156,7 +147,7 @@ utxo_get_and_validate(
     int64_t offset,
     as_bytes* expected_hash,
     as_bytes** out_utxo,
-    as_bytes** out_spending_data,
+    const uint8_t** out_spending_data,
     as_map** out_error_response)
 {
     if (out_utxo == NULL || out_spending_data == NULL || out_error_response == NULL) {
@@ -241,51 +232,38 @@ utxo_get_and_validate(
 
     *out_utxo = utxo;
 
-    // Extract spending data if present
+    // Return pointer to spending data within existing UTXO bytes (no allocation)
     if (utxo_size == FULL_UTXO_SIZE) {
-        // Create a new bytes object for spending data
-        as_bytes* spending = as_bytes_new(SPENDING_DATA_SIZE);
-        if (spending == NULL) {
-            *out_error_response = utxo_create_error_response(
-                ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
-            return -1;
-        }
-        as_bytes_set(spending, 0, utxo_data + UTXO_HASH_SIZE, SPENDING_DATA_SIZE);
-        *out_spending_data = spending;
+        *out_spending_data = utxo_data + UTXO_HASH_SIZE;
     }
 
     return 0;
 }
 
 as_string*
-utxo_spending_data_to_hex(as_bytes* spending_data)
+utxo_spending_data_to_hex(const uint8_t* spending_data)
 {
-    if (spending_data == NULL || as_bytes_size(spending_data) != SPENDING_DATA_SIZE) {
+    if (spending_data == NULL) {
         return NULL;
     }
 
     // Output: 64 chars (32 bytes reversed) + 8 chars (4 bytes LE) + null
     char hex[73];
-    const uint8_t* data = as_bytes_get(spending_data);
-    if (data == NULL) {
-        return NULL;
-    }
 
     // First 32 bytes reversed (txID)
     int pos = 0;
     for (int i = 31; i >= 0; i--) {
-        sprintf(&hex[pos], "%02x", data[i]);
+        sprintf(&hex[pos], "%02x", spending_data[i]);
         pos += 2;
     }
 
     // Next 4 bytes as-is (vin in little-endian)
     for (int i = 32; i < 36; i++) {
-        sprintf(&hex[pos], "%02x", data[i]);
+        sprintf(&hex[pos], "%02x", spending_data[i]);
         pos += 2;
     }
 
     hex[72] = '\0';
-    // Use strdup to copy string to heap, true flag means as_string will free it
     char* hex_copy = strdup(hex);
     if (hex_copy == NULL) {
         return NULL;
@@ -300,28 +278,23 @@ utxo_spending_data_to_hex(as_bytes* spending_data)
 
 // Convert spending data to just txid hex (32 bytes reversed) - for deletedChildren check
 static as_string*
-utxo_spending_data_to_txid_hex(as_bytes* spending_data)
+utxo_spending_data_to_txid_hex(const uint8_t* spending_data)
 {
-    if (spending_data == NULL || as_bytes_size(spending_data) != SPENDING_DATA_SIZE) {
+    if (spending_data == NULL) {
         return NULL;
     }
 
     // Output: 64 chars (32 bytes reversed) + null
     char hex[65];
-    const uint8_t* data = as_bytes_get(spending_data);
-    if (data == NULL) {
-        return NULL;
-    }
 
     // First 32 bytes reversed (txID)
     int pos = 0;
     for (int i = 31; i >= 0; i--) {
-        sprintf(&hex[pos], "%02x", data[i]);
+        sprintf(&hex[pos], "%02x", spending_data[i]);
         pos += 2;
     }
 
     hex[64] = '\0';
-    // Use strdup to copy string to heap, true flag means as_string will free it
     char* hex_copy = strdup(hex);
     if (hex_copy == NULL) {
         return NULL;
@@ -552,8 +525,13 @@ utxo_set_delete_at_height_impl(
 //
 
 as_val*
-teranode_spend(as_rec* rec, as_list* args)
+teranode_spend(as_rec* rec, as_list* args, as_aerospike* as)
 {
+    // Check aerospike context
+    if (as == NULL) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
+    }
+
     // Check record exists
     if (rec == NULL || as_rec_numbins(rec) == 0) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
@@ -629,14 +607,19 @@ teranode_spend(as_rec* rec, as_list* args)
     as_arraylist_append_int64(multi_args, current_block_height);
     as_arraylist_append_int64(multi_args, block_height_retention);
 
-    as_val* result = teranode_spend_multi(rec, (as_list*)multi_args);
+    as_val* result = teranode_spend_multi(rec, (as_list*)multi_args, as);
     as_val_destroy((as_val*)multi_args);
     return result;
 }
 
 as_val*
-teranode_spend_multi(as_rec* rec, as_list* args)
+teranode_spend_multi(as_rec* rec, as_list* args, as_aerospike* as)
 {
+    // Check aerospike context
+    if (as == NULL) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
+    }
+
     // Check record exists
     if (rec == NULL || as_rec_numbins(rec) == 0) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
@@ -684,21 +667,10 @@ teranode_spend_multi(as_rec* rec, as_list* args)
     // Check locked
     if (!ignore_locked) {
         as_val* locked_val = as_rec_get(rec, BIN_LOCKED);
-        cf_info(AS_UDF, "LOCKED_DEBUG: ignore_locked=%d locked_val=%p", ignore_locked, (void*)locked_val);
-        if (locked_val != NULL) {
-            int val_type = as_val_type(locked_val);
-            cf_info(AS_UDF, "LOCKED_DEBUG: val_type=%d (AS_BOOLEAN=%d)", val_type, AS_BOOLEAN);
-            if (val_type == AS_BOOLEAN) {
-                as_boolean* bool_obj = as_boolean_fromval(locked_val);
-                cf_info(AS_UDF, "LOCKED_DEBUG: bool_obj=%p", (void*)bool_obj);
-                if (bool_obj != NULL) {
-                    bool bool_value = as_boolean_get(bool_obj);
-                    cf_info(AS_UDF, "LOCKED_DEBUG: bool_value=%d - WILL%s RETURN ERROR", bool_value, bool_value ? "" : " NOT");
-                    if (bool_value) {
-                        as_val_destroy((as_val*)response);
-                        return (as_val*)utxo_create_error_response(ERROR_CODE_LOCKED, MSG_LOCKED);
-                    }
-                }
+        if (locked_val != NULL && as_val_type(locked_val) == AS_BOOLEAN) {
+            if (as_boolean_get(as_boolean_fromval(locked_val))) {
+                as_val_destroy((as_val*)response);
+                return (as_val*)utxo_create_error_response(ERROR_CODE_LOCKED, MSG_LOCKED);
             }
         }
     }
@@ -760,41 +732,39 @@ teranode_spend_multi(as_rec* rec, as_list* args)
         as_map* spend_item = as_map_fromval(as_list_get(spends, i));
         if (spend_item == NULL) continue;
 
-        as_string* k_offset = as_string_new((char*)"offset", false);
-        as_val* v_offset = as_map_get(spend_item, (as_val*)k_offset);
+        // Use stack-allocated as_string keys to avoid heap alloc churn
+        as_string k_offset;
+        as_string_init(&k_offset, (char*)"offset", false);
+        as_val* v_offset = as_map_get(spend_item, (as_val*)&k_offset);
         if (v_offset == NULL || as_val_type(v_offset) != AS_INTEGER) {
-            as_val_destroy((as_val*)k_offset);
             continue;
         }
         int64_t offset = as_integer_get(as_integer_fromval(v_offset));
-        as_val_destroy((as_val*)k_offset);
 
-        as_string* k_utxo = as_string_new((char*)"utxoHash", false);
-        as_val* v_utxo = as_map_get(spend_item, (as_val*)k_utxo);
+        as_string k_utxo;
+        as_string_init(&k_utxo, (char*)"utxoHash", false);
+        as_val* v_utxo = as_map_get(spend_item, (as_val*)&k_utxo);
         if (v_utxo == NULL || as_val_type(v_utxo) != AS_BYTES) {
-            as_val_destroy((as_val*)k_utxo);
             continue;
         }
         as_bytes* utxo_hash = as_bytes_fromval(v_utxo);
-        as_val_destroy((as_val*)k_utxo);
 
-        as_string* k_sp = as_string_new((char*)"spendingData", false);
-        as_val* v_sp = as_map_get(spend_item, (as_val*)k_sp);
+        as_string k_sp;
+        as_string_init(&k_sp, (char*)"spendingData", false);
+        as_val* v_sp = as_map_get(spend_item, (as_val*)&k_sp);
         if (v_sp == NULL || as_val_type(v_sp) != AS_BYTES) {
-            as_val_destroy((as_val*)k_sp);
             continue;
         }
         as_bytes* spending_data = as_bytes_fromval(v_sp);
-        as_val_destroy((as_val*)k_sp);
 
-        as_string* k_idx = as_string_new((char*)"idx", false);
-        as_val* idx_val = as_map_get(spend_item, (as_val*)k_idx);
-        as_val_destroy((as_val*)k_idx);
+        as_string k_idx;
+        as_string_init(&k_idx, (char*)"idx", false);
+        as_val* idx_val = as_map_get(spend_item, (as_val*)&k_idx);
         int64_t idx = (idx_val != NULL && as_val_type(idx_val) == AS_INTEGER) ? as_integer_get(as_integer_fromval(idx_val)) : i;
 
         // Validate UTXO
         as_bytes* utxo = NULL;
-        as_bytes* existing_spending_data = NULL;
+        const uint8_t* existing_spending_data = NULL;
         as_map* error_response = NULL;
 
         if (utxo_get_and_validate(utxos, offset, utxo_hash, &utxo, &existing_spending_data, &error_response) != 0) {
@@ -857,7 +827,6 @@ teranode_spend_multi(as_rec* rec, as_list* args)
                         }
                     }
 
-                    if (existing_spending_data) as_bytes_destroy(existing_spending_data);
                     continue;
                 }
             }
@@ -865,7 +834,9 @@ teranode_spend_multi(as_rec* rec, as_list* args)
 
         // Handle already spent UTXO
         if (existing_spending_data != NULL) {
-            if (utxo_bytes_equal(existing_spending_data, spending_data)) {
+            const uint8_t* new_spending_ptr = as_bytes_get(spending_data);
+            if (new_spending_ptr != NULL &&
+                    memcmp(existing_spending_data, new_spending_ptr, SPENDING_DATA_SIZE) == 0) {
                 // Already spent with same data - check if child tx was deleted
                 if (deleted_children != NULL) {
                     // Check whether this child tx (by txid) exists in the deletedChildren map
@@ -909,13 +880,11 @@ teranode_spend_multi(as_rec* rec, as_list* args)
                                 }
                             }
                             as_string_destroy(child_txid);
-                            as_bytes_destroy(existing_spending_data);
                             continue;
                         }
                         as_string_destroy(child_txid);
                     }
                 }
-                as_bytes_destroy(existing_spending_data);
                 continue;
             } else if (utxo_is_frozen(existing_spending_data)) {
                 as_hashmap* err = as_hashmap_new(2);
@@ -941,7 +910,6 @@ teranode_spend_multi(as_rec* rec, as_list* args)
                         }
                     }
                 }
-                as_bytes_destroy(existing_spending_data);
                 continue;
             } else {
                 // Spent by different transaction
@@ -979,7 +947,6 @@ teranode_spend_multi(as_rec* rec, as_list* args)
                         }
                     }
                 }
-                as_bytes_destroy(existing_spending_data);
                 continue;
             }
         }
@@ -997,7 +964,6 @@ teranode_spend_multi(as_rec* rec, as_list* args)
                     (as_val*)as_string_new((char*)"Memory allocation failed", false));
                 as_hashmap_set(errors, (as_val*)as_integer_new(idx), (as_val*)err);
             }
-            if (existing_spending_data) as_bytes_destroy(existing_spending_data);
             continue;
         }
         as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
@@ -1009,8 +975,6 @@ teranode_spend_multi(as_rec* rec, as_list* args)
             spent_count = as_integer_get(as_integer_fromval(spent_count_val));
         }
         as_rec_set(rec, BIN_SPENT_UTXOS, (as_val*)as_integer_new(spent_count + 1));
-
-        if (existing_spending_data) as_bytes_destroy(existing_spending_data);
     }
 
     // Mark utxos bin as dirty to persist changes
@@ -1024,6 +988,14 @@ teranode_spend_multi(as_rec* rec, as_list* args)
     // Call setDeleteAtHeight
     int64_t child_count = 0;
     const char* signal = utxo_set_delete_at_height_impl(rec, current_block_height, block_height_retention, &child_count);
+
+    // Commit record changes - equivalent to Lua's aerospike:update(rec)
+    int update_rv = as_aerospike_rec_update(as, rec);
+    if (update_rv != 0) {
+        as_hashmap_destroy(response);
+        as_hashmap_destroy(errors);
+        return (as_val*)utxo_create_error_response(ERROR_CODE_UPDATE_FAILED, ERR_UPDATE_FAILED);
+    }
 
     // Re-fetch block_ids after as_rec_set calls (both above and inside setDeleteAtHeight)
     as_val* response_block_ids_val = as_rec_get(rec, BIN_BLOCK_IDS);
@@ -1064,8 +1036,13 @@ teranode_spend_multi(as_rec* rec, as_list* args)
 }
 
 as_val*
-teranode_unspend(as_rec* rec, as_list* args)
+teranode_unspend(as_rec* rec, as_list* args, as_aerospike* as)
 {
+    // Check aerospike context
+    if (as == NULL) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
+    }
+
     // Check record exists
     if (rec == NULL || as_rec_numbins(rec) == 0) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
@@ -1092,7 +1069,7 @@ teranode_unspend(as_rec* rec, as_list* args)
 
     // Validate UTXO
     as_bytes* utxo = NULL;
-    as_bytes* existing_spending_data = NULL;
+    const uint8_t* existing_spending_data = NULL;
     as_map* error_response = NULL;
 
     if (utxo_get_and_validate(utxos, offset, utxo_hash, &utxo, &existing_spending_data, &error_response) != 0) {
@@ -1102,14 +1079,12 @@ teranode_unspend(as_rec* rec, as_list* args)
     // Only unspend if spent and not frozen
     if (as_bytes_size(utxo) == FULL_UTXO_SIZE) {
         if (utxo_is_frozen(existing_spending_data)) {
-            if (existing_spending_data) as_bytes_destroy(existing_spending_data);
             return (as_val*)utxo_create_error_response(ERROR_CODE_FROZEN, ERR_UTXO_IS_FROZEN);
         }
 
         // Create unspent UTXO
         as_bytes* new_utxo = utxo_create_with_spending_data(utxo_hash, NULL);
         if (new_utxo == NULL) {
-            if (existing_spending_data) as_bytes_destroy(existing_spending_data);
             return (as_val*)utxo_create_error_response(
                 ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
         }
@@ -1127,11 +1102,15 @@ teranode_unspend(as_rec* rec, as_list* args)
         as_rec_set(rec, BIN_SPENT_UTXOS, (as_val*)as_integer_new(spent_count - 1));
     }
 
-    if (existing_spending_data) as_bytes_destroy(existing_spending_data);
-
     // Call setDeleteAtHeight
     int64_t child_count = 0;
     const char* signal = utxo_set_delete_at_height_impl(rec, current_block_height, block_height_retention, &child_count);
+
+    // Commit record changes - equivalent to Lua's aerospike:update(rec)
+    int update_rv = as_aerospike_rec_update(as, rec);
+    if (update_rv != 0) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_UPDATE_FAILED, ERR_UPDATE_FAILED);
+    }
 
     // Build response
     as_hashmap* response = (as_hashmap*)utxo_create_ok_response();
@@ -1155,8 +1134,13 @@ teranode_unspend(as_rec* rec, as_list* args)
 }
 
 as_val*
-teranode_set_mined(as_rec* rec, as_list* args)
+teranode_set_mined(as_rec* rec, as_list* args, as_aerospike* as)
 {
+    // Check aerospike context
+    if (as == NULL) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
+    }
+
     // Check record exists
     if (rec == NULL || as_rec_numbins(rec) == 0) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
@@ -1346,6 +1330,12 @@ teranode_set_mined(as_rec* rec, as_list* args)
     int64_t child_count = 0;
     const char* signal = utxo_set_delete_at_height_impl(rec, current_block_height, block_height_retention, &child_count);
 
+    // Commit record changes - equivalent to Lua's aerospike:update(rec)
+    int update_rv = as_aerospike_rec_update(as, rec);
+    if (update_rv != 0) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_UPDATE_FAILED, ERR_UPDATE_FAILED);
+    }
+
     // Re-fetch block_ids from record since as_rec_set calls above may have invalidated the pointer
     as_val* response_block_ids_val = as_rec_get(rec, BIN_BLOCK_IDS);
 
@@ -1377,8 +1367,13 @@ teranode_set_mined(as_rec* rec, as_list* args)
 }
 
 as_val*
-teranode_freeze(as_rec* rec, as_list* args)
+teranode_freeze(as_rec* rec, as_list* args, as_aerospike* as)
 {
+    // Check aerospike context
+    if (as == NULL) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
+    }
+
     // Check record exists
     if (rec == NULL || as_rec_numbins(rec) == 0) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
@@ -1403,7 +1398,7 @@ teranode_freeze(as_rec* rec, as_list* args)
 
     // Validate UTXO
     as_bytes* utxo = NULL;
-    as_bytes* existing_spending_data = NULL;
+    const uint8_t* existing_spending_data = NULL;
     as_map* error_response = NULL;
 
     if (utxo_get_and_validate(utxos, offset, utxo_hash, &utxo, &existing_spending_data, &error_response) != 0) {
@@ -1413,15 +1408,19 @@ teranode_freeze(as_rec* rec, as_list* args)
     // If UTXO has spending data, check if already frozen
     if (existing_spending_data != NULL) {
         if (utxo_is_frozen(existing_spending_data)) {
-            as_bytes_destroy(existing_spending_data);
             return (as_val*)utxo_create_error_response(ERROR_CODE_ALREADY_FROZEN, MSG_ALREADY_FROZEN);
         } else {
             // Already spent by something else
             as_map* err = utxo_create_error_response(ERROR_CODE_SPENT, MSG_SPENT);
-            as_hashmap_set((as_hashmap*)err,
-                (as_val*)as_string_new((char*)FIELD_SPENDING_DATA, false),
-                (as_val*)utxo_spending_data_to_hex(existing_spending_data));
-            as_bytes_destroy(existing_spending_data);
+            as_string* hexstr = utxo_spending_data_to_hex(existing_spending_data);
+            if (hexstr != NULL) {
+                as_string* k_sd = as_string_new((char*)FIELD_SPENDING_DATA, false);
+                if (k_sd != NULL) {
+                    as_hashmap_set((as_hashmap*)err, (as_val*)k_sd, (as_val*)hexstr);
+                } else {
+                    as_string_destroy(hexstr);
+                }
+            }
             return (as_val*)err;
         }
     }
@@ -1456,6 +1455,12 @@ teranode_freeze(as_rec* rec, as_list* args)
 
     as_bytes_destroy(frozen_data);
 
+    // Commit record changes - equivalent to Lua's aerospike:update(rec)
+    int update_rv = as_aerospike_rec_update(as, rec);
+    if (update_rv != 0) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_UPDATE_FAILED, ERR_UPDATE_FAILED);
+    }
+
     as_map* ok_response = utxo_create_ok_response();
     if (ok_response == NULL) {
         return (as_val*)utxo_create_error_response(
@@ -1465,8 +1470,13 @@ teranode_freeze(as_rec* rec, as_list* args)
 }
 
 as_val*
-teranode_unfreeze(as_rec* rec, as_list* args)
+teranode_unfreeze(as_rec* rec, as_list* args, as_aerospike* as)
 {
+    // Check aerospike context
+    if (as == NULL) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
+    }
+
     // Check record exists
     if (rec == NULL || as_rec_numbins(rec) == 0) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
@@ -1491,7 +1501,7 @@ teranode_unfreeze(as_rec* rec, as_list* args)
 
     // Validate UTXO
     as_bytes* utxo = NULL;
-    as_bytes* existing_spending_data = NULL;
+    const uint8_t* existing_spending_data = NULL;
     as_map* error_response = NULL;
 
     if (utxo_get_and_validate(utxos, offset, utxo_hash, &utxo, &existing_spending_data, &error_response) != 0) {
@@ -1501,14 +1511,12 @@ teranode_unfreeze(as_rec* rec, as_list* args)
     // Check that UTXO is actually frozen (size=68 with frozen pattern)
     // Unspent UTXOs (size=32) or spent UTXOs (size=68 with non-frozen data) are not frozen
     if (as_bytes_size(utxo) != FULL_UTXO_SIZE || existing_spending_data == NULL || !utxo_is_frozen(existing_spending_data)) {
-        if (existing_spending_data) as_bytes_destroy(existing_spending_data);
         return (as_val*)utxo_create_error_response(ERROR_CODE_UTXO_NOT_FROZEN, ERR_UTXO_NOT_FROZEN);
     }
 
     // Create unspent UTXO (remove spending data)
     as_bytes* new_utxo = utxo_create_with_spending_data(utxo_hash, NULL);
     if (new_utxo == NULL) {
-        as_bytes_destroy(existing_spending_data);
         return (as_val*)utxo_create_error_response(
             ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
     }
@@ -1517,7 +1525,11 @@ teranode_unfreeze(as_rec* rec, as_list* args)
     // Mark utxos bin as dirty to persist changes
     as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
 
-    as_bytes_destroy(existing_spending_data);
+    // Commit record changes - equivalent to Lua's aerospike:update(rec)
+    int update_rv = as_aerospike_rec_update(as, rec);
+    if (update_rv != 0) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_UPDATE_FAILED, ERR_UPDATE_FAILED);
+    }
 
     as_map* ok_response = utxo_create_ok_response();
     if (ok_response == NULL) {
@@ -1528,8 +1540,13 @@ teranode_unfreeze(as_rec* rec, as_list* args)
 }
 
 as_val*
-teranode_reassign(as_rec* rec, as_list* args)
+teranode_reassign(as_rec* rec, as_list* args, as_aerospike* as)
 {
+    // Check aerospike context
+    if (as == NULL) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
+    }
+
     // Check record exists
     if (rec == NULL || as_rec_numbins(rec) == 0) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
@@ -1557,7 +1574,7 @@ teranode_reassign(as_rec* rec, as_list* args)
 
     // Validate UTXO
     as_bytes* utxo = NULL;
-    as_bytes* existing_spending_data = NULL;
+    const uint8_t* existing_spending_data = NULL;
     as_map* error_response = NULL;
 
     if (utxo_get_and_validate(utxos, offset, utxo_hash, &utxo, &existing_spending_data, &error_response) != 0) {
@@ -1567,14 +1584,12 @@ teranode_reassign(as_rec* rec, as_list* args)
     // Check that UTXO is frozen (required for reassignment)
     // Unspent UTXOs (size=32) or spent UTXOs (size=68 with non-frozen data) are not frozen
     if (as_bytes_size(utxo) != FULL_UTXO_SIZE || existing_spending_data == NULL || !utxo_is_frozen(existing_spending_data)) {
-        if (existing_spending_data) as_bytes_destroy(existing_spending_data);
         return (as_val*)utxo_create_error_response(ERROR_CODE_UTXO_NOT_FROZEN, ERR_UTXO_NOT_FROZEN);
     }
 
     // Create new UTXO with new hash (unspent)
     as_bytes* new_utxo = utxo_create_with_spending_data(new_utxo_hash, NULL);
     if (new_utxo == NULL) {
-        as_bytes_destroy(existing_spending_data);
         return (as_val*)utxo_create_error_response(
             ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
     }
@@ -1591,14 +1606,12 @@ teranode_reassign(as_rec* rec, as_list* args)
     if (reassignments_val == NULL || as_val_type(reassignments_val) == AS_NIL) {
         reassignments = (as_list*)as_arraylist_new(10, 10);
         if (reassignments == NULL) {
-            as_bytes_destroy(existing_spending_data);
             return (as_val*)utxo_create_error_response(
                 ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
         }
         reassignments_is_new = true;
     } else {
         if (as_val_type(reassignments_val) != AS_LIST) {
-            as_bytes_destroy(existing_spending_data);
             return (as_val*)utxo_create_error_response(
                 ERROR_CODE_INVALID_PARAMETER, "Invalid reassignments list");
         }
@@ -1613,7 +1626,6 @@ teranode_reassign(as_rec* rec, as_list* args)
         spendable_in = (as_map*)as_hashmap_new(10);
         if (spendable_in == NULL) {
             if (reassignments_is_new) as_list_destroy(reassignments);
-            as_bytes_destroy(existing_spending_data);
             return (as_val*)utxo_create_error_response(
                 ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
         }
@@ -1621,7 +1633,6 @@ teranode_reassign(as_rec* rec, as_list* args)
     } else {
         if (as_val_type(spendable_in_val) != AS_MAP) {
             if (reassignments_is_new) as_list_destroy(reassignments);
-            as_bytes_destroy(existing_spending_data);
             return (as_val*)utxo_create_error_response(
                 ERROR_CODE_INVALID_PARAMETER, "Invalid spendable_in map");
         }
@@ -1633,7 +1644,6 @@ teranode_reassign(as_rec* rec, as_list* args)
     if (reassignment_entry == NULL) {
         if (reassignments_is_new) as_list_destroy(reassignments);
         if (spendable_in_is_new) as_map_destroy(spendable_in);
-        as_bytes_destroy(existing_spending_data);
         return (as_val*)utxo_create_error_response(
             ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
     }
@@ -1680,7 +1690,11 @@ teranode_reassign(as_rec* rec, as_list* args)
     }
     as_rec_set(rec, BIN_RECORD_UTXOS, (as_val*)as_integer_new(record_utxos + 1));
 
-    as_bytes_destroy(existing_spending_data);
+    // Commit record changes - equivalent to Lua's aerospike:update(rec)
+    int update_rv = as_aerospike_rec_update(as, rec);
+    if (update_rv != 0) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_UPDATE_FAILED, ERR_UPDATE_FAILED);
+    }
 
     as_map* ok_response = utxo_create_ok_response();
     if (ok_response == NULL) {
@@ -1691,8 +1705,13 @@ teranode_reassign(as_rec* rec, as_list* args)
 }
 
 as_val*
-teranode_set_conflicting(as_rec* rec, as_list* args)
+teranode_set_conflicting(as_rec* rec, as_list* args, as_aerospike* as)
 {
+    // Check aerospike context
+    if (as == NULL) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
+    }
+
     // Check record exists
     if (rec == NULL || as_rec_numbins(rec) == 0) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
@@ -1709,6 +1728,12 @@ teranode_set_conflicting(as_rec* rec, as_list* args)
     // Call setDeleteAtHeight
     int64_t child_count = 0;
     const char* signal = utxo_set_delete_at_height_impl(rec, current_block_height, block_height_retention, &child_count);
+
+    // Commit record changes - equivalent to Lua's aerospike:update(rec)
+    int update_rv = as_aerospike_rec_update(as, rec);
+    if (update_rv != 0) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_UPDATE_FAILED, ERR_UPDATE_FAILED);
+    }
 
     // Build response
     as_hashmap* response = (as_hashmap*)utxo_create_ok_response();
@@ -1732,8 +1757,13 @@ teranode_set_conflicting(as_rec* rec, as_list* args)
 }
 
 as_val*
-teranode_preserve_until(as_rec* rec, as_list* args)
+teranode_preserve_until(as_rec* rec, as_list* args, as_aerospike* as)
 {
+    // Check aerospike context
+    if (as == NULL) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
+    }
+
     // Check record exists
     if (rec == NULL || as_rec_numbins(rec) == 0) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
@@ -1747,6 +1777,12 @@ teranode_preserve_until(as_rec* rec, as_list* args)
 
     // Set preserveUntil
     as_rec_set(rec, BIN_PRESERVE_UNTIL, (as_val*)as_integer_new(block_height));
+
+    // Commit record changes - equivalent to Lua's aerospike:update(rec)
+    int update_rv = as_aerospike_rec_update(as, rec);
+    if (update_rv != 0) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_UPDATE_FAILED, ERR_UPDATE_FAILED);
+    }
 
     // Build response
     as_hashmap* response = (as_hashmap*)utxo_create_ok_response();
@@ -1767,8 +1803,13 @@ teranode_preserve_until(as_rec* rec, as_list* args)
 }
 
 as_val*
-teranode_set_locked(as_rec* rec, as_list* args)
+teranode_set_locked(as_rec* rec, as_list* args, as_aerospike* as)
 {
+    // Check aerospike context
+    if (as == NULL) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
+    }
+
     // Check record exists
     if (rec == NULL || as_rec_numbins(rec) == 0) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
@@ -1795,6 +1836,12 @@ teranode_set_locked(as_rec* rec, as_list* args)
         }
     }
 
+    // Commit record changes - equivalent to Lua's aerospike:update(rec)
+    int update_rv = as_aerospike_rec_update(as, rec);
+    if (update_rv != 0) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_UPDATE_FAILED, ERR_UPDATE_FAILED);
+    }
+
     // Build response
     as_hashmap* response = (as_hashmap*)utxo_create_ok_response();
     if (response == NULL) {
@@ -1809,8 +1856,13 @@ teranode_set_locked(as_rec* rec, as_list* args)
 }
 
 as_val*
-teranode_increment_spent_extra_recs(as_rec* rec, as_list* args)
+teranode_increment_spent_extra_recs(as_rec* rec, as_list* args, as_aerospike* as)
 {
+    // Check aerospike context
+    if (as == NULL) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
+    }
+
     // Check record exists
     if (rec == NULL || as_rec_numbins(rec) == 0) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
@@ -1854,6 +1906,12 @@ teranode_increment_spent_extra_recs(as_rec* rec, as_list* args)
     int64_t child_count = 0;
     const char* signal = utxo_set_delete_at_height_impl(rec, current_block_height, block_height_retention, &child_count);
 
+    // Commit record changes - equivalent to Lua's aerospike:update(rec)
+    int update_rv = as_aerospike_rec_update(as, rec);
+    if (update_rv != 0) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_UPDATE_FAILED, ERR_UPDATE_FAILED);
+    }
+
     // Build response
     as_hashmap* response = (as_hashmap*)utxo_create_ok_response();
     if (response == NULL) {
@@ -1876,13 +1934,25 @@ teranode_increment_spent_extra_recs(as_rec* rec, as_list* args)
 }
 
 as_val*
-teranode_set_delete_at_height(as_rec* rec, as_list* args)
+teranode_set_delete_at_height(as_rec* rec, as_list* args, as_aerospike* as)
 {
+    // Check aerospike context
+    if (as == NULL) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
+    }
+
     int64_t current_block_height = get_list_int64(args, 0);
     int64_t block_height_retention = get_list_int64(args, 1);
 
     int64_t child_count = 0;
     const char* signal = utxo_set_delete_at_height_impl(rec, current_block_height, block_height_retention, &child_count);
+
+    // Commit record changes - equivalent to Lua's aerospike:update(rec)
+    // Note: When called via dispatch table, this persists the changes
+    int update_rv = as_aerospike_rec_update(as, rec);
+    if (update_rv != 0) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_UPDATE_FAILED, ERR_UPDATE_FAILED);
+    }
 
     as_hashmap* response = (as_hashmap*)utxo_create_ok_response();
     if (response == NULL) {

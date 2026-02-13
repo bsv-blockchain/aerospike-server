@@ -16,6 +16,7 @@
 #include <aerospike/as_string.h>
 #include <aerospike/as_integer.h>
 #include <aerospike/as_boolean.h>
+#include <aerospike/as_aerospike.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -84,6 +85,7 @@ extern "C" {
 #define ERROR_CODE_UTXO_HASH_MISMATCH   "UTXO_HASH_MISMATCH"
 #define ERROR_CODE_UTXO_NOT_FROZEN      "UTXO_NOT_FROZEN"
 #define ERROR_CODE_INVALID_PARAMETER    "INVALID_PARAMETER"
+#define ERROR_CODE_UPDATE_FAILED        "UPDATE_FAILED"
 
 //==========================================================
 // Message Constants.
@@ -123,6 +125,7 @@ extern "C" {
 #define ERR_SPENT_EXTRA_RECS_NEGATIVE   "spentExtraRecs cannot be negative"
 #define ERR_SPENT_EXTRA_RECS_EXCEED     "spentExtraRecs cannot be greater than totalExtraRecs"
 #define ERR_TOTAL_EXTRA_RECS            "totalExtraRecs not found in record. Possible non-master record?"
+#define ERR_UPDATE_FAILED               "Failed to commit record changes"
 
 //==========================================================
 // Response Field Names.
@@ -143,6 +146,7 @@ extern "C" {
 // Each function receives:
 //   - rec: The record to operate on
 //   - args: Arguments as as_list
+//   - as: The aerospike context for calling rec_update
 // Returns:
 //   - as_val* (typically as_map*) with result
 //
@@ -159,7 +163,7 @@ extern "C" {
  *   [5] currentBlockHeight (int64)
  *   [6] blockHeightRetention (int64)
  */
-as_val* teranode_spend(as_rec* rec, as_list* args);
+as_val* teranode_spend(as_rec* rec, as_list* args, as_aerospike* as);
 
 /**
  * Mark multiple UTXOs as spent in a single operation.
@@ -171,7 +175,7 @@ as_val* teranode_spend(as_rec* rec, as_list* args);
  *   [3] currentBlockHeight (int64)
  *   [4] blockHeightRetention (int64)
  */
-as_val* teranode_spend_multi(as_rec* rec, as_list* args);
+as_val* teranode_spend_multi(as_rec* rec, as_list* args, as_aerospike* as);
 
 /**
  * Reverse a spend operation (mark UTXO as unspent).
@@ -182,7 +186,7 @@ as_val* teranode_spend_multi(as_rec* rec, as_list* args);
  *   [2] currentBlockHeight (int64)
  *   [3] blockHeightRetention (int64)
  */
-as_val* teranode_unspend(as_rec* rec, as_list* args);
+as_val* teranode_unspend(as_rec* rec, as_list* args, as_aerospike* as);
 
 /**
  * Track which block(s) a transaction is mined in.
@@ -196,7 +200,7 @@ as_val* teranode_unspend(as_rec* rec, as_list* args);
  *   [5] onLongestChain (bool)
  *   [6] unsetMined (bool)        - if true, removes block instead of adding
  */
-as_val* teranode_set_mined(as_rec* rec, as_list* args);
+as_val* teranode_set_mined(as_rec* rec, as_list* args, as_aerospike* as);
 
 /**
  * Freeze a UTXO (prevent spending).
@@ -205,7 +209,7 @@ as_val* teranode_set_mined(as_rec* rec, as_list* args);
  *   [0] offset (int64)
  *   [1] utxoHash (bytes[32])
  */
-as_val* teranode_freeze(as_rec* rec, as_list* args);
+as_val* teranode_freeze(as_rec* rec, as_list* args, as_aerospike* as);
 
 /**
  * Unfreeze a frozen UTXO.
@@ -214,7 +218,7 @@ as_val* teranode_freeze(as_rec* rec, as_list* args);
  *   [0] offset (int64)
  *   [1] utxoHash (bytes[32])
  */
-as_val* teranode_unfreeze(as_rec* rec, as_list* args);
+as_val* teranode_unfreeze(as_rec* rec, as_list* args, as_aerospike* as);
 
 /**
  * Reassign a UTXO hash (for frozen UTXOs).
@@ -226,7 +230,7 @@ as_val* teranode_unfreeze(as_rec* rec, as_list* args);
  *   [3] blockHeight (int64)
  *   [4] spendableAfter (int64)
  */
-as_val* teranode_reassign(as_rec* rec, as_list* args);
+as_val* teranode_reassign(as_rec* rec, as_list* args, as_aerospike* as);
 
 /**
  * Mark a transaction as conflicting.
@@ -236,7 +240,7 @@ as_val* teranode_reassign(as_rec* rec, as_list* args);
  *   [1] currentBlockHeight (int64)
  *   [2] blockHeightRetention (int64)
  */
-as_val* teranode_set_conflicting(as_rec* rec, as_list* args);
+as_val* teranode_set_conflicting(as_rec* rec, as_list* args, as_aerospike* as);
 
 /**
  * Preserve a transaction until a specific block height (prevent deletion).
@@ -244,7 +248,7 @@ as_val* teranode_set_conflicting(as_rec* rec, as_list* args);
  * Args (as_list):
  *   [0] blockHeight (int64)
  */
-as_val* teranode_preserve_until(as_rec* rec, as_list* args);
+as_val* teranode_preserve_until(as_rec* rec, as_list* args, as_aerospike* as);
 
 /**
  * Lock/unlock a transaction from being spent.
@@ -252,7 +256,7 @@ as_val* teranode_preserve_until(as_rec* rec, as_list* args);
  * Args (as_list):
  *   [0] setValue (bool)          - true to lock, false to unlock
  */
-as_val* teranode_set_locked(as_rec* rec, as_list* args);
+as_val* teranode_set_locked(as_rec* rec, as_list* args, as_aerospike* as);
 
 /**
  * Increment/decrement the spent extra records counter.
@@ -262,7 +266,7 @@ as_val* teranode_set_locked(as_rec* rec, as_list* args);
  *   [1] currentBlockHeight (int64)
  *   [2] blockHeightRetention (int64)
  */
-as_val* teranode_increment_spent_extra_recs(as_rec* rec, as_list* args);
+as_val* teranode_increment_spent_extra_recs(as_rec* rec, as_list* args, as_aerospike* as);
 
 /**
  * Internal helper: Set the deleteAtHeight for a record.
@@ -274,7 +278,7 @@ as_val* teranode_increment_spent_extra_recs(as_rec* rec, as_list* args);
  *
  * Returns signal string and optional childCount.
  */
-as_val* teranode_set_delete_at_height(as_rec* rec, as_list* args);
+as_val* teranode_set_delete_at_height(as_rec* rec, as_list* args, as_aerospike* as);
 
 //==========================================================
 // Internal Helper Function Declarations.
@@ -287,8 +291,9 @@ bool utxo_bytes_equal(as_bytes* a, as_bytes* b);
 
 /**
  * Check if spending data indicates a frozen UTXO (all bytes = 255).
+ * Takes a raw pointer to SPENDING_DATA_SIZE bytes.
  */
-bool utxo_is_frozen(as_bytes* spending_data);
+bool utxo_is_frozen(const uint8_t* spending_data);
 
 /**
  * Create a new UTXO bytes object with optional spending data.
@@ -304,21 +309,25 @@ as_bytes* utxo_create_with_spending_data(as_bytes* utxo_hash, as_bytes* spending
  * Returns:
  *   0 on success, sets *out_utxo and *out_spending_data
  *   Non-zero on error, sets *out_error_response
+ *
+ * Note: out_spending_data points into the existing UTXO bytes (no allocation).
+ *       The pointer is valid as long as the UTXO list element is not replaced.
  */
 int utxo_get_and_validate(
     as_list* utxos,
     int64_t offset,
     as_bytes* expected_hash,
     as_bytes** out_utxo,
-    as_bytes** out_spending_data,
+    const uint8_t** out_spending_data,
     as_map** out_error_response
 );
 
 /**
  * Convert spending data bytes to hex string for error messages.
  * Format: reversed txid (32 bytes) + vin (4 bytes little-endian)
+ * Takes a raw pointer to SPENDING_DATA_SIZE bytes.
  */
-as_string* utxo_spending_data_to_hex(as_bytes* spending_data);
+as_string* utxo_spending_data_to_hex(const uint8_t* spending_data);
 
 /**
  * Create an error response map.
