@@ -1826,6 +1826,356 @@ TEST(spend_multi_frozen_utxo)
 }
 
 //==========================================================
+// Coverage gap tests.
+//
+
+// setMined with onLongestChain=false should NOT clear unminedSince
+TEST(setMined_not_on_longest_chain)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 3);
+    as_rec_set(rec, "unminedSince", (as_val*)as_integer_new(800));
+
+    as_arraylist* args = as_arraylist_new(7, 0);
+    as_arraylist_append_int64(args, 22222);
+    as_arraylist_append_int64(args, 500);
+    as_arraylist_append_int64(args, 1);
+    as_arraylist_append_int64(args, 1000);
+    as_arraylist_append_int64(args, 100);
+    as_arraylist_append(args, (as_val*)as_boolean_new(false));  // onLongestChain = false
+    as_arraylist_append(args, (as_val*)as_boolean_new(false));
+
+    as_val* result = teranode_set_mined(rec, (as_list*)args, as_ctx);
+    as_map* result_map = as_map_fromval(result);
+
+    as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
+    ASSERT_STR_EQ(as_string_get(as_string_fromval(status)), "OK");
+
+    // unminedSince should NOT be cleared when onLongestChain=false
+    as_val* unmined_val = as_rec_get(rec, "unminedSince");
+    ASSERT_NOT_NULL(unmined_val);
+    ASSERT_EQ(as_integer_get(as_integer_fromval(unmined_val)), 800);
+
+    // blockIDs should still be added
+    as_val* block_ids_val = as_rec_get(rec, "blockIDs");
+    ASSERT_NOT_NULL(block_ids_val);
+    as_list* block_ids = as_list_fromval(block_ids_val);
+    ASSERT_EQ(as_list_size(block_ids), 1);
+
+    as_arraylist_destroy(args);
+    as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// setLocked(false) when already unlocked — idempotent no-op
+TEST(setLocked_unlock_already_unlocked)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 3);
+
+    as_arraylist* args = as_arraylist_new(1, 0);
+    as_arraylist_append(args, (as_val*)as_boolean_new(false));
+
+    as_val* result = teranode_set_locked(rec, (as_list*)args, as_ctx);
+    as_map* result_map = as_map_fromval(result);
+
+    as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
+    ASSERT_STR_EQ(as_string_get(as_string_fromval(status)), "OK");
+
+    as_val* locked_val = as_rec_get(rec, "locked");
+    ASSERT_FALSE(as_boolean_get(as_boolean_fromval(locked_val)));
+
+    as_arraylist_destroy(args);
+    as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// setConflicting(true) on a record with all UTXOs spent triggers deleteAtHeight
+TEST(setConflicting_all_spent_triggers_dah)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 3);
+
+    as_rec_set(rec, "spentUtxos", (as_val*)as_integer_new(3));
+    as_rec_set(rec, "totalExtraRecs", (as_val*)as_integer_new(0));
+    as_rec_set(rec, "spentExtraRecs", (as_val*)as_integer_new(0));
+
+    as_arraylist* block_ids = as_arraylist_new(1, 0);
+    as_arraylist_append_int64(block_ids, 99999);
+    as_rec_set(rec, "blockIDs", (as_val*)block_ids);
+
+    as_arraylist* args = as_arraylist_new(3, 0);
+    as_arraylist_append(args, (as_val*)as_boolean_new(true));
+    as_arraylist_append_int64(args, 1000);
+    as_arraylist_append_int64(args, 100);
+
+    as_val* result = teranode_set_conflicting(rec, (as_list*)args, as_ctx);
+    as_map* result_map = as_map_fromval(result);
+
+    as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
+    ASSERT_STR_EQ(as_string_get(as_string_fromval(status)), "OK");
+
+    as_val* dah_val = as_rec_get(rec, "deleteAtHeight");
+    ASSERT_NOT_NULL(dah_val);
+    ASSERT_EQ(as_integer_get(as_integer_fromval(dah_val)), 1100);
+
+    as_arraylist_destroy(args);
+    as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// spend_multi with coinbase immature
+TEST(spend_multi_coinbase_immature)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 5);
+    as_rec_set(rec, "spendingHeight", (as_val*)as_integer_new(2000));
+
+    as_val* utxos_val = as_rec_get(rec, "utxos");
+    as_list* utxos = as_list_fromval(utxos_val);
+    uint8_t hash0[UTXO_HASH_SIZE];
+    memcpy(hash0, as_bytes_get(as_bytes_fromval(as_list_get(utxos, 0))), UTXO_HASH_SIZE);
+
+    uint8_t spending[SPENDING_DATA_SIZE];
+    memset(spending, 0xDD, SPENDING_DATA_SIZE);
+
+    as_arraylist* spends = as_arraylist_new(1, 0);
+    as_arraylist_append(spends, (as_val*)make_spend_item(0, hash0, UTXO_HASH_SIZE, spending, SPENDING_DATA_SIZE));
+
+    as_arraylist* args = as_arraylist_new(5, 0);
+    as_arraylist_append(args, (as_val*)spends);
+    as_arraylist_append(args, (as_val*)as_boolean_new(false));
+    as_arraylist_append(args, (as_val*)as_boolean_new(false));
+    as_arraylist_append_int64(args, 1000);
+    as_arraylist_append_int64(args, 100);
+
+    as_val* result = teranode_spend_multi(rec, (as_list*)args, as_ctx);
+    as_map* result_map = as_map_fromval(result);
+
+    as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
+    ASSERT_STR_EQ(as_string_get(as_string_fromval(code)), ERROR_CODE_COINBASE_IMMATURE);
+
+    as_arraylist_destroy(args);
+    as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// spend_multi with 4 UTXOs
+TEST(spend_multi_four_utxos)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 5);
+
+    as_val* utxos_val = as_rec_get(rec, "utxos");
+    as_list* utxos = as_list_fromval(utxos_val);
+
+    uint8_t hashes[4][UTXO_HASH_SIZE];
+    for (int i = 0; i < 4; i++) {
+        memcpy(hashes[i], as_bytes_get(as_bytes_fromval(as_list_get(utxos, i))), UTXO_HASH_SIZE);
+    }
+
+    uint8_t spending[SPENDING_DATA_SIZE];
+    memset(spending, 0xBB, SPENDING_DATA_SIZE);
+
+    as_arraylist* spends = as_arraylist_new(4, 0);
+    for (int i = 0; i < 4; i++) {
+        as_arraylist_append(spends, (as_val*)make_spend_item(i, hashes[i], UTXO_HASH_SIZE, spending, SPENDING_DATA_SIZE));
+    }
+
+    as_arraylist* args = as_arraylist_new(5, 0);
+    as_arraylist_append(args, (as_val*)spends);
+    as_arraylist_append(args, (as_val*)as_boolean_new(false));
+    as_arraylist_append(args, (as_val*)as_boolean_new(false));
+    as_arraylist_append_int64(args, 1000);
+    as_arraylist_append_int64(args, 100);
+
+    as_val* result = teranode_spend_multi(rec, (as_list*)args, as_ctx);
+    as_map* result_map = as_map_fromval(result);
+
+    as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
+    ASSERT_STR_EQ(as_string_get(as_string_fromval(status)), "OK");
+
+    as_val* spent_val = as_rec_get(rec, "spentUtxos");
+    ASSERT_EQ(as_integer_get(as_integer_fromval(spent_val)), 4);
+
+    as_arraylist_destroy(args);
+    as_val_destroy(result);
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// Large UTXO list — spend at various offsets
+TEST(large_utxo_list_stress)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 100);
+
+    int offsets[] = {0, 49, 99};
+    for (int i = 0; i < 3; i++) {
+        int offset = offsets[i];
+        as_val* utxos_val = as_rec_get(rec, "utxos");
+        as_list* utxos = as_list_fromval(utxos_val);
+        as_bytes* utxo = as_bytes_fromval(as_list_get(utxos, offset));
+        uint8_t hash[UTXO_HASH_SIZE];
+        memcpy(hash, as_bytes_get(utxo), UTXO_HASH_SIZE);
+
+        uint8_t spending[SPENDING_DATA_SIZE];
+        memset(spending, 0xC0 + i, SPENDING_DATA_SIZE);
+
+        as_arraylist* args = as_arraylist_new(7, 0);
+        as_arraylist_append_int64(args, offset);
+        as_arraylist_append(args, (as_val*)as_bytes_new_wrap(hash, UTXO_HASH_SIZE, false));
+        as_arraylist_append(args, (as_val*)as_bytes_new_wrap(spending, SPENDING_DATA_SIZE, false));
+        as_arraylist_append(args, (as_val*)as_boolean_new(false));
+        as_arraylist_append(args, (as_val*)as_boolean_new(false));
+        as_arraylist_append_int64(args, 1000);
+        as_arraylist_append_int64(args, 100);
+
+        as_val* result = teranode_spend(rec, (as_list*)args, as_ctx);
+        as_map* result_map = as_map_fromval(result);
+        as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
+        ASSERT_STR_EQ(as_string_get(as_string_fromval(status)), "OK");
+
+        as_val_destroy(result);
+        as_arraylist_destroy(args);
+    }
+
+    as_val* spent_val = as_rec_get(rec, "spentUtxos");
+    ASSERT_EQ(as_integer_get(as_integer_fromval(spent_val)), 3);
+
+    as_val* utxos_val = as_rec_get(rec, "utxos");
+    as_list* utxos = as_list_fromval(utxos_val);
+    for (int i = 0; i < 3; i++) {
+        as_bytes* utxo = as_bytes_fromval(as_list_get(utxos, offsets[i]));
+        ASSERT_EQ(as_bytes_size(utxo), FULL_UTXO_SIZE);
+    }
+
+    as_bytes* utxo50 = as_bytes_fromval(as_list_get(utxos, 50));
+    ASSERT_EQ(as_bytes_size(utxo50), UTXO_HASH_SIZE);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// setMined selective removal from multiple blocks
+TEST(setMined_selective_removal)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 3);
+
+    for (int i = 0; i < 3; i++) {
+        as_arraylist* args = as_arraylist_new(7, 0);
+        as_arraylist_append_int64(args, 10000 + i);
+        as_arraylist_append_int64(args, 500 + i);
+        as_arraylist_append_int64(args, i);
+        as_arraylist_append_int64(args, 1000);
+        as_arraylist_append_int64(args, 100);
+        as_arraylist_append(args, (as_val*)as_boolean_new(true));
+        as_arraylist_append(args, (as_val*)as_boolean_new(false));
+
+        as_val* r = teranode_set_mined(rec, (as_list*)args, as_ctx);
+        as_val_destroy(r);
+        as_arraylist_destroy(args);
+    }
+
+    as_val* block_ids_val = as_rec_get(rec, "blockIDs");
+    ASSERT_EQ(as_list_size(as_list_fromval(block_ids_val)), 3);
+
+    // Remove the middle block (10001)
+    as_arraylist* remove_args = as_arraylist_new(7, 0);
+    as_arraylist_append_int64(remove_args, 10001);
+    as_arraylist_append_int64(remove_args, 501);
+    as_arraylist_append_int64(remove_args, 1);
+    as_arraylist_append_int64(remove_args, 1000);
+    as_arraylist_append_int64(remove_args, 100);
+    as_arraylist_append(remove_args, (as_val*)as_boolean_new(true));
+    as_arraylist_append(remove_args, (as_val*)as_boolean_new(true));
+
+    as_val* result = teranode_set_mined(rec, (as_list*)remove_args, as_ctx);
+    as_map* result_map = as_map_fromval(result);
+    as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
+    ASSERT_STR_EQ(as_string_get(as_string_fromval(status)), "OK");
+    as_val_destroy(result);
+
+    block_ids_val = as_rec_get(rec, "blockIDs");
+    as_list* block_ids = as_list_fromval(block_ids_val);
+    ASSERT_EQ(as_list_size(block_ids), 2);
+
+    ASSERT_EQ(as_integer_get(as_integer_fromval(as_list_get(block_ids, 0))), 10000);
+    ASSERT_EQ(as_integer_get(as_integer_fromval(as_list_get(block_ids, 1))), 10002);
+
+    as_val* heights_val = as_rec_get(rec, "blockHeights");
+    ASSERT_EQ(as_list_size(as_list_fromval(heights_val)), 2);
+
+    as_arraylist_destroy(remove_args);
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// preserveUntil expiry with all-spent cascade
+TEST(preserveUntil_expiry_then_delete)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 3);
+
+    as_rec_set(rec, "spentUtxos", (as_val*)as_integer_new(3));
+    as_rec_set(rec, "totalExtraRecs", (as_val*)as_integer_new(0));
+    as_rec_set(rec, "spentExtraRecs", (as_val*)as_integer_new(0));
+
+    as_arraylist* bids = as_arraylist_new(1, 0);
+    as_arraylist_append_int64(bids, 77777);
+    as_rec_set(rec, "blockIDs", (as_val*)bids);
+
+    // preserveUntil should block deleteAtHeight
+    as_rec_set(rec, "preserveUntil", (as_val*)as_integer_new(5000));
+
+    as_arraylist* dah_args1 = as_arraylist_new(2, 0);
+    as_arraylist_append_int64(dah_args1, 1000);
+    as_arraylist_append_int64(dah_args1, 100);
+
+    as_val* result1 = teranode_set_delete_at_height(rec, (as_list*)dah_args1, as_ctx);
+    as_val_destroy(result1);
+
+    as_val* dah_val = as_rec_get(rec, "deleteAtHeight");
+    ASSERT_TRUE(dah_val == NULL || as_val_type(dah_val) == AS_NIL);
+    as_arraylist_destroy(dah_args1);
+
+    // Clear preserveUntil (simulating expiry)
+    as_rec_set(rec, "preserveUntil", (as_val*)&as_nil);
+
+    // Now setDeleteAtHeight should succeed
+    as_arraylist* dah_args2 = as_arraylist_new(2, 0);
+    as_arraylist_append_int64(dah_args2, 6000);
+    as_arraylist_append_int64(dah_args2, 100);
+
+    as_val* result2 = teranode_set_delete_at_height(rec, (as_list*)dah_args2, as_ctx);
+    as_map* result_map = as_map_fromval(result2);
+    as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
+    ASSERT_STR_EQ(as_string_get(as_string_fromval(status)), "OK");
+
+    dah_val = as_rec_get(rec, "deleteAtHeight");
+    ASSERT_NOT_NULL(dah_val);
+    ASSERT_EQ(as_integer_get(as_integer_fromval(dah_val)), 6100);
+
+    as_arraylist_destroy(dah_args2);
+    as_val_destroy(result2);
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+//==========================================================
 // Test runner.
 //
 
@@ -1898,4 +2248,14 @@ void run_comprehensive_tests(void)
     RUN_TEST(spend_null_as_ctx);
     RUN_TEST(freeze_null_as_ctx);
     RUN_TEST(setMined_null_as_ctx);
+
+    // Coverage gap tests
+    RUN_TEST(setMined_not_on_longest_chain);
+    RUN_TEST(setLocked_unlock_already_unlocked);
+    RUN_TEST(setConflicting_all_spent_triggers_dah);
+    RUN_TEST(spend_multi_coinbase_immature);
+    RUN_TEST(spend_multi_four_utxos);
+    RUN_TEST(large_utxo_list_stress);
+    RUN_TEST(setMined_selective_removal);
+    RUN_TEST(preserveUntil_expiry_then_delete);
 }
