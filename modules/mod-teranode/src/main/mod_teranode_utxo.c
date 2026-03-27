@@ -38,6 +38,44 @@
 // Fast hex conversion lookup table (used by byte_to_hex).
 static const char hex_digits[16] = "0123456789abcdef";
 
+//==========================================================
+// Immortal as_string constants for response map construction.
+//
+// count=0 makes as_val_destroy a no-op (same pattern as as_true/as_false/as_nil).
+// These eliminate cf_malloc/cf_free for constant map keys and status values.
+//
+
+#define IMMORTAL_STRING(name, str) \
+    static const as_string name = { \
+        ._ = { .type = AS_STRING, .free = false, .count = 0 }, \
+        .free = false, \
+        .value = (char*)(str), \
+        .len = sizeof(str) - 1 \
+    }
+
+// Response map keys
+IMMORTAL_STRING(g_key_status,        FIELD_STATUS);
+IMMORTAL_STRING(g_key_error_code,    FIELD_ERROR_CODE);
+IMMORTAL_STRING(g_key_message,       FIELD_MESSAGE);
+IMMORTAL_STRING(g_key_signal,        FIELD_SIGNAL);
+IMMORTAL_STRING(g_key_block_ids,     FIELD_BLOCK_IDS);
+IMMORTAL_STRING(g_key_errors,        FIELD_ERRORS);
+IMMORTAL_STRING(g_key_child_count,   FIELD_CHILD_COUNT);
+IMMORTAL_STRING(g_key_spending_data, FIELD_SPENDING_DATA);
+
+// Response status values
+IMMORTAL_STRING(g_val_ok,            STATUS_OK);
+IMMORTAL_STRING(g_val_error,         STATUS_ERROR);
+
+// Signal values
+IMMORTAL_STRING(g_sig_all_spent,     SIGNAL_ALL_SPENT);
+IMMORTAL_STRING(g_sig_not_all_spent, SIGNAL_NOT_ALL_SPENT);
+IMMORTAL_STRING(g_sig_dah_set,       SIGNAL_DELETE_AT_HEIGHT_SET);
+IMMORTAL_STRING(g_sig_dah_unset,     SIGNAL_DELETE_AT_HEIGHT_UNSET);
+IMMORTAL_STRING(g_sig_preserve,      SIGNAL_PRESERVE);
+
+#undef IMMORTAL_STRING
+
 /**
  * Convert a single byte to two hex characters.
  * Uses a lookup table instead of sprintf for ~10x faster conversion.
@@ -440,44 +478,28 @@ utxo_create_error_response(const char* error_code, const char* message)
         return NULL;
     }
 
-    as_string* k_status = as_string_new((char*)FIELD_STATUS, false);
-    as_string* v_status = as_string_new((char*)STATUS_ERROR, false);
-    if (k_status == NULL || v_status == NULL) {
-        if (k_status) as_string_destroy(k_status);
-        if (v_status) as_string_destroy(v_status);
-        as_hashmap_destroy(response);
-        return NULL;
-    }
-    as_hashmap_set(response, (as_val*)k_status, (as_val*)v_status);
+    // Use immortal keys — zero allocations for keys and status value
+    as_hashmap_set(response, (as_val*)&g_key_status, (as_val*)&g_val_error);
 
-    as_string* k_code = as_string_new((char*)FIELD_ERROR_CODE, false);
     as_string* v_code = as_string_new((char*)error_code, false);
-    if (k_code == NULL || v_code == NULL) {
-        if (k_code) as_string_destroy(k_code);
-        if (v_code) as_string_destroy(v_code);
+    if (v_code == NULL) {
         as_hashmap_destroy(response);
         return NULL;
     }
-    as_hashmap_set(response, (as_val*)k_code, (as_val*)v_code);
+    as_hashmap_set(response, (as_val*)&g_key_error_code, (as_val*)v_code);
 
     char* message_copy = strdup(message);
     if (message_copy == NULL) {
         as_hashmap_destroy(response);
         return NULL;
     }
-    as_string* k_msg = as_string_new((char*)FIELD_MESSAGE, false);
     as_string* v_msg = as_string_new(message_copy, true);
-    if (k_msg == NULL || v_msg == NULL) {
-        if (k_msg) as_string_destroy(k_msg);
-        if (v_msg == NULL) {
-            free(message_copy);
-        } else {
-            as_string_destroy(v_msg);
-        }
+    if (v_msg == NULL) {
+        free(message_copy);
         as_hashmap_destroy(response);
         return NULL;
     }
-    as_hashmap_set(response, (as_val*)k_msg, (as_val*)v_msg);
+    as_hashmap_set(response, (as_val*)&g_key_message, (as_val*)v_msg);
 
     return (as_map*)response;
 }
@@ -494,12 +516,7 @@ error_response_add_spending_data(as_map* err, const uint8_t* spending_data)
     }
     as_string* hexstr = utxo_spending_data_to_hex(spending_data);
     if (hexstr != NULL) {
-        as_string* k_sd = as_string_new((char*)FIELD_SPENDING_DATA, false);
-        if (k_sd != NULL) {
-            as_hashmap_set((as_hashmap*)err, (as_val*)k_sd, (as_val*)hexstr);
-        } else {
-            as_string_destroy(hexstr);
-        }
+        as_hashmap_set((as_hashmap*)err, (as_val*)&g_key_spending_data, (as_val*)hexstr);
     }
 }
 
@@ -511,20 +528,13 @@ error_response_add_spending_data(as_map* err, const uint8_t* spending_data)
 as_map*
 utxo_create_ok_response(void)
 {
-    as_hashmap* response = as_hashmap_new(2);
+    as_hashmap* response = as_hashmap_new(4);
     if (response == NULL) {
         return NULL;
     }
 
-    as_string* k_status = as_string_new((char*)FIELD_STATUS, false);
-    as_string* v_status = as_string_new((char*)STATUS_OK, false);
-    if (k_status == NULL || v_status == NULL) {
-        if (k_status) as_string_destroy(k_status);
-        if (v_status) as_string_destroy(v_status);
-        as_hashmap_destroy(response);
-        return NULL;
-    }
-    as_hashmap_set(response, (as_val*)k_status, (as_val*)v_status);
+    // Zero allocations — both key and value are immortal
+    as_hashmap_set(response, (as_val*)&g_key_status, (as_val*)&g_val_ok);
 
     return (as_map*)response;
 }
