@@ -598,42 +598,30 @@ utxo_set_delete_at_height_impl(
         return "";
     }
 
-    // Check preserveUntil
+    // Check preserveUntil — most common early-exit
     as_val* preserve_until_val = as_rec_get(rec, BIN_PRESERVE_UNTIL);
     if (preserve_until_val != NULL && as_val_type(preserve_until_val) != AS_NIL) {
         return "";
     }
 
-    // Get relevant bins
-    as_val* block_ids_val = as_rec_get(rec, BIN_BLOCK_IDS);
-    as_val* total_extra_recs_val = as_rec_get(rec, BIN_TOTAL_EXTRA_RECS);
-    as_val* spent_extra_recs_val = as_rec_get(rec, BIN_SPENT_EXTRA_RECS);
-    as_val* existing_dah_val = as_rec_get(rec, BIN_DELETE_AT_HEIGHT);
-    as_val* conflicting_val = as_rec_get(rec, BIN_CONFLICTING);
-    as_val* external_val = as_rec_get(rec, BIN_EXTERNAL);
-    as_val* spent_utxos_val = as_rec_get(rec, BIN_SPENT_UTXOS);
-    as_val* record_utxos_val = as_rec_get(rec, BIN_RECORD_UTXOS);
-    as_val* unmined_since_val = as_rec_get(rec, BIN_UNMINED_SINCE);
-    as_val* last_spent_state_val = as_rec_get(rec, BIN_LAST_SPENT_STATE);
-
     int64_t new_delete_height = current_block_height + block_height_retention;
-    int64_t spent_extra_recs = 0;
-    bool has_external = (external_val != NULL && as_val_type(external_val) != AS_NIL);
 
-    if (spent_extra_recs_val != NULL && as_val_type(spent_extra_recs_val) == AS_INTEGER) {
-        spent_extra_recs = as_integer_get(as_integer_fromval(spent_extra_recs_val));
-    }
-
-    // Handle conflicting transactions
+    // Handle conflicting transactions — read only conflicting + dah + external
+    as_val* conflicting_val = as_rec_get(rec, BIN_CONFLICTING);
     if (conflicting_val != NULL && as_val_type(conflicting_val) == AS_BOOLEAN) {
         if (as_boolean_get(as_boolean_fromval(conflicting_val))) {
+            as_val* existing_dah_val = as_rec_get(rec, BIN_DELETE_AT_HEIGHT);
             if (existing_dah_val == NULL || as_val_type(existing_dah_val) == AS_NIL) {
-                // Extract total_extra_recs BEFORE as_rec_set to avoid use-after-free
+                as_val* external_val = as_rec_get(rec, BIN_EXTERNAL);
+                bool has_external = (external_val != NULL && as_val_type(external_val) != AS_NIL);
                 bool should_signal = false;
                 int64_t total_extra_recs = 0;
-                if (has_external && total_extra_recs_val != NULL && as_val_type(total_extra_recs_val) == AS_INTEGER) {
-                    total_extra_recs = as_integer_get(as_integer_fromval(total_extra_recs_val));
-                    should_signal = true;
+                if (has_external) {
+                    as_val* total_extra_recs_val = as_rec_get(rec, BIN_TOTAL_EXTRA_RECS);
+                    if (total_extra_recs_val != NULL && as_val_type(total_extra_recs_val) == AS_INTEGER) {
+                        total_extra_recs = as_integer_get(as_integer_fromval(total_extra_recs_val));
+                        should_signal = true;
+                    }
                 }
 
                 as_rec_set(rec, BIN_DELETE_AT_HEIGHT, (as_val*)as_integer_new(new_delete_height));
@@ -647,17 +635,21 @@ utxo_set_delete_at_height_impl(
         }
     }
 
-    // Handle pagination records (no totalExtraRecs = child record)
+    // Determine record type: child (no totalExtraRecs) vs master
+    as_val* total_extra_recs_val = as_rec_get(rec, BIN_TOTAL_EXTRA_RECS);
+
+    // Child record path — read only spent_utxos, record_utxos, last_spent_state
     if (total_extra_recs_val == NULL || as_val_type(total_extra_recs_val) == AS_NIL) {
-        // Default nil to NOTALLSPENT
+        as_val* last_spent_state_val = as_rec_get(rec, BIN_LAST_SPENT_STATE);
         const char* last_state = SIGNAL_NOT_ALL_SPENT;
         if (last_spent_state_val != NULL && as_val_type(last_spent_state_val) == AS_STRING) {
             last_state = as_string_get(as_string_fromval(last_spent_state_val));
         }
 
+        as_val* spent_utxos_val = as_rec_get(rec, BIN_SPENT_UTXOS);
+        as_val* record_utxos_val = as_rec_get(rec, BIN_RECORD_UTXOS);
         int64_t spent_utxos = 0;
         int64_t record_utxos = 0;
-
         if (spent_utxos_val != NULL && as_val_type(spent_utxos_val) == AS_INTEGER) {
             spent_utxos = as_integer_get(as_integer_fromval(spent_utxos_val));
         }
@@ -675,16 +667,23 @@ utxo_set_delete_at_height_impl(
         return "";
     }
 
-    // Master record: check all conditions for deletion
+    // Master record path — read all remaining bins needed
     if (as_val_type(total_extra_recs_val) != AS_INTEGER) {
         return "";
     }
     int64_t total_extra_recs = as_integer_get(as_integer_fromval(total_extra_recs_val));
     *out_child_count = total_extra_recs;
 
+    as_val* spent_extra_recs_val = as_rec_get(rec, BIN_SPENT_EXTRA_RECS);
+    int64_t spent_extra_recs = 0;
+    if (spent_extra_recs_val != NULL && as_val_type(spent_extra_recs_val) == AS_INTEGER) {
+        spent_extra_recs = as_integer_get(as_integer_fromval(spent_extra_recs_val));
+    }
+
+    as_val* spent_utxos_val = as_rec_get(rec, BIN_SPENT_UTXOS);
+    as_val* record_utxos_val = as_rec_get(rec, BIN_RECORD_UTXOS);
     int64_t spent_utxos = 0;
     int64_t record_utxos = 0;
-
     if (spent_utxos_val != NULL && as_val_type(spent_utxos_val) == AS_INTEGER) {
         spent_utxos = as_integer_get(as_integer_fromval(spent_utxos_val));
     }
@@ -694,12 +693,18 @@ utxo_set_delete_at_height_impl(
 
     bool all_spent = (total_extra_recs == spent_extra_recs) && (spent_utxos == record_utxos);
 
+    as_val* block_ids_val = as_rec_get(rec, BIN_BLOCK_IDS);
     bool has_block_ids = false;
     if (block_ids_val != NULL && as_val_type(block_ids_val) == AS_LIST) {
         has_block_ids = as_list_size(as_list_fromval(block_ids_val)) > 0;
     }
 
+    as_val* unmined_since_val = as_rec_get(rec, BIN_UNMINED_SINCE);
     bool is_on_longest_chain = (unmined_since_val == NULL || as_val_type(unmined_since_val) == AS_NIL);
+
+    as_val* existing_dah_val = as_rec_get(rec, BIN_DELETE_AT_HEIGHT);
+    as_val* external_val = as_rec_get(rec, BIN_EXTERNAL);
+    bool has_external = (external_val != NULL && as_val_type(external_val) != AS_NIL);
 
     if (all_spent && has_block_ids && is_on_longest_chain) {
         int64_t existing_dah = 0;
