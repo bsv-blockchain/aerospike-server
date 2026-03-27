@@ -1055,17 +1055,9 @@ teranode_spend_multi(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
     }
 
-    // Max 5 entries: status, errors, blockIDs, signal, childCount
-    as_hashmap* response = as_hashmap_new(5);
-    if (response == NULL) {
-        return (as_val*)utxo_create_error_response(
-            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
-    }
-
     // Extract arguments
     as_val* spends_val = as_list_get(args, 0);
     if (spends_val == NULL || as_val_type(spends_val) != AS_LIST) {
-        as_val_destroy((as_val*)response);
         return (as_val*)utxo_create_error_response(
             ERROR_CODE_INVALID_PARAMETER, "Invalid spends list");
     }
@@ -1075,38 +1067,32 @@ teranode_spend_multi(as_rec* rec, as_list* args, as_aerospike* as)
     int64_t current_block_height = get_list_int64(args, 3);
     int64_t block_height_retention = get_list_int64(args, 4);
 
-    // Check creating flag
+    // Pre-checks — return error directly without allocating response hashmap
     as_val* creating_val = as_rec_get(rec, BIN_CREATING);
     if (creating_val != NULL && as_val_type(creating_val) == AS_BOOLEAN) {
         if (as_boolean_get(as_boolean_fromval(creating_val))) {
-            as_val_destroy((as_val*)response);
             return (as_val*)utxo_create_error_response(ERROR_CODE_CREATING, MSG_CREATING);
         }
     }
 
-    // Check conflicting
     if (!ignore_conflicting) {
         as_val* conflicting_val = as_rec_get(rec, BIN_CONFLICTING);
         if (conflicting_val != NULL && as_val_type(conflicting_val) == AS_BOOLEAN) {
             if (as_boolean_get(as_boolean_fromval(conflicting_val))) {
-                as_val_destroy((as_val*)response);
                 return (as_val*)utxo_create_error_response(ERROR_CODE_CONFLICTING, MSG_CONFLICTING);
             }
         }
     }
 
-    // Check locked
     if (!ignore_locked) {
         as_val* locked_val = as_rec_get(rec, BIN_LOCKED);
         if (locked_val != NULL && as_val_type(locked_val) == AS_BOOLEAN) {
             if (as_boolean_get(as_boolean_fromval(locked_val))) {
-                as_val_destroy((as_val*)response);
                 return (as_val*)utxo_create_error_response(ERROR_CODE_LOCKED, MSG_LOCKED);
             }
         }
     }
 
-    // Check coinbase spending height
     as_val* spending_height_val = as_rec_get(rec, BIN_SPENDING_HEIGHT);
     if (spending_height_val != NULL && as_val_type(spending_height_val) == AS_INTEGER) {
         int64_t coinbase_spending_height = as_integer_get(as_integer_fromval(spending_height_val));
@@ -1114,7 +1100,6 @@ teranode_spend_multi(as_rec* rec, as_list* args, as_aerospike* as)
             char msg[256];
             snprintf(msg, sizeof(msg), "%s, spendable in block %lld or greater. Current block height is %lld",
                 MSG_COINBASE_IMMATURE, (long long)coinbase_spending_height, (long long)current_block_height);
-            as_val_destroy((as_val*)response);
             return (as_val*)utxo_create_error_response(ERROR_CODE_COINBASE_IMMATURE, msg);
         }
     }
@@ -1122,10 +1107,16 @@ teranode_spend_multi(as_rec* rec, as_list* args, as_aerospike* as)
     // Get utxos bin
     as_val* utxos_val = as_rec_get(rec, BIN_UTXOS);
     if (utxos_val == NULL || as_val_type(utxos_val) != AS_LIST) {
-        as_val_destroy((as_val*)response);
         return (as_val*)utxo_create_error_response(ERROR_CODE_UTXOS_NOT_FOUND, ERR_UTXOS_NOT_FOUND);
     }
     as_list* utxos = as_list_fromval(utxos_val);
+
+    // Allocate response only after all pre-checks pass
+    as_hashmap* response = as_hashmap_new(5);
+    if (response == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
 
     // Fetch deleted_children and spendable_in once before the loop.
     // These bins are never modified inside the loop (only BIN_SPENT_UTXOS is set),
