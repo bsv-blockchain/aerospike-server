@@ -293,6 +293,14 @@ as_val* teranode_increment_spent_extra_recs(as_rec* rec, as_list* args, as_aeros
  */
 as_val* teranode_set_delete_at_height(as_rec* rec, as_list* args, as_aerospike* as);
 
+/**
+ * Add child transaction hashes to the deletedChildren map.
+ *
+ * Args (as_list):
+ *   [0] childHashes (list of strings) - child tx hashes to mark as deleted
+ */
+as_val* teranode_add_deleted_children(as_rec* rec, as_list* args, as_aerospike* as);
+
 //==========================================================
 // Internal Helper Function Declarations.
 //
