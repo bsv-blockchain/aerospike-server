@@ -188,29 +188,6 @@ static inline int64_t get_list_int64(as_list* list, uint32_t index) {
     return as_integer_get(i);
 }
 
-/**
- * Fast-path: create a 68-byte spent UTXO from raw hash and spending data
- * pointers. Bypasses the validation in utxo_create_with_spending_data since
- * callers have already validated sizes via utxo_get_and_validate.
- *
- * @param hash_data     Pointer to UTXO_HASH_SIZE (32) bytes.
- * @param spending_ptr  Pointer to SPENDING_DATA_SIZE (36) bytes.
- * @return Newly allocated 68-byte as_bytes, or NULL on failure.
- */
-static inline as_bytes*
-utxo_create_spent(const uint8_t* hash_data, const uint8_t* spending_ptr)
-{
-    as_bytes* new_utxo = as_bytes_new(FULL_UTXO_SIZE);
-    if (new_utxo == NULL) {
-        return NULL;
-    }
-
-    uint8_t* dst = new_utxo->value;
-    memcpy(dst, hash_data, UTXO_HASH_SIZE);
-    memcpy(dst + UTXO_HASH_SIZE, spending_ptr, SPENDING_DATA_SIZE);
-    new_utxo->size = FULL_UTXO_SIZE;
-    return new_utxo;
-}
 
 /**
  * Safely extract an as_bytes pointer from an as_list at the given index.
@@ -839,22 +816,23 @@ spend_single_utxo(
         }
     }
 
-    // Create new UTXO with spending data — use fast-path since we already
-    // validated sizes via utxo_get_and_validate above
-    const uint8_t* hash_ptr = as_bytes_get(utxo_hash);
+    // Grow existing UTXO in-place from 32->68 bytes.
+    // as_bytes_ensure uses cf_realloc which preserves the existing 32-byte hash,
+    // eliminating the hash copy. existing_spending_data is NULL here (already-spent
+    // UTXOs are handled above), so no dangling pointer risk from realloc.
     const uint8_t* spend_ptr = as_bytes_get(spending_data);
-    if (hash_ptr == NULL || spend_ptr == NULL) {
+    if (spend_ptr == NULL) {
         *out_error = utxo_create_error_response(
-            ERROR_CODE_INVALID_PARAMETER, "Failed to get byte data");
+            ERROR_CODE_INVALID_PARAMETER, "Failed to get spending data");
         return SPEND_ERROR;
     }
-    as_bytes* new_utxo = utxo_create_spent(hash_ptr, spend_ptr);
-    if (new_utxo == NULL) {
+    if (!as_bytes_ensure(utxo, FULL_UTXO_SIZE, true)) {
         *out_error = utxo_create_error_response(
             ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
         return SPEND_ERROR;
     }
-    as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
+    memcpy(utxo->value + UTXO_HASH_SIZE, spend_ptr, SPENDING_DATA_SIZE);
+    utxo->size = FULL_UTXO_SIZE;
 
     // Caller is responsible for batching the BIN_SPENT_UTXOS increment
     return SPEND_OK;
@@ -1324,13 +1302,8 @@ teranode_unspend(as_rec* rec, as_list* args, as_aerospike* as)
             return (as_val*)utxo_create_error_response(ERROR_CODE_FROZEN, ERR_UTXO_IS_FROZEN);
         }
 
-        // Create unspent UTXO
-        as_bytes* new_utxo = utxo_create_with_spending_data(utxo_hash, NULL);
-        if (new_utxo == NULL) {
-            return (as_val*)utxo_create_error_response(
-                ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
-        }
-        as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
+        // Truncate in-place: remove spending data, keep hash (zero alloc, zero copy)
+        as_bytes_truncate(utxo, SPENDING_DATA_SIZE);
 
         // Mark utxos bin as dirty to persist changes
         as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
@@ -1875,13 +1848,8 @@ teranode_unfreeze(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_UTXO_NOT_FROZEN, ERR_UTXO_NOT_FROZEN);
     }
 
-    // Create unspent UTXO (remove spending data)
-    as_bytes* new_utxo = utxo_create_with_spending_data(utxo_hash, NULL);
-    if (new_utxo == NULL) {
-        return (as_val*)utxo_create_error_response(
-            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
-    }
-    as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
+    // Truncate in-place: remove frozen spending data (zero alloc, zero copy)
+    as_bytes_truncate(utxo, SPENDING_DATA_SIZE);
 
     // Mark utxos bin as dirty to persist changes
     as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
