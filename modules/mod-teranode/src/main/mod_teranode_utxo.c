@@ -77,6 +77,48 @@ IMMORTAL_STRING(g_sig_preserve,      SIGNAL_PRESERVE);
 #undef IMMORTAL_STRING
 
 /**
+ * Map a signal const char* to its immortal as_string.
+ * Signal strings come from #define constants so this is a fast
+ * first-character dispatch. Returns NULL for empty/unknown signals.
+ */
+static inline const as_val*
+signal_to_val(const char* signal)
+{
+    switch (signal[0]) {
+    case 'A': return (const as_val*)&g_sig_all_spent;
+    case 'N': return (const as_val*)&g_sig_not_all_spent;
+    case 'P': return (const as_val*)&g_sig_preserve;
+    case 'D': return (signal[3] == 'S') ?
+        (const as_val*)&g_sig_dah_set : (const as_val*)&g_sig_dah_unset;
+    default:  return NULL;
+    }
+}
+
+/**
+ * Append signal and optional childCount to a response map.
+ * No-op if signal is empty. Uses immortal string constants.
+ */
+static inline void
+response_add_signal(as_hashmap* response, const char* signal, int64_t child_count)
+{
+    if (signal == NULL || signal[0] == '\0') {
+        return;
+    }
+    const as_val* sig_val = signal_to_val(signal);
+    if (sig_val != NULL) {
+        as_hashmap_set(response, (as_val*)&g_key_signal, (as_val*)sig_val);
+    } else {
+        as_hashmap_set(response, (as_val*)&g_key_signal,
+            (as_val*)as_string_new((char*)signal, false));
+    }
+    if (child_count > 0) {
+        as_hashmap_set(response,
+            (as_val*)&g_key_child_count,
+            (as_val*)as_integer_new(child_count));
+    }
+}
+
+/**
  * Convert a single byte to two hex characters.
  * Uses a lookup table instead of sprintf for ~10x faster conversion.
  *
@@ -966,8 +1008,8 @@ teranode_spend(as_rec* rec, as_list* args, as_aerospike* as)
 
     if (result == SPEND_ERROR && spend_error != NULL) {
         as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_STATUS, false),
-            (as_val*)as_string_new((char*)STATUS_ERROR, false));
+            (as_val*)&g_key_status,
+            (as_val*)&g_val_error);
         // Wrap single error in errors map keyed by index 0
         as_hashmap* errors_map = as_hashmap_new(1);
         if (errors_map != NULL) {
@@ -975,7 +1017,7 @@ teranode_spend(as_rec* rec, as_list* args, as_aerospike* as)
                 (as_val*)as_integer_new(0),
                 (as_val*)spend_error);
             as_hashmap_set(response,
-                (as_val*)as_string_new((char*)FIELD_ERRORS, false),
+                (as_val*)&g_key_errors,
                 (as_val*)errors_map);
         } else {
             as_val_destroy((as_val*)spend_error);
@@ -985,27 +1027,18 @@ teranode_spend(as_rec* rec, as_list* args, as_aerospike* as)
             as_val_destroy((as_val*)spend_error);
         }
         as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_STATUS, false),
-            (as_val*)as_string_new((char*)STATUS_OK, false));
+            (as_val*)&g_key_status,
+            (as_val*)&g_val_ok);
     }
 
     as_val* response_block_ids_val = as_rec_get(rec, BIN_BLOCK_IDS);
     if (response_block_ids_val != NULL && as_val_type(response_block_ids_val) == AS_LIST) {
         as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_BLOCK_IDS, false),
+            (as_val*)&g_key_block_ids,
             as_val_reserve(response_block_ids_val));
     }
 
-    if (signal != NULL && signal[0] != '\0') {
-        as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_SIGNAL, false),
-            (as_val*)as_string_new((char*)signal, false));
-        if (child_count > 0) {
-            as_hashmap_set(response,
-                (as_val*)as_string_new((char*)FIELD_CHILD_COUNT, false),
-                (as_val*)as_integer_new(child_count));
-        }
-    }
+    response_add_signal(response, signal, child_count);
 
     return (as_val*)response;
 }
@@ -1213,33 +1246,24 @@ teranode_spend_multi(as_rec* rec, as_list* args, as_aerospike* as)
     // Build response
     if (errors != NULL && as_hashmap_size(errors) > 0) {
         as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_STATUS, false),
-            (as_val*)as_string_new((char*)STATUS_ERROR, false));
+            (as_val*)&g_key_status,
+            (as_val*)&g_val_error);
         as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_ERRORS, false),
+            (as_val*)&g_key_errors,
             (as_val*)errors);
     } else {
         as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_STATUS, false),
-            (as_val*)as_string_new((char*)STATUS_OK, false));
+            (as_val*)&g_key_status,
+            (as_val*)&g_val_ok);
     }
 
     if (response_block_ids_val != NULL && as_val_type(response_block_ids_val) == AS_LIST) {
         as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_BLOCK_IDS, false),
+            (as_val*)&g_key_block_ids,
             as_val_reserve(response_block_ids_val));
     }
 
-    if (signal != NULL && signal[0] != '\0') {
-        as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_SIGNAL, false),
-            (as_val*)as_string_new((char*)signal, false));
-        if (child_count > 0) {
-            as_hashmap_set(response,
-                (as_val*)as_string_new((char*)FIELD_CHILD_COUNT, false),
-                (as_val*)as_integer_new(child_count));
-        }
-    }
+    response_add_signal(response, signal, child_count);
 
     return (as_val*)response;
 }
@@ -1337,16 +1361,7 @@ teranode_unspend(as_rec* rec, as_list* args, as_aerospike* as)
             ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
     }
 
-    if (signal != NULL && signal[0] != '\0') {
-        as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_SIGNAL, false),
-            (as_val*)as_string_new((char*)signal, false));
-        if (child_count > 0) {
-            as_hashmap_set(response,
-                (as_val*)as_string_new((char*)FIELD_CHILD_COUNT, false),
-                (as_val*)as_integer_new(child_count));
-        }
-    }
+    response_add_signal(response, signal, child_count);
 
     return (as_val*)response;
 }
@@ -1699,19 +1714,10 @@ dah_done: ;
 
     // Always include blockIDs in response (matches Lua behavior)
     as_hashmap_set(response,
-        (as_val*)as_string_new((char*)FIELD_BLOCK_IDS, false),
+        (as_val*)&g_key_block_ids,
         as_val_reserve((as_val*)block_ids));
 
-    if (signal[0] != '\0') {
-        as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_SIGNAL, false),
-            (as_val*)as_string_new((char*)signal, false));
-        if (child_count > 0) {
-            as_hashmap_set(response,
-                (as_val*)as_string_new((char*)FIELD_CHILD_COUNT, false),
-                (as_val*)as_integer_new(child_count));
-        }
-    }
+    response_add_signal(response, signal, child_count);
 
     return (as_val*)response;
 }
@@ -1772,12 +1778,7 @@ teranode_freeze(as_rec* rec, as_list* args, as_aerospike* as)
             as_map* err = utxo_create_error_response(ERROR_CODE_SPENT, MSG_SPENT);
             as_string* hexstr = utxo_spending_data_to_hex(existing_spending_data);
             if (hexstr != NULL) {
-                as_string* k_sd = as_string_new((char*)FIELD_SPENDING_DATA, false);
-                if (k_sd != NULL) {
-                    as_hashmap_set((as_hashmap*)err, (as_val*)k_sd, (as_val*)hexstr);
-                } else {
-                    as_string_destroy(hexstr);
-                }
+                as_hashmap_set((as_hashmap*)err, (as_val*)&g_key_spending_data, (as_val*)hexstr);
             }
             return (as_val*)err;
         }
@@ -2121,16 +2122,7 @@ teranode_set_conflicting(as_rec* rec, as_list* args, as_aerospike* as)
             ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
     }
 
-    if (signal != NULL && signal[0] != '\0') {
-        as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_SIGNAL, false),
-            (as_val*)as_string_new((char*)signal, false));
-        if (child_count > 0) {
-            as_hashmap_set(response,
-                (as_val*)as_string_new((char*)FIELD_CHILD_COUNT, false),
-                (as_val*)as_integer_new(child_count));
-        }
-    }
+    response_add_signal(response, signal, child_count);
 
     return (as_val*)response;
 }
@@ -2178,9 +2170,7 @@ teranode_preserve_until(as_rec* rec, as_list* args, as_aerospike* as)
     // Check if we need to signal external file handling
     as_val* external_val = as_rec_get(rec, BIN_EXTERNAL);
     if (external_val != NULL && as_val_type(external_val) != AS_NIL) {
-        as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_SIGNAL, false),
-            (as_val*)as_string_new((char*)SIGNAL_PRESERVE, false));
+        as_hashmap_set(response, (as_val*)&g_key_signal, (as_val*)&g_sig_preserve);
     }
 
     return (as_val*)response;
@@ -2241,7 +2231,7 @@ teranode_set_locked(as_rec* rec, as_list* args, as_aerospike* as)
             ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
     }
     as_hashmap_set(response,
-        (as_val*)as_string_new((char*)FIELD_CHILD_COUNT, false),
+        (as_val*)&g_key_child_count,
         (as_val*)as_integer_new(total_extra_recs));
 
     return (as_val*)response;
@@ -2321,16 +2311,7 @@ teranode_increment_spent_extra_recs(as_rec* rec, as_list* args, as_aerospike* as
             ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
     }
 
-    if (signal != NULL && signal[0] != '\0') {
-        as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_SIGNAL, false),
-            (as_val*)as_string_new((char*)signal, false));
-        if (child_count > 0) {
-            as_hashmap_set(response,
-                (as_val*)as_string_new((char*)FIELD_CHILD_COUNT, false),
-                (as_val*)as_integer_new(child_count));
-        }
-    }
+    response_add_signal(response, signal, child_count);
 
     return (as_val*)response;
 }
@@ -2369,16 +2350,7 @@ teranode_set_delete_at_height(as_rec* rec, as_list* args, as_aerospike* as)
             ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
     }
 
-    if (signal != NULL && signal[0] != '\0') {
-        as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_SIGNAL, false),
-            (as_val*)as_string_new((char*)signal, false));
-        if (child_count > 0) {
-            as_hashmap_set(response,
-                (as_val*)as_string_new((char*)FIELD_CHILD_COUNT, false),
-                (as_val*)as_integer_new(child_count));
-        }
-    }
+    response_add_signal(response, signal, child_count);
 
     return (as_val*)response;
 }
