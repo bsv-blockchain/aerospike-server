@@ -25,6 +25,8 @@
 #include <aerospike/as_hashmap.h>
 #include <aerospike/as_nil.h>
 
+#include <citrusleaf/alloc.h>
+
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,7 +38,7 @@
 //
 
 // Fast hex conversion lookup table (used by byte_to_hex).
-static const char hex_digits[16] = "0123456789abcdef";
+static const char hex_digits[] = "0123456789abcdef";
 
 //==========================================================
 // Immortal as_string constants for response map construction.
@@ -73,6 +75,14 @@ IMMORTAL_STRING(g_sig_not_all_spent, SIGNAL_NOT_ALL_SPENT);
 IMMORTAL_STRING(g_sig_dah_set,       SIGNAL_DELETE_AT_HEIGHT_SET);
 IMMORTAL_STRING(g_sig_dah_unset,     SIGNAL_DELETE_AT_HEIGHT_UNSET);
 IMMORTAL_STRING(g_sig_preserve,      SIGNAL_PRESERVE);
+
+// Spend-item and reassignment map lookup keys
+IMMORTAL_STRING(g_key_offset,        "offset");
+IMMORTAL_STRING(g_key_utxo_hash,     "utxoHash");
+IMMORTAL_STRING(g_key_spending_data_key, "spendingData");
+IMMORTAL_STRING(g_key_idx,           "idx");
+IMMORTAL_STRING(g_key_new_utxo_hash, "newUtxoHash");
+IMMORTAL_STRING(g_key_block_height,  "blockHeight");
 
 #undef IMMORTAL_STRING
 
@@ -210,6 +220,9 @@ static inline as_bytes* get_list_bytes(as_list* list, uint32_t index) {
  * Compare two as_bytes objects for byte-level equality.
  * Two NULLs are considered equal. A NULL and non-NULL are not equal.
  * Returns false if either bytes object has NULL internal data.
+ *
+ * Not used in the hot path (direct memcmp on raw pointers is preferred),
+ * but retained for test use.
  */
 bool
 utxo_bytes_equal(as_bytes* a, as_bytes* b)
@@ -452,8 +465,9 @@ utxo_spending_data_to_hex(const uint8_t* spending_data)
         return NULL;
     }
 
-    // Allocate directly — 64 + 8 + NUL = 73 bytes
-    char* hex = malloc(73);
+    // Allocate directly — 64 + 8 + NUL = 73 bytes.
+    // Use cf_malloc to match cf_free in as_string destruction (free=true).
+    char* hex = cf_malloc(73);
     if (hex == NULL) {
         return NULL;
     }
@@ -474,7 +488,7 @@ utxo_spending_data_to_hex(const uint8_t* spending_data)
     hex[72] = '\0';
     as_string* s = as_string_new(hex, true);
     if (s == NULL) {
-        free(hex);
+        cf_free(hex);
         return NULL;
     }
     return s;
@@ -1142,26 +1156,20 @@ teranode_spend_multi(as_rec* rec, as_list* args, as_aerospike* as)
         as_map* spend_item = as_map_fromval(as_list_get(spends, i));
         if (spend_item == NULL) continue;
 
-        // Use stack-allocated as_string keys to avoid heap alloc churn
-        as_string k_offset;
-        as_string_init(&k_offset, (char*)"offset", false);
-        as_val* v_offset = as_map_get(spend_item, (as_val*)&k_offset);
+        // Use immortal string keys — zero per-iteration init cost
+        as_val* v_offset = as_map_get(spend_item, (as_val*)&g_key_offset);
         if (v_offset == NULL || as_val_type(v_offset) != AS_INTEGER) {
             continue;
         }
         int64_t offset = as_integer_get(as_integer_fromval(v_offset));
 
-        as_string k_utxo;
-        as_string_init(&k_utxo, (char*)"utxoHash", false);
-        as_val* v_utxo = as_map_get(spend_item, (as_val*)&k_utxo);
+        as_val* v_utxo = as_map_get(spend_item, (as_val*)&g_key_utxo_hash);
         if (v_utxo == NULL || as_val_type(v_utxo) != AS_BYTES) {
             continue;
         }
         as_bytes* utxo_hash = as_bytes_fromval(v_utxo);
 
-        as_string k_sp;
-        as_string_init(&k_sp, (char*)"spendingData", false);
-        as_val* v_sp = as_map_get(spend_item, (as_val*)&k_sp);
+        as_val* v_sp = as_map_get(spend_item, (as_val*)&g_key_spending_data_key);
         if (v_sp == NULL || as_val_type(v_sp) != AS_BYTES) {
             continue;
         }
@@ -1175,9 +1183,7 @@ teranode_spend_multi(as_rec* rec, as_list* args, as_aerospike* as)
         if (sr == SPEND_OK) {
             success_count++;
         } else if (sr == SPEND_ERROR && spend_error != NULL) {
-            as_string k_idx;
-            as_string_init(&k_idx, (char*)"idx", false);
-            as_val* idx_val = as_map_get(spend_item, (as_val*)&k_idx);
+            as_val* idx_val = as_map_get(spend_item, (as_val*)&g_key_idx);
             int64_t idx = (idx_val != NULL && as_val_type(idx_val) == AS_INTEGER) ?
                 as_integer_get(as_integer_fromval(idx_val)) : i;
 
@@ -1758,23 +1764,16 @@ teranode_freeze(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_UTXO_INVALID_SIZE, ERR_UTXO_INVALID_SIZE);
     }
 
-    // Build frozen UTXO directly — avoids intermediate as_bytes allocation + double copy
-    const uint8_t* hash_data = as_bytes_get(utxo_hash);
-    if (hash_data == NULL) {
-        return (as_val*)utxo_create_error_response(
-            ERROR_CODE_INVALID_PARAMETER, "Failed to get UTXO hash data");
-    }
-
-    as_bytes* new_utxo = as_bytes_new(FULL_UTXO_SIZE);
-    if (new_utxo == NULL) {
+    // Grow existing UTXO in-place from 32->68 bytes (same pattern as spend_single_utxo).
+    // The hash is already correct (validated by utxo_get_and_validate above), so we
+    // only need to write the frozen spending data. as_bytes_ensure uses cf_realloc
+    // which preserves the existing 32-byte hash.
+    if (!as_bytes_ensure(utxo, FULL_UTXO_SIZE, true)) {
         return (as_val*)utxo_create_error_response(
             ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
     }
-    as_bytes_set(new_utxo, 0, hash_data, UTXO_HASH_SIZE);
-    memset(new_utxo->value + UTXO_HASH_SIZE, FROZEN_BYTE, SPENDING_DATA_SIZE);
-    new_utxo->size = FULL_UTXO_SIZE;
-
-    as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
+    memset(utxo->value + UTXO_HASH_SIZE, FROZEN_BYTE, SPENDING_DATA_SIZE);
+    utxo->size = FULL_UTXO_SIZE;
 
     // Mark utxos bin as dirty to persist changes
     as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
@@ -1923,13 +1922,16 @@ teranode_reassign(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_UTXO_NOT_FROZEN, ERR_UTXO_NOT_FROZEN);
     }
 
-    // Create new UTXO with new hash (unspent)
-    as_bytes* new_utxo = utxo_create_with_spending_data(new_utxo_hash, NULL);
-    if (new_utxo == NULL) {
+    // Mutate existing UTXO in-place: overwrite hash, truncate frozen spending data.
+    // The existing buffer has 68 bytes capacity — overwriting the first 32 is safe.
+    // Same zero-alloc pattern as unfreeze (as_bytes_truncate).
+    const uint8_t* new_hash_data = as_bytes_get(new_utxo_hash);
+    if (new_hash_data == NULL) {
         return (as_val*)utxo_create_error_response(
-            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+            ERROR_CODE_INVALID_PARAMETER, "Failed to get new UTXO hash data");
     }
-    as_list_set(utxos, (uint32_t)offset, (as_val*)new_utxo);
+    memcpy(utxo->value, new_hash_data, UTXO_HASH_SIZE);
+    as_bytes_truncate(utxo, SPENDING_DATA_SIZE);
 
     // Mark utxos bin as dirty to persist changes
     as_rec_set(rec, BIN_UTXOS, as_val_reserve((as_val*)utxos));
@@ -1983,17 +1985,18 @@ teranode_reassign(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(
             ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
     }
+    // Use immortal string keys — eliminates 4 cf_malloc/cf_free per reassign
     as_hashmap_set(reassignment_entry,
-        (as_val*)as_string_new((char*)"offset", false),
+        (as_val*)&g_key_offset,
         (as_val*)as_integer_new(offset));
     as_hashmap_set(reassignment_entry,
-        (as_val*)as_string_new((char*)"utxoHash", false),
+        (as_val*)&g_key_utxo_hash,
         as_val_reserve((as_val*)utxo_hash));
     as_hashmap_set(reassignment_entry,
-        (as_val*)as_string_new((char*)"newUtxoHash", false),
+        (as_val*)&g_key_new_utxo_hash,
         as_val_reserve((as_val*)new_utxo_hash));
     as_hashmap_set(reassignment_entry,
-        (as_val*)as_string_new((char*)"blockHeight", false),
+        (as_val*)&g_key_block_height,
         (as_val*)as_integer_new(block_height));
 
     as_list_append(reassignments, (as_val*)reassignment_entry);
