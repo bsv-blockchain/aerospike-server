@@ -173,9 +173,10 @@ teranode_validate(as_module* m, as_aerospike* as,
  * dispatch (switch on function[0], then strcmp within each group). This
  * reduces average strcmp calls from ~6 to ~2 for the 12 registered functions.
  *
- * Groups: 's' (spend, spendMulti, setMined, setConflicting, setLocked,
- * setDeleteAtHeight), 'u' (unspend, unfreeze), 'f' (freeze),
- * 'i' (incrementSpentExtraRecs), 'p' (preserveUntil), 'r' (reassign).
+ * Groups: 'a' (addDeletedChildren), 's' (spend, spendMulti, setMined,
+ * setConflicting, setLocked, setDeleteAtHeight), 'u' (unspend, unfreeze),
+ * 'f' (freeze), 'i' (incrementSpentExtraRecs), 'p' (preserveUntil),
+ * 'r' (reassign).
  *
  * After execution, decrements the record refcount to compensate for the
  * unconditional as_val_reserve in udf.c (see comment at label 'done').
@@ -201,6 +202,9 @@ teranode_apply_record(as_module* m, as_udf_context* ctx,
     teranode_fn fn = NULL;
 
     switch (function[0]) {
+    case 'a':
+        if (strcmp(function, "addDeletedChildren") == 0) fn = teranode_add_deleted_children;
+        break;
     case 's':
         // spend, spendMulti, setMined, setConflicting, setLocked, setDeleteAtHeight
         if (strcmp(function, "spend") == 0) fn = teranode_spend;

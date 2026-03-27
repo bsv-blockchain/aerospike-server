@@ -440,6 +440,8 @@ TEST(incrementSpentExtraRecs_no_total)
 
 TEST(incrementSpentExtraRecs_negative_result)
 {
+    // Clamps negative results to 0 instead of erroring (matches Lua behavior).
+    // Handles counter drift from interrupted rollbacks.
     as_rec* rec = mock_rec_new();
     as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
@@ -447,15 +449,20 @@ TEST(incrementSpentExtraRecs_negative_result)
     as_rec_set(rec, "spentExtraRecs", (as_val*)as_integer_new(2));
 
     as_arraylist* args = as_arraylist_new(3, 0);
-    as_arraylist_append_int64(args, -5);    // Would result in -3
+    as_arraylist_append_int64(args, -5);    // Would result in -3, clamped to 0
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
     as_val* result = teranode_increment_spent_extra_recs(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
-    as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
-    ASSERT_STR_EQ(as_string_get(as_string_fromval(code)), ERROR_CODE_INVALID_PARAMETER);
+    as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
+    ASSERT_STR_EQ(as_string_get(as_string_fromval(status)), "OK");
+
+    // Verify spentExtraRecs was clamped to 0
+    as_val* spent_val = as_rec_get(rec, "spentExtraRecs");
+    ASSERT_NOT_NULL(spent_val);
+    ASSERT_EQ(as_integer_get(as_integer_fromval(spent_val)), 0);
 
     as_arraylist_destroy(args);
     as_val_destroy(result);
@@ -465,6 +472,8 @@ TEST(incrementSpentExtraRecs_negative_result)
 
 TEST(incrementSpentExtraRecs_exceeds_total)
 {
+    // Clamps values exceeding totalExtraRecs instead of erroring (matches Lua behavior).
+    // Handles counter drift from interrupted rollbacks.
     as_rec* rec = mock_rec_new();
     as_aerospike* as_ctx = mock_aerospike_new();
     mock_rec_init_utxos(rec, 5);
@@ -472,15 +481,20 @@ TEST(incrementSpentExtraRecs_exceeds_total)
     as_rec_set(rec, "spentExtraRecs", (as_val*)as_integer_new(8));
 
     as_arraylist* args = as_arraylist_new(3, 0);
-    as_arraylist_append_int64(args, 5);     // Would result in 13 > 10
+    as_arraylist_append_int64(args, 5);     // Would result in 13 > 10, clamped to 10
     as_arraylist_append_int64(args, 1000);
     as_arraylist_append_int64(args, 100);
 
     as_val* result = teranode_increment_spent_extra_recs(rec, (as_list*)args, as_ctx);
     as_map* result_map = as_map_fromval(result);
 
-    as_val* code = as_map_get(result_map, (as_val*)as_string_new((char*)"errorCode", false));
-    ASSERT_STR_EQ(as_string_get(as_string_fromval(code)), ERROR_CODE_INVALID_PARAMETER);
+    as_val* status = as_map_get(result_map, (as_val*)as_string_new((char*)"status", false));
+    ASSERT_STR_EQ(as_string_get(as_string_fromval(status)), "OK");
+
+    // Verify spentExtraRecs was clamped to totalExtraRecs (10)
+    as_val* spent_val = as_rec_get(rec, "spentExtraRecs");
+    ASSERT_NOT_NULL(spent_val);
+    ASSERT_EQ(as_integer_get(as_integer_fromval(spent_val)), 10);
 
     as_arraylist_destroy(args);
     as_val_destroy(result);

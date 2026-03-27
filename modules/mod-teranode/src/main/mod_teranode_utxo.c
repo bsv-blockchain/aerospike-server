@@ -1687,11 +1687,10 @@ dah_done: ;
             ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
     }
 
-    if (block_count > 0) {
-        as_hashmap_set(response,
-            (as_val*)as_string_new((char*)FIELD_BLOCK_IDS, false),
-            as_val_reserve((as_val*)block_ids));
-    }
+    // Always include blockIDs in response (matches Lua behavior)
+    as_hashmap_set(response,
+        (as_val*)as_string_new((char*)FIELD_BLOCK_IDS, false),
+        as_val_reserve((as_val*)block_ids));
 
     if (signal[0] != '\0') {
         as_hashmap_set(response,
@@ -2280,13 +2279,16 @@ teranode_increment_spent_extra_recs(as_rec* rec, as_list* args, as_aerospike* as
     // Increment
     spent_extra_recs += inc;
 
-    // Validate bounds
+    // Clamp to valid range instead of erroring. The counter can drift out of
+    // sync when spend/unspend rollbacks are interrupted (e.g. context cancellation
+    // during DEVICE_OVERLOAD). Clamping keeps the node alive — Go verifies
+    // children before acting on DAH signals, so a drifted counter is harmless.
     if (spent_extra_recs < 0) {
-        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, ERR_SPENT_EXTRA_RECS_NEGATIVE);
+        spent_extra_recs = 0;
     }
 
     if (spent_extra_recs > total_extra_recs) {
-        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, ERR_SPENT_EXTRA_RECS_EXCEED);
+        spent_extra_recs = total_extra_recs;
     }
 
     // Update bin
@@ -2369,4 +2371,87 @@ teranode_set_delete_at_height(as_rec* rec, as_list* args, as_aerospike* as)
     }
 
     return (as_val*)response;
+}
+
+/**
+ * Add child transaction hashes to the deletedChildren map on a parent record.
+ *
+ * If the record does not exist, returns TX_NOT_FOUND. For each hash in the
+ * childHashes list, marks it as deleted in the deletedChildren map (creating
+ * the map if it doesn't exist). The Go side uses this to track which child
+ * transactions have already been deleted, so spend can detect invalid
+ * re-spends to deleted children.
+ */
+as_val*
+teranode_add_deleted_children(as_rec* rec, as_list* args, as_aerospike* as)
+{
+    // Check aerospike context
+    if (as == NULL) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
+    }
+
+    // Check record exists
+    if (rec == NULL || as_rec_numbins(rec) == 0) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
+    }
+
+    // Extract arguments - childHashes is a list of string tx hashes
+    as_val* child_hashes_val = as_list_get(args, 0);
+    if (child_hashes_val == NULL || as_val_type(child_hashes_val) != AS_LIST) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Missing or invalid childHashes list");
+    }
+    as_list* child_hashes = as_list_fromval(child_hashes_val);
+
+    // Get or create deletedChildren map
+    as_val* deleted_children_val = as_rec_get(rec, BIN_DELETED_CHILDREN);
+    as_map* deleted_children = NULL;
+    bool deleted_children_is_new = false;
+    if (deleted_children_val == NULL || as_val_type(deleted_children_val) == AS_NIL) {
+        deleted_children = (as_map*)as_hashmap_new(8);
+        if (deleted_children == NULL) {
+            return (as_val*)utxo_create_error_response(
+                ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+        }
+        deleted_children_is_new = true;
+    } else {
+        if (as_val_type(deleted_children_val) != AS_MAP) {
+            return (as_val*)utxo_create_error_response(
+                ERROR_CODE_INVALID_PARAMETER, "Invalid deletedChildren bin type");
+        }
+        deleted_children = as_map_fromval(deleted_children_val);
+    }
+
+    // Add each child hash to the map with value = true
+    uint32_t count = as_list_size(child_hashes);
+    for (uint32_t i = 0; i < count; i++) {
+        as_val* hash_val = as_list_get(child_hashes, i);
+        if (hash_val == NULL || as_val_type(hash_val) != AS_STRING) {
+            continue;
+        }
+        // Reserve the key (it comes from the args list, which is owned by the caller)
+        as_map_set(deleted_children,
+            as_val_reserve(hash_val),
+            (as_val*)&as_true);
+    }
+
+    // Set the map on the record
+    if (deleted_children_is_new) {
+        as_rec_set(rec, BIN_DELETED_CHILDREN, (as_val*)deleted_children);
+    } else {
+        as_rec_set(rec, BIN_DELETED_CHILDREN, as_val_reserve((as_val*)deleted_children));
+    }
+
+    // Commit record changes
+    int update_rv = as_aerospike_rec_update(as, rec);
+    if (update_rv != 0) {
+        return (as_val*)utxo_create_error_response(ERROR_CODE_UPDATE_FAILED, ERR_UPDATE_FAILED);
+    }
+
+    as_map* ok_response = utxo_create_ok_response();
+    if (ok_response == NULL) {
+        return (as_val*)utxo_create_error_response(
+            ERROR_CODE_INVALID_PARAMETER, "Memory allocation failed");
+    }
+    return (as_val*)ok_response;
 }
