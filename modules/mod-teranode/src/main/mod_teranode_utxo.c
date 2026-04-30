@@ -882,8 +882,9 @@ teranode_spend(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
     }
 
-    // Check record exists
-    if (rec == NULL || as_rec_numbins(rec) == 0) {
+    // Check record exists - use rec_exists (silent) instead of numbins,
+    // which warns "record not open" when the urecord isn't open.
+    if (rec == NULL || ! as_aerospike_rec_exists(as, rec)) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
     }
 
@@ -1064,8 +1065,9 @@ teranode_spend_multi(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
     }
 
-    // Check record exists
-    if (rec == NULL || as_rec_numbins(rec) == 0) {
+    // Check record exists - use rec_exists (silent) instead of numbins,
+    // which warns "record not open" when the urecord isn't open.
+    if (rec == NULL || ! as_aerospike_rec_exists(as, rec)) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
     }
 
@@ -1265,8 +1267,9 @@ teranode_unspend(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
     }
 
-    // Check record exists
-    if (rec == NULL || as_rec_numbins(rec) == 0) {
+    // Check record exists - use rec_exists (silent) instead of numbins,
+    // which warns "record not open" when the urecord isn't open.
+    if (rec == NULL || ! as_aerospike_rec_exists(as, rec)) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
     }
 
@@ -1364,8 +1367,9 @@ teranode_set_mined(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
     }
 
-    // Check record exists
-    if (rec == NULL || as_rec_numbins(rec) == 0) {
+    // Check record exists - use rec_exists (silent) instead of numbins,
+    // which warns "record not open" when the urecord isn't open.
+    if (rec == NULL || ! as_aerospike_rec_exists(as, rec)) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
     }
 
@@ -1713,8 +1717,9 @@ teranode_freeze(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
     }
 
-    // Check record exists
-    if (rec == NULL || as_rec_numbins(rec) == 0) {
+    // Check record exists - use rec_exists (silent) instead of numbins,
+    // which warns "record not open" when the urecord isn't open.
+    if (rec == NULL || ! as_aerospike_rec_exists(as, rec)) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
     }
 
@@ -1806,8 +1811,9 @@ teranode_unfreeze(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
     }
 
-    // Check record exists
-    if (rec == NULL || as_rec_numbins(rec) == 0) {
+    // Check record exists - use rec_exists (silent) instead of numbins,
+    // which warns "record not open" when the urecord isn't open.
+    if (rec == NULL || ! as_aerospike_rec_exists(as, rec)) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
     }
 
@@ -1882,8 +1888,9 @@ teranode_reassign(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
     }
 
-    // Check record exists
-    if (rec == NULL || as_rec_numbins(rec) == 0) {
+    // Check record exists - use rec_exists (silent) instead of numbins,
+    // which warns "record not open" when the urecord isn't open.
+    if (rec == NULL || ! as_aerospike_rec_exists(as, rec)) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
     }
 
@@ -2058,8 +2065,9 @@ teranode_set_conflicting(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
     }
 
-    // Check record exists
-    if (rec == NULL || as_rec_numbins(rec) == 0) {
+    // Check record exists - use rec_exists (silent) instead of numbins,
+    // which warns "record not open" when the urecord isn't open.
+    if (rec == NULL || ! as_aerospike_rec_exists(as, rec)) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
     }
 
@@ -2107,8 +2115,9 @@ teranode_preserve_until(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
     }
 
-    // Check record exists
-    if (rec == NULL || as_rec_numbins(rec) == 0) {
+    // Check record exists - use rec_exists (silent) instead of numbins,
+    // which warns "record not open" when the urecord isn't open.
+    if (rec == NULL || ! as_aerospike_rec_exists(as, rec)) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
     }
 
@@ -2158,8 +2167,9 @@ teranode_set_locked(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
     }
 
-    // Check record exists
-    if (rec == NULL || as_rec_numbins(rec) == 0) {
+    // Check record exists - use rec_exists (silent) instead of numbins,
+    // which warns "record not open" when the urecord isn't open.
+    if (rec == NULL || ! as_aerospike_rec_exists(as, rec)) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
     }
 
@@ -2219,8 +2229,9 @@ teranode_increment_spent_extra_recs(as_rec* rec, as_list* args, as_aerospike* as
         return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
     }
 
-    // Check record exists
-    if (rec == NULL || as_rec_numbins(rec) == 0) {
+    // Check record exists - use rec_exists (silent) instead of numbins,
+    // which warns "record not open" when the urecord isn't open.
+    if (rec == NULL || ! as_aerospike_rec_exists(as, rec)) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
     }
 
@@ -2339,8 +2350,9 @@ teranode_add_deleted_children(as_rec* rec, as_list* args, as_aerospike* as)
         return (as_val*)utxo_create_error_response(ERROR_CODE_INVALID_PARAMETER, "aerospike context is NULL");
     }
 
-    // Check record exists
-    if (rec == NULL || as_rec_numbins(rec) == 0) {
+    // Check record exists - use rec_exists (silent) instead of numbins,
+    // which warns "record not open" when the urecord isn't open.
+    if (rec == NULL || ! as_aerospike_rec_exists(as, rec)) {
         return (as_val*)utxo_create_error_response(ERROR_CODE_TX_NOT_FOUND, ERR_TX_NOT_FOUND);
     }
 

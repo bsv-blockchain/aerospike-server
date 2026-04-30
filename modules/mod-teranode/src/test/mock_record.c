@@ -252,11 +252,25 @@ mock_as_rec_remove(const as_aerospike* a, const as_rec* r)
     return 0;
 }
 
+static int
+mock_as_rec_exists(const as_aerospike* a, const as_rec* r)
+{
+    (void)a;
+    // Mirror the production check (udf_aerospike_rec_exists): an "open"
+    // record in the test world is one that has at least one bin set. The
+    // tx_not_found tests deliberately leave the record empty.
+    if (r == NULL || r->data == NULL) {
+        return 0;
+    }
+    mock_rec_data* data = (mock_rec_data*)r->data;
+    return (data->bins != NULL && as_map_size(data->bins) > 0) ? 1 : 0;
+}
+
 static const as_aerospike_hooks mock_aerospike_hooks = {
     .rec_create  = mock_as_rec_create,
     .rec_update  = mock_as_rec_update,
     .rec_remove  = mock_as_rec_remove,
-    .rec_exists  = NULL,
+    .rec_exists  = mock_as_rec_exists,
     .log         = NULL,
     .get_current_time = NULL,
 };
