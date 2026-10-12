@@ -257,6 +257,38 @@ TEST(setMined_unset_last_block_stamps_unmined_since_when_absent)
     mock_rec_destroy(rec);
 }
 
+// Lua parity (teranode#1186): setMined stamps deleteAtHeight from the mined
+// block's height, not from the caller's (possibly lagging/backdated)
+// currentBlockHeight.
+TEST(setMined_dah_stamped_from_block_height)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 2);
+    as_rec_set(rec, "spentUtxos", (as_val*)as_integer_new(2));
+    as_rec_set(rec, "totalExtraRecs", (as_val*)as_integer_new(0));
+
+    as_arraylist* args = as_arraylist_new(7, 0);
+    as_arraylist_append_int64(args, 54321);   // blockID
+    as_arraylist_append_int64(args, 500);     // blockHeight
+    as_arraylist_append_int64(args, 1);       // subtreeIdx
+    as_arraylist_append_int64(args, 450);     // currentBlockHeight (lagging)
+    as_arraylist_append_int64(args, 100);     // retention
+    as_arraylist_append(args, (as_val*)as_boolean_new(true));
+    as_arraylist_append(args, (as_val*)as_boolean_new(false));
+
+    as_val* result = teranode_set_mined(rec, (as_list*)args, as_ctx);
+    as_val_destroy(result);
+    as_arraylist_destroy(args);
+
+    as_val* dah = as_rec_get(rec, "deleteAtHeight");
+    ASSERT_TRUE(dah != NULL && as_val_type(dah) == AS_INTEGER);
+    ASSERT_EQ(as_integer_get(as_integer_fromval(dah)), 600);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
 //==========================================================
 // setConflicting() tests.
 //
@@ -795,6 +827,7 @@ void run_state_management_tests(void)
     RUN_TEST(setMined_clears_creating);
     RUN_TEST(setMined_unset_last_block_keeps_existing_unmined_since);
     RUN_TEST(setMined_unset_last_block_stamps_unmined_since_when_absent);
+    RUN_TEST(setMined_dah_stamped_from_block_height);
 
     RUN_TEST(setConflicting_set_true);
     RUN_TEST(setConflicting_set_false);

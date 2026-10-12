@@ -1576,7 +1576,9 @@ teranode_set_mined(as_rec* rec, as_list* args, as_aerospike* as)
             as_val* conflicting_val = as_rec_get(rec, BIN_CONFLICTING);
             as_val* external_val = as_rec_get(rec, BIN_EXTERNAL);
 
-            int64_t new_delete_height = current_block_height + block_height_retention;
+            // Stamp from the mined block's height, not the caller's (possibly
+            // lagging) current height — matches teranode.lua.
+            int64_t new_delete_height = block_height + block_height_retention;
             bool has_external = (external_val != NULL && as_val_type(external_val) != AS_NIL);
 
             // Handle conflicting transactions
