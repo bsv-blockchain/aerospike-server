@@ -188,6 +188,75 @@ TEST(setMined_clears_creating)
     mock_rec_destroy(rec);
 }
 
+// Helper: unsetMined of the only block on a record whose blockIDs is [block_id],
+// passing current_block_height as the stamp height.
+static void unset_only_block(as_rec* rec, as_aerospike* as_ctx,
+        int64_t block_id, int64_t current_block_height)
+{
+    as_arraylist* args = as_arraylist_new(7, 0);
+    as_arraylist_append_int64(args, block_id);
+    as_arraylist_append_int64(args, 500);
+    as_arraylist_append_int64(args, 1);
+    as_arraylist_append_int64(args, current_block_height);
+    as_arraylist_append_int64(args, 100);
+    as_arraylist_append(args, (as_val*)as_boolean_new(false));  // onLongestChain
+    as_arraylist_append(args, (as_val*)as_boolean_new(true));   // unsetMined
+
+    as_val* result = teranode_set_mined(rec, (as_list*)args, as_ctx);
+    as_val_destroy(result);
+    as_arraylist_destroy(args);
+}
+
+static void set_single_block_bins(as_rec* rec, int64_t block_id)
+{
+    as_arraylist* ids = as_arraylist_new(1, 0);
+    as_arraylist_append_int64(ids, block_id);
+    as_rec_set(rec, "blockIDs", (as_val*)ids);
+    as_arraylist* heights = as_arraylist_new(1, 0);
+    as_arraylist_append_int64(heights, 500);
+    as_rec_set(rec, "blockHeights", (as_val*)heights);
+    as_arraylist* idxs = as_arraylist_new(1, 0);
+    as_arraylist_append_int64(idxs, 1);
+    as_rec_set(rec, "subtreeIdxs", (as_val*)idxs);
+}
+
+// Lua parity: removing the last block keeps an existing unminedSince.
+TEST(setMined_unset_last_block_keeps_existing_unmined_since)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 5);
+    set_single_block_bins(rec, 54321);
+    as_rec_set(rec, "unminedSince", (as_val*)as_integer_new(700));
+
+    unset_only_block(rec, as_ctx, 54321, 1000);
+
+    as_val* v = as_rec_get(rec, "unminedSince");
+    ASSERT_TRUE(v != NULL && as_val_type(v) == AS_INTEGER);
+    ASSERT_EQ(as_integer_get(as_integer_fromval(v)), 700);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// Lua parity: removing the last block stamps the passed height when absent.
+TEST(setMined_unset_last_block_stamps_unmined_since_when_absent)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 5);
+    set_single_block_bins(rec, 54321);
+
+    unset_only_block(rec, as_ctx, 54321, 900);
+
+    as_val* v = as_rec_get(rec, "unminedSince");
+    ASSERT_TRUE(v != NULL && as_val_type(v) == AS_INTEGER);
+    ASSERT_EQ(as_integer_get(as_integer_fromval(v)), 900);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
 //==========================================================
 // setConflicting() tests.
 //
@@ -724,6 +793,8 @@ void run_state_management_tests(void)
     RUN_TEST(setMined_remove_block);
     RUN_TEST(setMined_clears_locked);
     RUN_TEST(setMined_clears_creating);
+    RUN_TEST(setMined_unset_last_block_keeps_existing_unmined_since);
+    RUN_TEST(setMined_unset_last_block_stamps_unmined_since_when_absent);
 
     RUN_TEST(setConflicting_set_true);
     RUN_TEST(setConflicting_set_false);

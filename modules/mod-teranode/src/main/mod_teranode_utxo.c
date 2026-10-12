@@ -1539,7 +1539,12 @@ teranode_set_mined(as_rec* rec, as_list* args, as_aerospike* as)
         }
         is_on_longest_chain = on_longest_chain;
     } else {
-        as_rec_set(rec, BIN_UNMINED_SINCE, (as_val*)as_integer_new(current_block_height));
+        // Mined -> unmined: stamp only when absent, keeping an earlier
+        // unminedSince (matches teranode.lua setMined).
+        as_val* unmined_since_val = as_rec_get(rec, BIN_UNMINED_SINCE);
+        if (unmined_since_val == NULL || as_val_type(unmined_since_val) == AS_NIL) {
+            as_rec_set(rec, BIN_UNMINED_SINCE, (as_val*)as_integer_new(current_block_height));
+        }
         is_on_longest_chain = false;
     }
 
