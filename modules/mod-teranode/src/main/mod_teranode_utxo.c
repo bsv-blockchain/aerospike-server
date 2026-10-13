@@ -1532,16 +1532,26 @@ teranode_set_mined(as_rec* rec, as_list* args, as_aerospike* as)
     }
 
     // Handle unminedSince — use locally tracked block_count, no re-fetch needed
-    bool is_on_longest_chain;
     if (block_count > 0) {
         if (on_longest_chain) {
             as_rec_set(rec, BIN_UNMINED_SINCE, (as_val*)&as_nil);
         }
-        is_on_longest_chain = on_longest_chain;
     } else {
-        as_rec_set(rec, BIN_UNMINED_SINCE, (as_val*)as_integer_new(current_block_height));
-        is_on_longest_chain = false;
+        // Mined -> unmined: stamp only when absent, keeping an earlier
+        // unminedSince. Matches Teranode PR #1947 (branch
+        // fix/utxo-unmined-dah-consistency, not yet on main).
+        as_val* unmined_since_val = as_rec_get(rec, BIN_UNMINED_SINCE);
+        if (unmined_since_val == NULL || as_val_type(unmined_since_val) == AS_NIL) {
+            as_rec_set(rec, BIN_UNMINED_SINCE, (as_val*)as_integer_new(current_block_height));
+        }
     }
+
+    // On the longest chain == unminedSince absent, read after the update
+    // above exactly as teranode.lua setDeleteAtHeight does (not the
+    // onLongestChain argument).
+    as_val* unmined_since_now = as_rec_get(rec, BIN_UNMINED_SINCE);
+    bool is_on_longest_chain =
+        (unmined_since_now == NULL || as_val_type(unmined_since_now) == AS_NIL);
 
     // Clear locked flag if set — uses pre-read value, avoids cache scan.
     // as_false is a global const with count=0 (immortal): as_val_destroy is
@@ -1571,7 +1581,10 @@ teranode_set_mined(as_rec* rec, as_list* args, as_aerospike* as)
             as_val* conflicting_val = as_rec_get(rec, BIN_CONFLICTING);
             as_val* external_val = as_rec_get(rec, BIN_EXTERNAL);
 
-            int64_t new_delete_height = current_block_height + block_height_retention;
+            // Stamp from the mined block's height, not the caller's (possibly
+            // lagging) current height — matches teranode.lua (teranode
+            // 77cd4607d, #1186).
+            int64_t new_delete_height = block_height + block_height_retention;
             bool has_external = (external_val != NULL && as_val_type(external_val) != AS_NIL);
 
             // Handle conflicting transactions
@@ -1697,6 +1710,17 @@ dah_done: ;
         as_val_reserve((as_val*)block_ids));
 
     response_add_signal(response, signal, child_count);
+    // Lua parity (teranode 88efbced3, #1037): on a mine always return
+    // totalExtraRecs when > 0, so the client can clear `locked` on the
+    // pagination records even when no DAH signal fired.
+    if (!unset_mined) {
+        as_val* tx_val = as_rec_get(rec, BIN_TOTAL_EXTRA_RECS);
+        if (tx_val != NULL && as_val_type(tx_val) == AS_INTEGER &&
+                as_integer_get(as_integer_fromval(tx_val)) > 0) {
+            as_hashmap_set(response, (as_val*)&g_key_child_count,
+                (as_val*)as_integer_new(as_integer_get(as_integer_fromval(tx_val))));
+        }
+    }
 
     return (as_val*)response;
 }

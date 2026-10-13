@@ -188,6 +188,396 @@ TEST(setMined_clears_creating)
     mock_rec_destroy(rec);
 }
 
+// Helper: unsetMined of the only block on a record whose blockIDs is [block_id],
+// passing current_block_height as the stamp height.
+static void unset_only_block(as_rec* rec, as_aerospike* as_ctx,
+        int64_t block_id, int64_t current_block_height)
+{
+    as_arraylist* args = as_arraylist_new(7, 0);
+    as_arraylist_append_int64(args, block_id);
+    as_arraylist_append_int64(args, 500);
+    as_arraylist_append_int64(args, 1);
+    as_arraylist_append_int64(args, current_block_height);
+    as_arraylist_append_int64(args, 100);
+    as_arraylist_append(args, (as_val*)as_boolean_new(false));  // onLongestChain
+    as_arraylist_append(args, (as_val*)as_boolean_new(true));   // unsetMined
+
+    as_val* result = teranode_set_mined(rec, (as_list*)args, as_ctx);
+    as_val_destroy(result);
+    as_arraylist_destroy(args);
+}
+
+static void set_single_block_bins(as_rec* rec, int64_t block_id)
+{
+    as_arraylist* ids = as_arraylist_new(1, 0);
+    as_arraylist_append_int64(ids, block_id);
+    as_rec_set(rec, "blockIDs", (as_val*)ids);
+    as_arraylist* heights = as_arraylist_new(1, 0);
+    as_arraylist_append_int64(heights, 500);
+    as_rec_set(rec, "blockHeights", (as_val*)heights);
+    as_arraylist* idxs = as_arraylist_new(1, 0);
+    as_arraylist_append_int64(idxs, 1);
+    as_rec_set(rec, "subtreeIdxs", (as_val*)idxs);
+}
+
+// Lua parity: removing the last block keeps an existing unminedSince.
+TEST(setMined_unset_last_block_keeps_existing_unmined_since)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 5);
+    set_single_block_bins(rec, 54321);
+    as_rec_set(rec, "unminedSince", (as_val*)as_integer_new(700));
+
+    unset_only_block(rec, as_ctx, 54321, 1000);
+
+    as_val* v = as_rec_get(rec, "unminedSince");
+    ASSERT_TRUE(v != NULL && as_val_type(v) == AS_INTEGER);
+    ASSERT_EQ(as_integer_get(as_integer_fromval(v)), 700);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// Lua parity: removing the last block stamps the passed height when absent.
+TEST(setMined_unset_last_block_stamps_unmined_since_when_absent)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 5);
+    set_single_block_bins(rec, 54321);
+
+    unset_only_block(rec, as_ctx, 54321, 900);
+
+    as_val* v = as_rec_get(rec, "unminedSince");
+    ASSERT_TRUE(v != NULL && as_val_type(v) == AS_INTEGER);
+    ASSERT_EQ(as_integer_get(as_integer_fromval(v)), 900);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// Lua parity (teranode#1186): setMined stamps deleteAtHeight from the mined
+// block's height, not from the caller's (possibly lagging/backdated)
+// currentBlockHeight.
+TEST(setMined_dah_stamped_from_block_height)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 2);
+    as_rec_set(rec, "spentUtxos", (as_val*)as_integer_new(2));
+    as_rec_set(rec, "totalExtraRecs", (as_val*)as_integer_new(0));
+
+    as_arraylist* args = as_arraylist_new(7, 0);
+    as_arraylist_append_int64(args, 54321);   // blockID
+    as_arraylist_append_int64(args, 500);     // blockHeight
+    as_arraylist_append_int64(args, 1);       // subtreeIdx
+    as_arraylist_append_int64(args, 450);     // currentBlockHeight (lagging)
+    as_arraylist_append_int64(args, 100);     // retention
+    as_arraylist_append(args, (as_val*)as_boolean_new(true));
+    as_arraylist_append(args, (as_val*)as_boolean_new(false));
+
+    as_val* result = teranode_set_mined(rec, (as_list*)args, as_ctx);
+    as_val_destroy(result);
+    as_arraylist_destroy(args);
+
+    as_val* dah = as_rec_get(rec, "deleteAtHeight");
+    ASSERT_TRUE(dah != NULL && as_val_type(dah) == AS_INTEGER);
+    ASSERT_EQ(as_integer_get(as_integer_fromval(dah)), 600);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// Calls teranode_set_mined with the 7 positional args and returns the
+// response (caller destroys).
+static as_val* sm_call(as_rec* rec, as_aerospike* as_ctx, int64_t block_id,
+        int64_t block_height, int64_t current_height, int64_t retention,
+        bool on_longest_chain, bool unset_mined)
+{
+    as_arraylist* args = as_arraylist_new(7, 0);
+    as_arraylist_append_int64(args, block_id);
+    as_arraylist_append_int64(args, block_height);
+    as_arraylist_append_int64(args, 1);
+    as_arraylist_append_int64(args, current_height);
+    as_arraylist_append_int64(args, retention);
+    as_arraylist_append(args, (as_val*)as_boolean_new(on_longest_chain));
+    as_arraylist_append(args, (as_val*)as_boolean_new(unset_mined));
+    as_val* result = teranode_set_mined(rec, (as_list*)args, as_ctx);
+    as_arraylist_destroy(args);
+    return result;
+}
+
+// Fully spent master record (2 of 2 UTXOs spent, no extra records).
+static void sm_init_all_spent(as_rec* rec)
+{
+    mock_rec_init_utxos(rec, 2);
+    as_rec_set(rec, "spentUtxos", (as_val*)as_integer_new(2));
+    as_rec_set(rec, "recordUtxos", (as_val*)as_integer_new(2));
+    as_rec_set(rec, "totalExtraRecs", (as_val*)as_integer_new(0));
+}
+
+// Reads childCount from a setMined response using a stack key (no leak).
+static bool sm_child_count(as_val* resp, int64_t* out)
+{
+    as_string key;
+    as_string_init(&key, (char*)"childCount", false);
+    as_val* v = as_map_get(as_map_fromval(resp), (as_val*)&key);
+    if (v == NULL || as_val_type(v) != AS_INTEGER) return false;
+    *out = as_integer_get(as_integer_fromval(v));
+    return true;
+}
+
+static bool sm_int_bin(as_rec* rec, const char* name, int64_t* out)
+{
+    as_val* v = as_rec_get(rec, name);
+    if (v == NULL || as_val_type(v) != AS_INTEGER) return false;
+    *out = as_integer_get(as_integer_fromval(v));
+    return true;
+}
+
+// Lua parity (teranode#1037): a mine always returns childCount =
+// totalExtraRecs when > 0, even with no DAH signal; an unset does not.
+TEST(setMined_mine_returns_child_count_without_signal)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 2);
+    as_rec_set(rec, "totalExtraRecs", (as_val*)as_integer_new(3));
+
+    as_val* r = sm_call(rec, as_ctx, 54321, 500, 450, 100, true, false);
+    int64_t cc = 0;
+    ASSERT_TRUE(sm_child_count(r, &cc));
+    ASSERT_EQ(cc, 3);
+    as_val_destroy(r);
+
+    r = sm_call(rec, as_ctx, 54321, 500, 450, 100, true, true);
+    ASSERT_FALSE(sm_child_count(r, &cc));
+    as_val_destroy(r);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// Lua parity: on-longest-chain comes from the record (unminedSince absent),
+// not from the onLongestChain arg. Adding a side-chain block to a record
+// already on the longest chain keeps the DAH.
+TEST(setMined_side_chain_block_keeps_dah_when_unmined_since_nil)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    sm_init_all_spent(rec);
+    set_single_block_bins(rec, 111);
+    as_rec_set(rec, "deleteAtHeight", (as_val*)as_integer_new(600));
+
+    as_val* r = sm_call(rec, as_ctx, 222, 500, 450, 100, false, false);
+    as_val_destroy(r);
+
+    int64_t dah = 0;
+    ASSERT_TRUE(sm_int_bin(rec, "deleteAtHeight", &dah));
+    ASSERT_EQ(dah, 600);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+TEST(setMined_stale_higher_dah_unchanged)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    sm_init_all_spent(rec);
+    as_rec_set(rec, "deleteAtHeight", (as_val*)as_integer_new(900));
+
+    as_val* r = sm_call(rec, as_ctx, 54321, 500, 450, 100, true, false);
+    as_val_destroy(r);
+
+    int64_t dah = 0;
+    ASSERT_TRUE(sm_int_bin(rec, "deleteAtHeight", &dah));
+    ASSERT_EQ(dah, 900);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+TEST(setMined_unset_last_block_clears_existing_dah)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    sm_init_all_spent(rec);
+    set_single_block_bins(rec, 54321);
+    as_rec_set(rec, "deleteAtHeight", (as_val*)as_integer_new(600));
+
+    as_val* r = sm_call(rec, as_ctx, 54321, 500, 450, 100, false, true);
+    as_val_destroy(r);
+
+    int64_t dah = 0;
+    ASSERT_FALSE(sm_int_bin(rec, "deleteAtHeight", &dah));
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+TEST(setMined_retention_zero_sets_no_dah)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    sm_init_all_spent(rec);
+
+    as_val* r = sm_call(rec, as_ctx, 54321, 500, 450, 0, true, false);
+    as_val_destroy(r);
+
+    int64_t dah = 0;
+    ASSERT_FALSE(sm_int_bin(rec, "deleteAtHeight", &dah));
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+TEST(setMined_preserve_until_sets_no_dah)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    sm_init_all_spent(rec);
+    as_rec_set(rec, "preserveUntil", (as_val*)as_integer_new(5000));
+
+    as_val* r = sm_call(rec, as_ctx, 54321, 500, 450, 100, true, false);
+    as_val_destroy(r);
+
+    int64_t dah = 0;
+    ASSERT_FALSE(sm_int_bin(rec, "deleteAtHeight", &dah));
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+TEST(setMined_conflicting_dah_uses_block_height)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 2);
+    as_rec_set(rec, "conflicting", (as_val*)as_boolean_new(true));
+
+    as_val* r = sm_call(rec, as_ctx, 54321, 500, 450, 100, true, false);
+    as_val_destroy(r);
+
+    int64_t dah = 0;
+    ASSERT_TRUE(sm_int_bin(rec, "deleteAtHeight", &dah));
+    ASSERT_EQ(dah, 600);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// Mining on the longest chain clears unminedSince and then the DAH
+// evaluation sees the record as on-chain (Lua reads the bin after the update).
+TEST(setMined_mine_on_longest_chain_clears_unmined_since_and_sets_dah)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    sm_init_all_spent(rec);
+    as_rec_set(rec, "unminedSince", (as_val*)as_integer_new(300));
+
+    as_val* r = sm_call(rec, as_ctx, 54321, 500, 450, 100, true, false);
+    as_val_destroy(r);
+
+    int64_t v = 0;
+    ASSERT_FALSE(sm_int_bin(rec, "unminedSince", &v));
+    ASSERT_TRUE(sm_int_bin(rec, "deleteAtHeight", &v));
+    ASSERT_EQ(v, 600);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// Two blocks on the record, both reported on the longest chain
+// (unminedSince absent).
+static void sm_set_two_blocks(as_rec* rec, int64_t a, int64_t b)
+{
+    as_arraylist* ids = as_arraylist_new(2, 0);
+    as_arraylist_append_int64(ids, a);
+    as_arraylist_append_int64(ids, b);
+    as_rec_set(rec, "blockIDs", (as_val*)ids);
+    as_arraylist* heights = as_arraylist_new(2, 0);
+    as_arraylist_append_int64(heights, 500);
+    as_arraylist_append_int64(heights, 501);
+    as_rec_set(rec, "blockHeights", (as_val*)heights);
+    as_arraylist* idxs = as_arraylist_new(2, 0);
+    as_arraylist_append_int64(idxs, 1);
+    as_arraylist_append_int64(idxs, 1);
+    as_rec_set(rec, "subtreeIdxs", (as_val*)idxs);
+}
+
+// Unset of a non-last block: the record is still on the longest chain
+// (unminedSince absent), so the DAH stays even though the onLongestChain
+// argument is false.
+TEST(setMined_unset_non_last_block_keeps_dah_when_unmined_since_nil)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    sm_init_all_spent(rec);
+    sm_set_two_blocks(rec, 111, 222);
+    as_rec_set(rec, "deleteAtHeight", (as_val*)as_integer_new(600));
+
+    as_val* r = sm_call(rec, as_ctx, 222, 500, 450, 100, false, true);
+    as_val_destroy(r);
+
+    int64_t v = 0;
+    ASSERT_FALSE(sm_int_bin(rec, "unminedSince", &v));
+    ASSERT_TRUE(sm_int_bin(rec, "deleteAtHeight", &v));
+    ASSERT_EQ(v, 600);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+// External, fully spent master record: the DAH signal fires and childCount
+// equals totalExtraRecs.
+TEST(setMined_external_dah_signal_child_count_equals_total_extra_recs)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    mock_rec_init_utxos(rec, 2);
+    as_rec_set(rec, "spentUtxos", (as_val*)as_integer_new(2));
+    as_rec_set(rec, "totalExtraRecs", (as_val*)as_integer_new(3));
+    as_rec_set(rec, "spentExtraRecs", (as_val*)as_integer_new(3));
+    as_rec_set(rec, "external", (as_val*)as_boolean_new(true));
+
+    as_val* r = sm_call(rec, as_ctx, 54321, 500, 450, 100, true, false);
+    int64_t cc = 0;
+    ASSERT_TRUE(sm_child_count(r, &cc));
+    ASSERT_EQ(cc, 3);
+    as_val_destroy(r);
+
+    int64_t dah = 0;
+    ASSERT_TRUE(sm_int_bin(rec, "deleteAtHeight", &dah));
+    ASSERT_EQ(dah, 600);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
+TEST(setMined_mine_no_child_count_when_total_extra_recs_zero_or_absent)
+{
+    as_rec* rec = mock_rec_new();
+    as_aerospike* as_ctx = mock_aerospike_new();
+    sm_init_all_spent(rec);   // totalExtraRecs = 0
+
+    as_val* r = sm_call(rec, as_ctx, 54321, 500, 450, 100, true, false);
+    int64_t cc = 0;
+    ASSERT_FALSE(sm_child_count(r, &cc));
+    as_val_destroy(r);
+    mock_rec_destroy(rec);
+
+    rec = mock_rec_new();
+    mock_rec_init_utxos(rec, 2);   // totalExtraRecs absent
+    r = sm_call(rec, as_ctx, 54321, 500, 450, 100, true, false);
+    ASSERT_FALSE(sm_child_count(r, &cc));
+    as_val_destroy(r);
+
+    mock_aerospike_destroy(as_ctx);
+    mock_rec_destroy(rec);
+}
+
 //==========================================================
 // setConflicting() tests.
 //
@@ -724,6 +1114,20 @@ void run_state_management_tests(void)
     RUN_TEST(setMined_remove_block);
     RUN_TEST(setMined_clears_locked);
     RUN_TEST(setMined_clears_creating);
+    RUN_TEST(setMined_unset_last_block_keeps_existing_unmined_since);
+    RUN_TEST(setMined_unset_last_block_stamps_unmined_since_when_absent);
+    RUN_TEST(setMined_dah_stamped_from_block_height);
+    RUN_TEST(setMined_mine_returns_child_count_without_signal);
+    RUN_TEST(setMined_side_chain_block_keeps_dah_when_unmined_since_nil);
+    RUN_TEST(setMined_stale_higher_dah_unchanged);
+    RUN_TEST(setMined_unset_last_block_clears_existing_dah);
+    RUN_TEST(setMined_retention_zero_sets_no_dah);
+    RUN_TEST(setMined_preserve_until_sets_no_dah);
+    RUN_TEST(setMined_conflicting_dah_uses_block_height);
+    RUN_TEST(setMined_mine_on_longest_chain_clears_unmined_since_and_sets_dah);
+    RUN_TEST(setMined_unset_non_last_block_keeps_dah_when_unmined_since_nil);
+    RUN_TEST(setMined_external_dah_signal_child_count_equals_total_extra_recs);
+    RUN_TEST(setMined_mine_no_child_count_when_total_extra_recs_zero_or_absent);
 
     RUN_TEST(setConflicting_set_true);
     RUN_TEST(setConflicting_set_false);
