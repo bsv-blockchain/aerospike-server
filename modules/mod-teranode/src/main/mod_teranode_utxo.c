@@ -1538,8 +1538,8 @@ teranode_set_mined(as_rec* rec, as_list* args, as_aerospike* as)
         }
     } else {
         // Mined -> unmined: stamp only when absent, keeping an earlier
-        // unminedSince (teranode.lua setMined; Teranode
-        // fix/utxo-unmined-dah-consistency).
+        // unminedSince. Matches Teranode PR #1947 (branch
+        // fix/utxo-unmined-dah-consistency, not yet on main).
         as_val* unmined_since_val = as_rec_get(rec, BIN_UNMINED_SINCE);
         if (unmined_since_val == NULL || as_val_type(unmined_since_val) == AS_NIL) {
             as_rec_set(rec, BIN_UNMINED_SINCE, (as_val*)as_integer_new(current_block_height));
